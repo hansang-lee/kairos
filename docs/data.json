@@ -6,49 +6,18 @@
     "metals": 10,
     "stocks": 40
   },
-  "details": {
-    "cpi": {
-      "change": 0.5570000000000164,
-      "value": 326.588
-    },
-    "fedfunds": {
-      "change": -0.08000000000000007,
-      "value": 3.64
-    },
-    "hy_spread": {
-      "change": 0.1599999999999997,
-      "value": 2.9
-    },
-    "indpro": {
-      "change": 0.7116000000000042,
-      "value": 102.3412
-    },
-    "payems": {
-      "change": 130.0,
-      "value": 158627.0
-    },
-    "unrate": {
-      "change": -0.10000000000000053,
-      "value": 4.3
-    },
-    "yield_curve": {
-      "change": -0.030000000000000027,
-      "value": 0.65
-    }
-  },
   "fng": {
     "rating": "fear",
-    "score": 42.8857142857143
+    "score": 42.2450704225352
   },
   "regime": "OVERHEATING",
   "scores": {
-    "composite": 50.5,
+    "composite": 50.4,
     "growth": 73.6,
     "inflation": 78.5,
     "liquidity": 53.5,
-    "risk": 34.7,
-    "sentiment": 26.8
+    "risk": 34.6,
+    "sentiment": 26.5
   },
-  "summary": "Signs of overheating are emerging. Strong growth is being coupled with rising inflationary pressure. Monetary tightening or market volatility may follow as the cycle matures.",
-  "timestamp": "2026-02-28T06:16:23Z"
+  "timestamp": "2026-02-27T14:41:19Z"
 }
