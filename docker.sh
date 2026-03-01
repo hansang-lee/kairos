@@ -12,15 +12,15 @@ else
     BASE_DIR="$(dirname "$(realpath "$0")")"
 fi
 
-DOCKER_IMAGE="libyfinance"
+WORKSPACE="$(basename "${BASE_DIR}")"
 
-docker build -t ${DOCKER_IMAGE} ${BASE_DIR}
+docker build -t ${WORKSPACE} ${BASE_DIR}
 
 DOCKER_ARGS=(
     "--rm"
     "--interactive"
     "--tty"
-    "--name=libyfinance"
+    "--name=${WORKSPACE}"
     "--user=admin"
     "--network=host"
     "--ipc=host"
@@ -36,9 +36,9 @@ DOCKER_ARGS=(
     "--mount=source=/etc/timezone,target=/etc/timezone,type=bind,consistency=cached:ro"
     "--mount=source=/dev,target=/dev,type=bind,consistency=cached:ro"
     "--mount=source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind,consistency=cached"
-    "--mount=source=${BASE_DIR},target=/workspaces/libyfinance,type=bind"
-    "--workdir=/workspaces/libyfinance"
-    "${DOCKER_IMAGE}"
+    "--mount=source=${BASE_DIR},target=/workspaces/${WORKSPACE},type=bind"
+    "--workdir=/workspaces/${WORKSPACE}"
+    "${WORKSPACE}"
 )
 
 CONTAINER_COMMANDS="
