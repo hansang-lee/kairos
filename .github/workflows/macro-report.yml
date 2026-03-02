@@ -2,7 +2,7 @@ name: Daily Macro Report
 
 on:
   schedule:
-    - cron: '0 14 * * 1-5'  # Weekdays UTC 14:00 (KST 23:00)
+    - cron: '0 14 * * *'  # Daily UTC 14:00 (KST 23:00)
   workflow_dispatch:         # Manual trigger
 
 permissions:
