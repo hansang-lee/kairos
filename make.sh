@@ -15,7 +15,7 @@ fi
 BUILD_TYPE="${1:-Release}"
 BUILD_DIR="${BASE_DIR}/build/${BUILD_TYPE}"
 
-/usr/bin/cmake \
+cmake \
     -G Ninja \
     -S "${BASE_DIR}" \
     -B "${BUILD_DIR}" \
@@ -23,7 +23,7 @@ BUILD_DIR="${BASE_DIR}/build/${BUILD_TYPE}"
     -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
-/usr/bin/cmake \
+cmake \
     --build "${BUILD_DIR}" \
     --config "${BUILD_TYPE}" \
     --target all \

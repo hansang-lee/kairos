@@ -1,4 +1,4 @@
-FROM debian:11-slim AS builder
+FROM debian:12-slim AS builder
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \

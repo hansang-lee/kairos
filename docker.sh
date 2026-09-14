@@ -16,6 +16,11 @@ WORKSPACE="$(basename "${BASE_DIR}")"
 
 docker build -t ${WORKSPACE} ${BASE_DIR}
 
+ENV_FILE_ARG=()
+if [ -f "${HOME}/.env" ]; then
+    ENV_FILE_ARG+=("--env-file=${HOME}/.env")
+fi
+
 DOCKER_ARGS=(
     "--rm"
     "--interactive"
@@ -31,7 +36,7 @@ DOCKER_ARGS=(
     "--env=NVIDIA_VISIBLE_DEVICES=all"
     "--env=NVIDIA_DRIVER_CAPABILITIES=all"
     "--env=TZ=Asia/Seoul"
-    "--env-file=${HOME}/.env"
+    "${ENV_FILE_ARG[@]}"
     "--mount=source=/etc/localtime,target=/etc/localtime,type=bind,consistency=cached:ro"
     "--mount=source=/etc/timezone,target=/etc/timezone,type=bind,consistency=cached:ro"
     "--mount=source=/dev,target=/dev,type=bind,consistency=cached:ro"

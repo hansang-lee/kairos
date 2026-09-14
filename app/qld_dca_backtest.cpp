@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "indicator.hpp"
+#include <functional>
 #include "yfinance.hpp"
 
 struct Defer {
