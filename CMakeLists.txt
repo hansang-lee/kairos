@@ -22,6 +22,7 @@ add_library(${PROJECT_NAME} SHARED
   src/macro/macro_scorer.cpp
   src/macro/macro_backtester.cpp
   src/broker/kis_auth.cpp
+  src/broker/kis_trader.cpp
   src/data/kis_provider.cpp
   lib/sma_crossover/sma_crossover.cpp
   lib/rsi/rsi_strategy.cpp
