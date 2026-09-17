@@ -237,7 +237,7 @@ struct BollingerBands {
  * @param low     Low price series.
  * @param close   Close price series.
  * @param period  Lookback period (typically 14).
- * @return        ATR values. Size = close.size() - period.
+ * @return        ATR values. Size = close.size() - period + 1; result[0] corresponds to data index (period - 1).
  *
  * Measures market volatility. True Range = max(H - L, |H - C_prev|, |L - C_prev|).
  */
@@ -375,6 +375,644 @@ struct StochasticResult {
     std::vector<double> alignedK(rawK.begin() + (dPeriod - 1), rawK.end());
 
     return {std::move(alignedK), d};
+}
+
+/**
+ * @brief Compute Weighted Moving Average (WMA) — linearly weights recent prices higher.
+ * @param prices  Input price series.
+ * @param window  Window size.
+ * @return        WMA values. Size = prices.size() - window + 1.
+ */
+[[nodiscard]] inline std::vector<double> wma(const std::vector<double>& prices, std::size_t window) {
+    if (window == 0 || prices.size() < window) {
+        return {};
+    }
+
+    std::vector<double> result;
+    result.reserve(prices.size() - window + 1);
+    const double denom = static_cast<double>(window) * static_cast<double>(window + 1) / 2.0;
+
+    for (std::size_t i = window - 1; i < prices.size(); ++i) {
+        double sum = 0.0;
+        for (std::size_t j = 0; j < window; ++j) {
+            sum += prices[i - j] * static_cast<double>(window - j);
+        }
+        result.push_back(sum / denom);
+    }
+
+    return result;
+}
+
+/**
+ * @brief Compute rolling standard deviation (population).
+ * @param prices  Input price series.
+ * @param window  Window size.
+ * @return        Std-dev values. Size = prices.size() - window + 1.
+ */
+[[nodiscard]] inline std::vector<double> stddev(const std::vector<double>& prices, std::size_t window) {
+    if (window == 0 || prices.size() < window) {
+        return {};
+    }
+
+    std::vector<double> result;
+    result.reserve(prices.size() - window + 1);
+
+    for (std::size_t i = window - 1; i < prices.size(); ++i) {
+        double sum = 0.0;
+        for (std::size_t j = 0; j < window; ++j) {
+            sum += prices[i - j];
+        }
+        const double mean = sum / static_cast<double>(window);
+
+        double varSum = 0.0;
+        for (std::size_t j = 0; j < window; ++j) {
+            const double diff = prices[i - j] - mean;
+            varSum += diff * diff;
+        }
+        result.push_back(std::sqrt(varSum / static_cast<double>(window)));
+    }
+
+    return result;
+}
+
+/**
+ * @brief Compute Rate of Change (ROC) as a percentage.
+ * @param prices  Input price series.
+ * @param period  Lookback period.
+ * @return        ROC values (%). Size = prices.size() - period.
+ */
+[[nodiscard]] inline std::vector<double> roc(const std::vector<double>& prices, std::size_t period) {
+    if (period == 0 || prices.size() <= period) {
+        return {};
+    }
+
+    std::vector<double> result;
+    result.reserve(prices.size() - period);
+    for (std::size_t i = period; i < prices.size(); ++i) {
+        const double prev = prices[i - period];
+        result.push_back(prev != 0.0 ? (prices[i] - prev) / prev * 100.0 : 0.0);
+    }
+
+    return result;
+}
+
+/**
+ * @brief Compute Commodity Channel Index (CCI).
+ * @param high    High price series.
+ * @param low     Low price series.
+ * @param close   Close price series.
+ * @param period  Lookback period (typically 20).
+ * @return        CCI values. Size = close.size() - period + 1.
+ */
+[[nodiscard]] inline std::vector<double> cci(const std::vector<double>& high, const std::vector<double>& low,
+                                             const std::vector<double>& close, std::size_t period = 20) {
+    const std::size_t n = close.size();
+    if (period == 0 || n < period || high.size() != n || low.size() != n) {
+        return {};
+    }
+
+    std::vector<double> typical(n);
+    for (std::size_t i = 0; i < n; ++i) {
+        typical[i] = (high[i] + low[i] + close[i]) / 3.0;
+    }
+
+    std::vector<double> result;
+    result.reserve(n - period + 1);
+    for (std::size_t i = period - 1; i < n; ++i) {
+        double sum = 0.0;
+        for (std::size_t j = 0; j < period; ++j) {
+            sum += typical[i - j];
+        }
+        const double smaTp = sum / static_cast<double>(period);
+
+        double meanDev = 0.0;
+        for (std::size_t j = 0; j < period; ++j) {
+            meanDev += std::abs(typical[i - j] - smaTp);
+        }
+        meanDev /= static_cast<double>(period);
+
+        result.push_back(meanDev < 1e-12 ? 0.0 : (typical[i] - smaTp) / (0.015 * meanDev));
+    }
+
+    return result;
+}
+
+/**
+ * @brief Compute Williams %R.
+ * @param high    High price series.
+ * @param low     Low price series.
+ * @param close   Close price series.
+ * @param period  Lookback period (typically 14).
+ * @return        %R values (-100~0). Size = close.size() - period + 1.
+ */
+[[nodiscard]] inline std::vector<double> williamsR(const std::vector<double>& high, const std::vector<double>& low,
+                                                   const std::vector<double>& close, std::size_t period = 14) {
+    const std::size_t n = close.size();
+    if (period == 0 || n < period || high.size() != n || low.size() != n) {
+        return {};
+    }
+
+    std::vector<double> result;
+    result.reserve(n - period + 1);
+    for (std::size_t i = period - 1; i < n; ++i) {
+        double highest = high[i];
+        double lowest  = low[i];
+        for (std::size_t j = 0; j < period; ++j) {
+            highest = std::max(highest, high[i - j]);
+            lowest  = std::min(lowest, low[i - j]);
+        }
+        const double diff = highest - lowest;
+        result.push_back(diff < 1e-12 ? -50.0 : (highest - close[i]) / diff * -100.0);
+    }
+
+    return result;
+}
+
+/**
+ * @brief Compute TRIX — rate of change of a triple-smoothed EMA.
+ * @param prices  Input price series.
+ * @param period  Smoothing period for each of the 3 EMA passes (typically 15).
+ * @return        TRIX values (%).
+ */
+[[nodiscard]] inline std::vector<double> trix(const std::vector<double>& prices, std::size_t period = 15) {
+    const auto ema1 = ema(prices, period);
+    const auto ema2 = ema(ema1, period);
+    const auto ema3 = ema(ema2, period);
+    if (ema3.size() < 2) {
+        return {};
+    }
+
+    std::vector<double> result;
+    result.reserve(ema3.size() - 1);
+    for (std::size_t i = 1; i < ema3.size(); ++i) {
+        const double prev = ema3[i - 1];
+        result.push_back(prev != 0.0 ? (ema3[i] - prev) / prev * 100.0 : 0.0);
+    }
+
+    return result;
+}
+
+/**
+ * @brief Directional Movement Index result: +DI, -DI, and the smoothed ADX line.
+ *
+ * plusDI[i] and minusDI[i] correspond to data index (period + i).
+ * adx[k] correspond to data index (2*period - 1 + k), and also lines up with
+ * plusDI[k + period - 1] / minusDI[k + period - 1] (same data index).
+ */
+struct DmiResult {
+    std::vector<double> plusDI;
+    std::vector<double> minusDI;
+    std::vector<double> adx;
+};
+
+/**
+ * @brief Compute the Directional Movement Index / Average Directional Index (Wilder).
+ * @param high    High price series.
+ * @param low     Low price series.
+ * @param close   Close price series.
+ * @param period  Wilder smoothing period (typically 14).
+ * @return        DmiResult with +DI, -DI, and ADX lines.
+ */
+[[nodiscard]] inline DmiResult adx(const std::vector<double>& high, const std::vector<double>& low,
+                                   const std::vector<double>& close, std::size_t period = 14) {
+    const std::size_t n = close.size();
+    if (period == 0 || n <= period + 1 || high.size() != n || low.size() != n) {
+        return {};
+    }
+
+    std::vector<double> tr(n, 0.0), plusDM(n, 0.0), minusDM(n, 0.0);
+    for (std::size_t i = 1; i < n; ++i) {
+        const double upMove   = high[i] - high[i - 1];
+        const double downMove = low[i - 1] - low[i];
+        plusDM[i]             = (upMove > downMove && upMove > 0.0) ? upMove : 0.0;
+        minusDM[i]            = (downMove > upMove && downMove > 0.0) ? downMove : 0.0;
+
+        const double hl = high[i] - low[i];
+        const double hc = std::abs(high[i] - close[i - 1]);
+        const double lc = std::abs(low[i] - close[i - 1]);
+        tr[i]           = std::max({hl, hc, lc});
+    }
+
+    double smoothTr = 0.0, smoothPlusDM = 0.0, smoothMinusDM = 0.0;
+    for (std::size_t i = 1; i <= period; ++i) {
+        smoothTr += tr[i];
+        smoothPlusDM += plusDM[i];
+        smoothMinusDM += minusDM[i];
+    }
+
+    std::vector<double> plusDIvec, minusDIvec, dxVec;
+    const auto          pushDI = [&]() {
+        const double pDI = smoothTr < 1e-12 ? 0.0 : (smoothPlusDM / smoothTr) * 100.0;
+        const double mDI = smoothTr < 1e-12 ? 0.0 : (smoothMinusDM / smoothTr) * 100.0;
+        plusDIvec.push_back(pDI);
+        minusDIvec.push_back(mDI);
+        const double sum = pDI + mDI;
+        dxVec.push_back(sum < 1e-12 ? 0.0 : std::abs(pDI - mDI) / sum * 100.0);
+    };
+    pushDI();
+
+    for (std::size_t i = period + 1; i < n; ++i) {
+        smoothTr      = smoothTr - (smoothTr / static_cast<double>(period)) + tr[i];
+        smoothPlusDM  = smoothPlusDM - (smoothPlusDM / static_cast<double>(period)) + plusDM[i];
+        smoothMinusDM = smoothMinusDM - (smoothMinusDM / static_cast<double>(period)) + minusDM[i];
+        pushDI();
+    }
+
+    if (dxVec.size() < period) {
+        return {std::move(plusDIvec), std::move(minusDIvec), {}};
+    }
+
+    std::vector<double> adxVec;
+    adxVec.reserve(dxVec.size() - period + 1);
+    double sumDx = 0.0;
+    for (std::size_t i = 0; i < period; ++i) {
+        sumDx += dxVec[i];
+    }
+    adxVec.push_back(sumDx / static_cast<double>(period));
+    for (std::size_t i = period; i < dxVec.size(); ++i) {
+        const double prevAdx = adxVec.back();
+        adxVec.push_back((prevAdx * static_cast<double>(period - 1) + dxVec[i]) / static_cast<double>(period));
+    }
+
+    return {std::move(plusDIvec), std::move(minusDIvec), std::move(adxVec)};
+}
+
+/**
+ * @brief Compute the Parabolic SAR (Wilder).
+ * @param high    High price series.
+ * @param low     Low price series.
+ * @param afStep  Acceleration factor step (typically 0.02).
+ * @param afMax   Maximum acceleration factor (typically 0.2).
+ * @return        SAR values, 1:1 aligned with the input (size = high.size()).
+ */
+[[nodiscard]] inline std::vector<double> parabolicSar(const std::vector<double>& high, const std::vector<double>& low,
+                                                      double afStep = 0.02, double afMax = 0.2) {
+    const std::size_t n = high.size();
+    if (n < 2 || low.size() != n) {
+        return {};
+    }
+
+    std::vector<double> sar(n, 0.0);
+    bool                uptrend = true;
+    double              af      = afStep;
+    double              ep      = high[0];
+    sar[0]                      = low[0];
+
+    for (std::size_t i = 1; i < n; ++i) {
+        const double prevSar = sar[i - 1];
+        double       nextSar = prevSar + af * (ep - prevSar);
+
+        if (uptrend) {
+            nextSar = std::min({nextSar, low[i - 1], i >= 2 ? low[i - 2] : low[i - 1]});
+            if (low[i] < nextSar) {
+                uptrend = false;
+                nextSar = ep;
+                ep      = low[i];
+                af      = afStep;
+            } else if (high[i] > ep) {
+                ep = high[i];
+                af = std::min(af + afStep, afMax);
+            }
+        } else {
+            nextSar = std::max({nextSar, high[i - 1], i >= 2 ? high[i - 2] : high[i - 1]});
+            if (high[i] > nextSar) {
+                uptrend = true;
+                nextSar = ep;
+                ep      = high[i];
+                af      = afStep;
+            } else if (low[i] < ep) {
+                ep = low[i];
+                af = std::min(af + afStep, afMax);
+            }
+        }
+
+        sar[i] = nextSar;
+    }
+
+    return sar;
+}
+
+/**
+ * @brief SuperTrend result: the trailing stop line and its trend direction.
+ */
+struct SuperTrendResult {
+    std::vector<double> value;  ///< SuperTrend line, aligned to data index (i + period).
+    std::vector<int>    trend;  ///< 1 = uptrend, -1 = downtrend.
+};
+
+/**
+ * @brief Compute the SuperTrend indicator (ATR-band trailing stop with flips).
+ * @param high        High price series.
+ * @param low         Low price series.
+ * @param close       Close price series.
+ * @param period      ATR period (typically 10).
+ * @param multiplier  ATR band multiplier (typically 3.0).
+ * @return            SuperTrendResult. value[i]/trend[i] correspond to data index (i + period - 1).
+ */
+[[nodiscard]] inline SuperTrendResult superTrend(const std::vector<double>& high, const std::vector<double>& low,
+                                                 const std::vector<double>& close, std::size_t period = 10,
+                                                 double multiplier = 3.0) {
+    const auto atrVals = atr(high, low, close, period);
+    if (atrVals.empty()) {
+        return {};
+    }
+    const std::size_t offset = period - 1;  // atrVals[0] corresponds to data index `period - 1`.
+    const std::size_t m      = atrVals.size();
+
+    std::vector<double> finalUpper(m), finalLower(m), value(m);
+    std::vector<int>    trend(m);
+
+    for (std::size_t i = 0; i < m; ++i) {
+        const std::size_t di         = i + offset;
+        const double      mid        = (high[di] + low[di]) / 2.0;
+        const double      basicUpper = mid + multiplier * atrVals[i];
+        const double      basicLower = mid - multiplier * atrVals[i];
+
+        if (i == 0) {
+            finalUpper[i] = basicUpper;
+            finalLower[i] = basicLower;
+            trend[i]      = (close[di] <= basicUpper) ? -1 : 1;
+            value[i]      = (trend[i] == 1) ? finalLower[i] : finalUpper[i];
+            continue;
+        }
+
+        finalUpper[i] =
+            (basicUpper < finalUpper[i - 1] || close[di - 1] > finalUpper[i - 1]) ? basicUpper : finalUpper[i - 1];
+        finalLower[i] =
+            (basicLower > finalLower[i - 1] || close[di - 1] < finalLower[i - 1]) ? basicLower : finalLower[i - 1];
+
+        if (trend[i - 1] == 1) {
+            trend[i] = (close[di] < finalLower[i]) ? -1 : 1;
+        } else {
+            trend[i] = (close[di] > finalUpper[i]) ? 1 : -1;
+        }
+        value[i] = (trend[i] == 1) ? finalLower[i] : finalUpper[i];
+    }
+
+    return {std::move(value), std::move(trend)};
+}
+
+/**
+ * @brief Aroon result: Up and Down lines (0~100).
+ */
+struct AroonResult {
+    std::vector<double> up;
+    std::vector<double> down;
+};
+
+/**
+ * @brief Compute the Aroon Up/Down indicator.
+ * @param high    High price series.
+ * @param low     Low price series.
+ * @param period  Lookback period (typically 25).
+ * @return        AroonResult. up[0]/down[0] correspond to data index `period`.
+ */
+[[nodiscard]] inline AroonResult aroon(const std::vector<double>& high, const std::vector<double>& low,
+                                       std::size_t period = 25) {
+    const std::size_t n = high.size();
+    if (period == 0 || n <= period || low.size() != n) {
+        return {};
+    }
+
+    std::vector<double> up, down;
+    up.reserve(n - period);
+    down.reserve(n - period);
+
+    for (std::size_t i = period; i < n; ++i) {
+        std::size_t highIdx = i, lowIdx = i;
+        for (std::size_t j = i - period; j <= i; ++j) {
+            if (high[j] >= high[highIdx])
+                highIdx = j;
+            if (low[j] <= low[lowIdx])
+                lowIdx = j;
+        }
+        const double sinceHigh = static_cast<double>(i - highIdx);
+        const double sinceLow  = static_cast<double>(i - lowIdx);
+        up.push_back((static_cast<double>(period) - sinceHigh) / static_cast<double>(period) * 100.0);
+        down.push_back((static_cast<double>(period) - sinceLow) / static_cast<double>(period) * 100.0);
+    }
+
+    return {std::move(up), std::move(down)};
+}
+
+/**
+ * @brief Compute On-Balance Volume (OBV).
+ * @param close   Close price series.
+ * @param volume  Volume series.
+ * @return        Cumulative OBV, 1:1 aligned with the input.
+ */
+[[nodiscard]] inline std::vector<double> obv(const std::vector<double>& close, const std::vector<int64_t>& volume) {
+    const std::size_t n = close.size();
+    if (n == 0 || volume.size() != n) {
+        return {};
+    }
+
+    std::vector<double> result(n);
+    result[0] = static_cast<double>(volume[0]);
+    for (std::size_t i = 1; i < n; ++i) {
+        if (close[i] > close[i - 1]) {
+            result[i] = result[i - 1] + static_cast<double>(volume[i]);
+        } else if (close[i] < close[i - 1]) {
+            result[i] = result[i - 1] - static_cast<double>(volume[i]);
+        } else {
+            result[i] = result[i - 1];
+        }
+    }
+
+    return result;
+}
+
+/**
+ * @brief Compute the Money Flow Index (MFI) — volume-weighted RSI.
+ * @param high    High price series.
+ * @param low     Low price series.
+ * @param close   Close price series.
+ * @param volume  Volume series.
+ * @param period  Lookback period (typically 14).
+ * @return        MFI values (0~100). Size = close.size() - period.
+ */
+[[nodiscard]] inline std::vector<double> mfi(const std::vector<double>& high, const std::vector<double>& low,
+                                             const std::vector<double>& close, const std::vector<int64_t>& volume,
+                                             std::size_t period = 14) {
+    const std::size_t n = close.size();
+    if (period == 0 || n <= period || high.size() != n || low.size() != n || volume.size() != n) {
+        return {};
+    }
+
+    std::vector<double> typical(n), rawMoneyFlow(n);
+    for (std::size_t i = 0; i < n; ++i) {
+        typical[i]      = (high[i] + low[i] + close[i]) / 3.0;
+        rawMoneyFlow[i] = typical[i] * static_cast<double>(volume[i]);
+    }
+
+    std::vector<double> result;
+    result.reserve(n - period);
+    for (std::size_t i = period; i < n; ++i) {
+        double posFlow = 0.0, negFlow = 0.0;
+        for (std::size_t j = i - period + 1; j <= i; ++j) {
+            if (typical[j] > typical[j - 1]) {
+                posFlow += rawMoneyFlow[j];
+            } else if (typical[j] < typical[j - 1]) {
+                negFlow += rawMoneyFlow[j];
+            }
+        }
+        result.push_back(negFlow < 1e-12 ? 100.0 : 100.0 - (100.0 / (1.0 + posFlow / negFlow)));
+    }
+
+    return result;
+}
+
+/**
+ * @brief Compute Chaikin Money Flow (CMF).
+ * @param high    High price series.
+ * @param low     Low price series.
+ * @param close   Close price series.
+ * @param volume  Volume series.
+ * @param period  Lookback period (typically 20).
+ * @return        CMF values. Size = close.size() - period + 1.
+ */
+[[nodiscard]] inline std::vector<double> cmf(const std::vector<double>& high, const std::vector<double>& low,
+                                             const std::vector<double>& close, const std::vector<int64_t>& volume,
+                                             std::size_t period = 20) {
+    const std::size_t n = close.size();
+    if (period == 0 || n < period || high.size() != n || low.size() != n || volume.size() != n) {
+        return {};
+    }
+
+    std::vector<double> mfv(n);
+    for (std::size_t i = 0; i < n; ++i) {
+        const double range = high[i] - low[i];
+        const double mult  = range < 1e-12 ? 0.0 : ((close[i] - low[i]) - (high[i] - close[i])) / range;
+        mfv[i]             = mult * static_cast<double>(volume[i]);
+    }
+
+    std::vector<double> result;
+    result.reserve(n - period + 1);
+    for (std::size_t i = period - 1; i < n; ++i) {
+        double  sumMfv = 0.0;
+        int64_t sumVol = 0;
+        for (std::size_t j = 0; j < period; ++j) {
+            sumMfv += mfv[i - j];
+            sumVol += volume[i - j];
+        }
+        result.push_back(sumVol == 0 ? 0.0 : sumMfv / static_cast<double>(sumVol));
+    }
+
+    return result;
+}
+
+/**
+ * @brief Compute the Accumulation/Distribution Line.
+ * @param high    High price series.
+ * @param low     Low price series.
+ * @param close   Close price series.
+ * @param volume  Volume series.
+ * @return        Cumulative A/D line, 1:1 aligned with the input.
+ */
+[[nodiscard]] inline std::vector<double> adLine(const std::vector<double>& high, const std::vector<double>& low,
+                                                const std::vector<double>& close, const std::vector<int64_t>& volume) {
+    const std::size_t n = close.size();
+    if (n == 0 || high.size() != n || low.size() != n || volume.size() != n) {
+        return {};
+    }
+
+    std::vector<double> result(n);
+    double              cum = 0.0;
+    for (std::size_t i = 0; i < n; ++i) {
+        const double range = high[i] - low[i];
+        const double mult  = range < 1e-12 ? 0.0 : ((close[i] - low[i]) - (high[i] - close[i])) / range;
+        cum += mult * static_cast<double>(volume[i]);
+        result[i] = cum;
+    }
+
+    return result;
+}
+
+/**
+ * @brief Donchian Channel result.
+ */
+struct DonchianResult {
+    std::vector<double> upper;
+    std::vector<double> middle;
+    std::vector<double> lower;
+};
+
+/**
+ * @brief Compute Donchian Channels (highest-high / lowest-low breakout bands).
+ * @param high    High price series.
+ * @param low     Low price series.
+ * @param period  Lookback period (typically 20).
+ * @return        DonchianResult. Size = high.size() - period + 1.
+ */
+[[nodiscard]] inline DonchianResult donchian(const std::vector<double>& high, const std::vector<double>& low,
+                                             std::size_t period = 20) {
+    const std::size_t n = high.size();
+    if (period == 0 || n < period || low.size() != n) {
+        return {};
+    }
+
+    std::vector<double> upper, lower, middle;
+    const std::size_t   m = n - period + 1;
+    upper.reserve(m);
+    lower.reserve(m);
+    middle.reserve(m);
+
+    for (std::size_t i = period - 1; i < n; ++i) {
+        double hi = high[i], lo = low[i];
+        for (std::size_t j = 0; j < period; ++j) {
+            hi = std::max(hi, high[i - j]);
+            lo = std::min(lo, low[i - j]);
+        }
+        upper.push_back(hi);
+        lower.push_back(lo);
+        middle.push_back((hi + lo) / 2.0);
+    }
+
+    return {std::move(upper), std::move(middle), std::move(lower)};
+}
+
+/**
+ * @brief Keltner Channel result.
+ */
+struct KeltnerResult {
+    std::vector<double> upper;
+    std::vector<double> middle;
+    std::vector<double> lower;
+};
+
+/**
+ * @brief Compute Keltner Channels (EMA midline +/- ATR multiple).
+ * @param high        High price series.
+ * @param low         Low price series.
+ * @param close       Close price series.
+ * @param emaPeriod   EMA midline period (typically 20).
+ * @param atrPeriod   ATR period (typically 10).
+ * @param multiplier  ATR band multiplier (typically 2.0).
+ * @return            KeltnerResult aligned to data index `max(emaPeriod - 1, atrPeriod - 1)` onward.
+ */
+[[nodiscard]] inline KeltnerResult keltner(const std::vector<double>& high, const std::vector<double>& low,
+                                           const std::vector<double>& close, std::size_t emaPeriod = 20,
+                                           std::size_t atrPeriod = 10, double multiplier = 2.0) {
+    const auto middleEma = ema(close, emaPeriod);
+    const auto atrVals   = atr(high, low, close, atrPeriod);
+    if (middleEma.empty() || atrVals.empty()) {
+        return {};
+    }
+
+    const std::size_t emaOffset = emaPeriod - 1;
+    const std::size_t atrOffset = atrPeriod - 1;  // atrVals[0] corresponds to data index `atrPeriod - 1`.
+    const std::size_t start     = std::max(emaOffset, atrOffset);
+
+    std::vector<double> upper, middle, lower;
+    for (std::size_t di = start; di < close.size(); ++di) {
+        const double mid    = middleEma[di - emaOffset];
+        const double atrVal = atrVals[di - atrOffset];
+        middle.push_back(mid);
+        upper.push_back(mid + multiplier * atrVal);
+        lower.push_back(mid - multiplier * atrVal);
+    }
+
+    return {std::move(upper), std::move(middle), std::move(lower)};
 }
 
 }  // namespace indicator

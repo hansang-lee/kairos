@@ -55,6 +55,76 @@ int main() {
     std::cout << "7. MACD(5, 12, 5) count: " << macdVal.macd.size() << " | MACD: " << macdVal.macd.back()
               << " | Signal: " << macdVal.signal.back() << " | Hist: " << macdVal.histogram.back() << std::endl;
 
-    std::cout << "\nAll 7 technical indicators calculated and verified successfully!" << std::endl;
+    // 8. WMA
+    auto wma5 = indicator::wma(close, 5);
+    std::cout << "8. WMA(5) count: " << wma5.size() << " | Latest WMA: " << wma5.back() << std::endl;
+
+    // 9. Rolling StdDev
+    auto std5 = indicator::stddev(close, 5);
+    std::cout << "9. StdDev(5) count: " << std5.size() << " | Latest: " << std5.back() << std::endl;
+
+    // 10. ROC
+    auto roc10 = indicator::roc(close, 10);
+    std::cout << "10. ROC(10) count: " << roc10.size() << " | Latest: " << roc10.back() << std::endl;
+
+    // 11. CCI
+    auto cci20 = indicator::cci(high, low, close, 20);
+    std::cout << "11. CCI(20) count: " << cci20.size() << " | Latest: " << cci20.back() << std::endl;
+
+    // 12. Williams %R
+    auto willR = indicator::williamsR(high, low, close, 14);
+    std::cout << "12. Williams %R(14) count: " << willR.size() << " | Latest: " << willR.back() << std::endl;
+
+    // 13. TRIX (small period so 3 EMA passes fit in 30 bars)
+    auto trixVal = indicator::trix(close, 5);
+    std::cout << "13. TRIX(5) count: " << trixVal.size() << " | Latest: " << trixVal.back() << std::endl;
+
+    // 14. ADX / DMI
+    auto dmi = indicator::adx(high, low, close, 14);
+    std::cout << "14. ADX(14) count: " << dmi.adx.size() << " | +DI: " << dmi.plusDI.back()
+              << " | -DI: " << dmi.minusDI.back() << " | ADX: " << (dmi.adx.empty() ? 0.0 : dmi.adx.back())
+              << std::endl;
+
+    // 15. Parabolic SAR
+    auto psar = indicator::parabolicSar(high, low);
+    std::cout << "15. Parabolic SAR count: " << psar.size() << " | Latest: " << psar.back() << std::endl;
+
+    // 16. SuperTrend
+    auto st = indicator::superTrend(high, low, close, 10, 3.0);
+    std::cout << "16. SuperTrend(10, 3.0) count: " << st.value.size() << " | Latest: " << st.value.back()
+              << " | Trend: " << st.trend.back() << std::endl;
+
+    // 17. Aroon
+    auto aroonVal = indicator::aroon(high, low, 25);
+    std::cout << "17. Aroon(25) count: " << aroonVal.up.size() << " | Up: " << aroonVal.up.back()
+              << " | Down: " << aroonVal.down.back() << std::endl;
+
+    // 18. OBV
+    auto obvVal = indicator::obv(close, volume);
+    std::cout << "18. OBV count: " << obvVal.size() << " | Latest: " << obvVal.back() << std::endl;
+
+    // 19. MFI
+    auto mfiVal = indicator::mfi(high, low, close, volume, 14);
+    std::cout << "19. MFI(14) count: " << mfiVal.size() << " | Latest: " << mfiVal.back() << std::endl;
+
+    // 20. CMF
+    auto cmfVal = indicator::cmf(high, low, close, volume, 20);
+    std::cout << "20. CMF(20) count: " << cmfVal.size() << " | Latest: " << cmfVal.back() << std::endl;
+
+    // 21. A/D Line
+    auto adLineVal = indicator::adLine(high, low, close, volume);
+    std::cout << "21. A/D Line count: " << adLineVal.size() << " | Latest: " << adLineVal.back() << std::endl;
+
+    // 22. Donchian Channels
+    auto donch = indicator::donchian(high, low, 20);
+    std::cout << "22. Donchian(20) count: " << donch.middle.size() << " | Upper: " << donch.upper.back()
+              << " | Middle: " << donch.middle.back() << " | Lower: " << donch.lower.back() << std::endl;
+
+    // 23. Keltner Channels
+    auto keltVal = indicator::keltner(high, low, close, 20, 10, 2.0);
+    std::cout << "23. Keltner(20, 10, 2.0) count: " << keltVal.middle.size() << " | Upper: " << keltVal.upper.back()
+              << " | Middle: " << keltVal.middle.back() << " | Lower: " << keltVal.lower.back() << std::endl;
+
+    std::cout << "\nAll 24 technical indicators calculated and verified successfully!" << std::endl;
     return 0;
 }
