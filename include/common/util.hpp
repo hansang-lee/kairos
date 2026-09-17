@@ -68,9 +68,9 @@ struct Defer {
 [[nodiscard]] inline std::string resolveFromExe(const std::string& relativePath) {
     namespace fs = std::filesystem;
     // The executable is typically at build/Release/app/<name>,
-    // so we go up 3 levels to get the project root.
+    // so we go up 4 levels (app -> Release -> build -> project root).
     auto exePath    = fs::read_symlink("/proc/self/exe");
-    auto projectDir = exePath.parent_path().parent_path().parent_path();
+    auto projectDir = exePath.parent_path().parent_path().parent_path().parent_path();
     return (projectDir / relativePath).string();
 }
 
