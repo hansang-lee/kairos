@@ -21,8 +21,13 @@ add_library(${PROJECT_NAME} SHARED
   src/backtest/backtest_engine.cpp
   src/macro/macro_scorer.cpp
   src/macro/macro_backtester.cpp
+  src/broker/kis_auth.cpp
+  src/data/kis_provider.cpp
   lib/sma_crossover/sma_crossover.cpp
   lib/rsi/rsi_strategy.cpp
+  lib/macd/macd_strategy.cpp
+  lib/bollinger/bollinger_strategy.cpp
+  src/strategy/strategy_factory.cpp
 )
 
 target_include_directories(${PROJECT_NAME}
@@ -32,6 +37,8 @@ target_include_directories(${PROJECT_NAME}
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/sma_crossover
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/rsi
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/macd
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/bollinger
 )
 
 target_link_libraries(${PROJECT_NAME}

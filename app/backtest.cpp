@@ -1,7 +1,5 @@
-#include <ctime>
 #include <filesystem>
 #include <fstream>
-#include <functional>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
@@ -9,25 +7,8 @@
 #include "backtest/backtest_engine.hpp"
 #include "rsi_strategy.hpp"
 #include "sma_crossover.hpp"
+#include "common/util.hpp"
 #include "yfinance.hpp"
-
-struct Defer {
-    std::function<void()> f;
-    explicit Defer(std::function<void()> f)
-        : f(std::move(f)) {}
-    ~Defer() {
-        if (f) {
-            f();
-        }
-    }
-};
-
-inline std::string formatTime(const int64_t timestamp) {
-    const std::time_t t = static_cast<std::time_t>(timestamp);
-    char              mbstr[100];
-    std::strftime(mbstr, sizeof(mbstr), "%Y-%m-%d", std::localtime(&t));
-    return mbstr;
-}
 
 inline std::string currentDateTimeString() {
     const std::time_t now = std::time(nullptr);
@@ -42,13 +23,13 @@ void printSummary(std::ostream& os, const BacktestResult& result, const StockInf
        << "=== Backtest Result: " << result.strategyName << " ===" << "\n"
        << "Ticker:         " << result.ticker << "\n"
        << "Period:         "
-           << formatTime(data.timestamps.front()) << " ~ "
-           << formatTime(data.timestamps.back()) << "\n"
+           << util::formatTime(data.timestamps.front()) << " ~ "
+           << util::formatTime(data.timestamps.back()) << "\n"
        << std::fixed << std::setprecision(2)
        << "Initial Capital: $" << result.initialCapital << "\n"
        << "Final Capital:   $" << result.finalCapital << "\n"
-       << "Peak Capital:    $" << result.peakCapital << " (" << formatTime(result.peakTimestamp) << ")\n"
-       << "Lowest Capital:  $" << result.lowestCapital << " (" << formatTime(result.lowestTimestamp) << ")\n"
+       << "Peak Capital:    $" << result.peakCapital << " (" << util::formatTime(result.peakTimestamp) << ")\n"
+       << "Lowest Capital:  $" << result.lowestCapital << " (" << util::formatTime(result.lowestTimestamp) << ")\n"
        << "-" << "\n"
        << "Total Return:   " << result.totalReturnPct << "%" << "\n"
        << "CAGR:           " << result.cagr << "%" << "\n"
@@ -86,8 +67,8 @@ void printTrades(std::ostream& os, const BacktestResult& result, const StockInfo
     for (const auto& trade : result.trades) {
         // clang-format off
         os << std::left
-           << std::setw(16) << formatTime(data.timestamps[trade.buyIndex])
-           << std::setw(16) << formatTime(data.timestamps[trade.sellIndex])
+           << std::setw(16) << util::formatTime(data.timestamps[trade.buyIndex])
+           << std::setw(16) << util::formatTime(data.timestamps[trade.sellIndex])
            << std::fixed << std::setprecision(2)
            << "$" << std::setw(11) << trade.buyPrice
            << "$" << std::setw(11) << trade.sellPrice
@@ -227,7 +208,7 @@ void printComparison(std::ostream& os, const std::vector<BacktestResult>& result
 
 int main(int argc, char* argv[]) {
     yFinance::init();
-    Defer _cleanup([] { yFinance::close(); });
+    util::Defer _cleanup([] { yFinance::close(); });
 
     const auto TICKER   = ((argc > 1) ? argv[1] : "SPY");
     const auto START    = ((argc > 2) ? argv[2] : "2021-01-01");
@@ -270,8 +251,8 @@ int main(int argc, char* argv[]) {
     try {
         std::filesystem::create_directories("logs");
 
-        const std::string dtStr = currentDateTimeString();
-        const std::string logPath = "logs/backtest_" + std::string(TICKER) + "_" + dtStr + ".log";
+        const std::string dtStr         = currentDateTimeString();
+        const std::string logPath       = "logs/backtest_" + std::string(TICKER) + "_" + dtStr + ".log";
         const std::string latestLogPath = "logs/backtest_latest.log";
 
         std::ofstream logFile(logPath);
@@ -293,4 +274,3 @@ int main(int argc, char* argv[]) {
 
     return 0;
 }
-

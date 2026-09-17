@@ -275,8 +275,7 @@ void MacroBacktester::printResults(const std::vector<MacroBacktestResult>& resul
                 std::clog << "--- " << p.date << " ---" << std::endl;
 
                 // Scores
-                std::clog << "  Indicators:  "
-                          << "Growth=" << std::fixed << std::setprecision(1) << p.scores.growth
+                std::clog << "  Indicators:  " << "Growth=" << std::fixed << std::setprecision(1) << p.scores.growth
                           << "  Inflation=" << p.scores.inflation << "  Liquidity=" << p.scores.liquidity
                           << "  Sentiment=" << p.scores.sentiment << "  Risk=" << p.scores.risk
                           << "  (Composite=" << p.scores.composite << ")" << std::endl;
@@ -290,8 +289,7 @@ void MacroBacktester::printResults(const std::vector<MacroBacktestResult>& resul
                               << std::endl;
                 }
 
-                std::clog << "  Allocation:  "
-                          << "Stocks=" << static_cast<int>(p.alloc.stocks) << "%"
+                std::clog << "  Allocation:  " << "Stocks=" << static_cast<int>(p.alloc.stocks) << "%"
                           << "  Gold=" << static_cast<int>(p.alloc.gold) << "%"
                           << "  Metals=" << static_cast<int>(p.alloc.metals) << "%"
                           << "  Bonds=" << static_cast<int>(p.alloc.bonds) << "%"

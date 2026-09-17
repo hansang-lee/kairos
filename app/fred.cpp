@@ -1,23 +1,13 @@
 #include <cstdlib>
-#include <functional>
 #include <iomanip>
 #include <iostream>
 #include <map>
 #include <set>
 #include <vector>
 
+#include "common/util.hpp"
 #include "yfinance.hpp"
 
-struct Defer {
-    std::function<void()> f;
-    explicit Defer(std::function<void()> f)
-        : f(std::move(f)) {}
-    ~Defer() {
-        if (f) {
-            f();
-        }
-    }
-};
 
 void printTable(const std::vector<std::shared_ptr<FredSeriesInfo>>& seriesList) {
     /* Collect all unique dates */
@@ -78,7 +68,7 @@ int main() {
     }
 
     yFinance::init();
-    Defer _cleanup([] { yFinance::close(); });
+    util::Defer _cleanup([] { yFinance::close(); });
 
     /* Fetch last 12 months of data (monthly frequency) */
     const auto unrate   = yFinance::getFredSeries("UNRATE", apiKey, "2025-01-01", "2026-02-01", "m");

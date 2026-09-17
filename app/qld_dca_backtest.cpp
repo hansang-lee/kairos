@@ -6,31 +6,13 @@
 #include <map>
 #include <vector>
 
+#include "common/util.hpp"
 #include "indicator.hpp"
-#include <functional>
 #include "yfinance.hpp"
-
-struct Defer {
-    std::function<void()> f;
-    explicit Defer(std::function<void()> f)
-        : f(std::move(f)) {}
-    ~Defer() {
-        if (f) {
-            f();
-        }
-    }
-};
-
-inline std::string formatTime(const int64_t timestamp) {
-    const std::time_t t = static_cast<std::time_t>(timestamp);
-    char              mbstr[100];
-    std::strftime(mbstr, sizeof(mbstr), "%Y-%m-%d", std::localtime(&t));
-    return mbstr;
-}
 
 int main(int argc, char* argv[]) {
     yFinance::init();
-    Defer _cleanup([] { yFinance::close(); });
+    util::Defer _cleanup([] { yFinance::close(); });
 
     const std::string TICKER     = "QLD";
     const std::string START_DATE = "2021-01-01";
@@ -57,11 +39,11 @@ int main(int argc, char* argv[]) {
     // Map F&G timestamps to dates for easier lookup
     std::map<std::string, std::string> fngRatingsByDate;
     for (size_t i = 0; i < fng->timestamps.size(); ++i) {
-        fngRatingsByDate[formatTime(fng->timestamps[i])] = fng->ratings[i];
+        fngRatingsByDate[util::formatTime(fng->timestamps[i])] = fng->ratings[i];
     }
 
     auto getFngRating = [&](int64_t timestamp) -> std::string {
-        std::string date = formatTime(timestamp);
+        std::string date = util::formatTime(timestamp);
         if (fngRatingsByDate.count(date)) {
             return fngRatingsByDate[date];
         }
@@ -101,7 +83,7 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    std::clog << "Step 4: Running DCA Simulation from " << formatTime(stock->timestamps[startIndex]) << "..."
+    std::clog << "Step 4: Running DCA Simulation from " << util::formatTime(stock->timestamps[startIndex]) << "..."
               << std::endl;
 
     std::clog << std::left << std::setw(12) << "Date" << std::setw(10) << "Price" << std::setw(10) << "SMA120"
@@ -117,7 +99,7 @@ int main(int argc, char* argv[]) {
         // Use 'open' price for daily purchase as requested
         const double      price   = stock->open[i];
         const int64_t     ts      = stock->timestamps[i];
-        const std::string dateStr = formatTime(ts);
+        const std::string dateStr = util::formatTime(ts);
 
         // Find SMA value for this day
         // sma[0] corresponds to stock[SMA_WINDOW - 1]
@@ -146,7 +128,7 @@ int main(int argc, char* argv[]) {
 
         // Print every month or so to keep logs clean, or just some updates
         if (i % 60 == 0 || i == startIndex || i == stock->close.size() - 1) {
-            std::clog << std::left << std::setw(12) << formatTime(ts) << std::fixed << std::setprecision(2) << "$"
+            std::clog << std::left << std::setw(12) << util::formatTime(ts) << std::fixed << std::setprecision(2) << "$"
                       << std::setw(9) << price << "$" << std::setw(9) << currentSma << std::setw(15) << rating
                       << std::setw(8) << buyQty << "$" << std::setw(11) << totalInvested << std::endl;
         }
@@ -161,8 +143,8 @@ int main(int argc, char* argv[]) {
     std::clog << "  BACKTEST SUMMARY (" << TICKER << ")\n";
     std::clog << std::string(40, '=') << "\n";
     std::clog << std::fixed << std::setprecision(2);
-    std::clog << "Period:         " << formatTime(stock->timestamps[startIndex]) << " ~ "
-              << formatTime(stock->timestamps.back()) << "\n";
+    std::clog << "Period:         " << util::formatTime(stock->timestamps[startIndex]) << " ~ "
+              << util::formatTime(stock->timestamps.back()) << "\n";
     std::clog << "Principal:      $" << totalInvested << "\n";
     std::clog << "Final Value:    $" << finalValue << "\n";
     std::clog << "Profit:         $" << profit << (profit >= 0 ? " (Gain)" : " (Loss)") << "\n";

@@ -19,8 +19,7 @@ struct MacroScores {
     double composite = 0.0;  // weighted total
 };
 
-enum class Regime
-{
+enum class Regime {
     Expansion,    // strong growth, moderate inflation
     Overheating,  // strong growth, high inflation
     Slowdown,     // weakening growth, elevated inflation

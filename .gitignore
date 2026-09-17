@@ -1,2 +1,30 @@
+# Build
 build/
+
+# Data & Cache
+data/
+cache/
 logs/
+
+# Secrets
+.env
+
+# Database
+*.db
+*.db-*
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+.venv/
+__pycache__/
+*.pyc

@@ -30,16 +30,16 @@ struct BacktestResult {
     double finalCapital   = 0.0;
 
     /* ----- Key Metrics ----- */
-    double totalReturnPct = 0.0;  // Total return percentage
-    double cagr           = 0.0;  // Compound Annual Growth Rate (%)
-    double peakCapital    = 0.0;  // Highest capital during backtest
-    std::int64_t peakTimestamp = 0; // Timestamp of peak capital
-    double lowestCapital  = 0.0;  // Lowest capital during backtest
-    std::int64_t lowestTimestamp = 0; // Timestamp of lowest capital
-    double maxDrawdownPct = 0.0;  // Maximum drawdown percentage (negative)
-    double winRate        = 0.0;  // Winning trades / Total trades (0~1)
-    double profitFactor   = 0.0;  // Gross profit / Gross loss
-    double sharpeRatio    = 0.0;  // Annualized Sharpe ratio
+    double       totalReturnPct  = 0.0;  // Total return percentage
+    double       cagr            = 0.0;  // Compound Annual Growth Rate (%)
+    double       peakCapital     = 0.0;  // Highest capital during backtest
+    std::int64_t peakTimestamp   = 0;    // Timestamp of peak capital
+    double       lowestCapital   = 0.0;  // Lowest capital during backtest
+    std::int64_t lowestTimestamp = 0;    // Timestamp of lowest capital
+    double       maxDrawdownPct  = 0.0;  // Maximum drawdown percentage (negative)
+    double       winRate         = 0.0;  // Winning trades / Total trades (0~1)
+    double       profitFactor    = 0.0;  // Gross profit / Gross loss
+    double       sharpeRatio     = 0.0;  // Annualized Sharpe ratio
 
     /* ----- Composite Score (0~100) ----- */
     double score = 0.0;

@@ -1,6 +1,5 @@
 #include <cstdlib>
 #include <fstream>
-#include <functional>
 #include <iostream>
 #include <map>
 #include <set>
@@ -11,45 +10,10 @@
 
 #include <nlohmann/json.hpp>
 
+#include "common/util.hpp"
 #include "macro/macro_backtester.hpp"
 #include "macro_scorer.hpp"
 #include "yfinance.hpp"
-
-/**
- * @brief Resolve a path relative to the executable's directory.
- *        e.g., if exe is /foo/build/Debug/app/macro_backtest,
- *        resolveFromExe("config/x.json") → /foo/config/x.json
- */
-static std::string resolveFromExe(const std::string& relativePath) {
-    char    buf[4096];
-    ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
-    if (len <= 0) {
-        return relativePath;  // fallback
-    }
-    buf[len] = '\0';
-    std::string exePath(buf);
-
-    // Walk up from exe dir to project root (exe is in build/<type>/app/)
-    for (int i = 0; i < 4; ++i) {
-        auto pos = exePath.rfind('/');
-        if (pos == std::string::npos) {
-            return relativePath;
-        }
-        exePath = exePath.substr(0, pos);
-    }
-    return exePath + "/" + relativePath;
-}
-
-struct Defer {
-    std::function<void()> f;
-    explicit Defer(std::function<void()> f)
-        : f(std::move(f)) {}
-    ~Defer() {
-        if (f) {
-            f();
-        }
-    }
-};
 
 /**
  * @brief Build monthly returns from StockInfo close prices.
@@ -98,7 +62,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    std::string configPath = resolveFromExe("config/macro_allocation.json");
+    std::string configPath = util::resolveFromExe("config/macro_allocation.json");
     if (argc > 1) {
         configPath = argv[1];
     }
@@ -144,7 +108,7 @@ int main(int argc, char* argv[]) {
     std::string warmupDate = computeWarmupDate(startDate, 3);
 
     yFinance::init();
-    Defer _cleanup([] { yFinance::close(); });
+    util::Defer _cleanup([] { yFinance::close(); });
 
     /* ---- Fetch FRED data ---- */
     // clang-format off

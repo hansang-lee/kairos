@@ -21,7 +21,7 @@ class yFinance {
     yFinance(yFinance&& other)      = delete;
 
     yFinance& operator=(const yFinance& other) = delete;
-    yFinance& operator=(yFinance&& other) = delete;
+    yFinance& operator=(yFinance&& other)      = delete;
 
     /**
      * @brief Fetch historical stock data.

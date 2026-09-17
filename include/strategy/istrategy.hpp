@@ -5,8 +5,7 @@
 
 #include "stock_info.hpp"
 
-enum class Signal
-{
+enum class Signal {
     BUY,
     SELL,
     HOLD,

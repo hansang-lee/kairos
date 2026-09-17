@@ -1,31 +1,12 @@
 #include <algorithm>
 #include <cmath>
-#include <ctime>
-#include <functional>
 #include <iomanip>
 #include <iostream>
 #include <map>
 #include <vector>
 
+#include "common/util.hpp"
 #include "yfinance.hpp"
-
-struct Defer {
-    std::function<void()> f;
-    explicit Defer(std::function<void()> f)
-        : f(std::move(f)) {}
-    ~Defer() {
-        if (f) {
-            f();
-        }
-    }
-};
-
-inline std::string formatTime(const int64_t timestamp) {
-    const std::time_t t = static_cast<std::time_t>(timestamp);
-    char              mbstr[100];
-    std::strftime(mbstr, sizeof(mbstr), "%Y-%m-%d", std::localtime(&t));
-    return mbstr;
-}
 
 inline int getYear(const int64_t timestamp) {
     const std::time_t t  = static_cast<std::time_t>(timestamp);
@@ -46,7 +27,7 @@ int main(int argc, char* argv[]) {
     const std::string END      = argv[4];
 
     yFinance::init();
-    Defer _cleanup([] { yFinance::close(); });
+    util::Defer _cleanup([] { yFinance::close(); });
 
     std::clog << "Step 1: Fetching data for " << TICKER << "..." << std::endl;
     const auto stock = yFinance::getStockInfo(TICKER, START, END, "1d");
@@ -86,13 +67,12 @@ int main(int argc, char* argv[]) {
     std::clog << "  BUY AND HOLD SUMMARY: " << TICKER << "\n";
     std::clog << std::string(50, '=') << "\n";
     std::clog << std::fixed << std::setprecision(2);
-    std::clog << "Period:         " << formatTime(stock->timestamps.front()) << " ~ "
-              << formatTime(stock->timestamps.back()) << "\n";
+    std::clog << "Period:         " << util::formatTime(stock->timestamps.front()) << " ~ "
+              << util::formatTime(stock->timestamps.back()) << "\n";
     std::clog << "Quantity:       " << QUANTITY << " shares\n";
     std::clog << "Initial Price:  $" << initialPrice << " (Open)\n";
     std::clog << "Final Price:    $" << finalPrice << " (Close)\n";
-    std::clog << "-"
-              << "\n";
+    std::clog << "-" << "\n";
     std::clog << "Principal:      $" << principal << "\n";
     std::clog << "Final Value:    $" << finalValue << "\n";
     std::clog << "Total Profit:   $" << totalProfit << (totalProfit >= 0 ? " (Gain)" : " (Loss)") << "\n";
@@ -101,8 +81,7 @@ int main(int argc, char* argv[]) {
 
     std::clog << "\nYEARLY PERFORMANCE:\n";
     std::clog << std::left << std::setw(10) << "Year" << std::setw(15) << "Start" << std::setw(15) << "End"
-              << "Return (%)"
-              << "\n";
+              << "Return (%)" << "\n";
     std::clog << std::string(50, '-') << "\n";
 
     for (const auto& [year, data] : yearlyData) {

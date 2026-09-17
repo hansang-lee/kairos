@@ -42,10 +42,10 @@ BacktestResult BacktestEngine::run(IStrategy& strategy, const StockInfo& data, c
     std::vector<double> equity;
     equity.reserve(n);
 
-    double       peakEq      = initialCapital_;
-    double       lowestEq    = initialCapital_;
-    std::int64_t peakTs      = data.timestamps.empty() ? 0 : data.timestamps.front();
-    std::int64_t lowestTs    = data.timestamps.empty() ? 0 : data.timestamps.front();
+    double       peakEq   = initialCapital_;
+    double       lowestEq = initialCapital_;
+    std::int64_t peakTs   = data.timestamps.empty() ? 0 : data.timestamps.front();
+    std::int64_t lowestTs = data.timestamps.empty() ? 0 : data.timestamps.front();
 
     for (std::size_t i = 0; i < n; ++i) {
         const double price         = data.close[i];
@@ -72,10 +72,10 @@ BacktestResult BacktestEngine::run(IStrategy& strategy, const StockInfo& data, c
             // Buy: apply commission & slippage to entry price
             const double effectiveBuyPrice = price * (1.0 + config.slippagePct) * (1.0 + config.commissionRate);
             const double allocCapital      = capital * std::clamp(config.positionPct, 0.1, 1.0);
-            shares   = allocCapital / effectiveBuyPrice;
-            buyPrice = effectiveBuyPrice;
-            buyIdx   = i;
-            inPos    = true;
+            shares                         = allocCapital / effectiveBuyPrice;
+            buyPrice                       = effectiveBuyPrice;
+            buyIdx                         = i;
+            inPos                          = true;
             capital -= allocCapital;
         } else if (signal == Signal::SELL && inPos) {
             // Sell: apply commission & slippage to exit price
@@ -194,12 +194,14 @@ BacktestResult BacktestEngine::run(IStrategy& strategy, const StockInfo& data, c
     }
 
     // 6. Composite Score
-    result.score = computeScore(result.totalReturnPct, result.winRate, result.maxDrawdownPct, result.sharpeRatio, result.cagr);
+    result.score =
+        computeScore(result.totalReturnPct, result.winRate, result.maxDrawdownPct, result.sharpeRatio, result.cagr);
 
     return result;
 }
 
-double BacktestEngine::computeScore(double totalReturnPct, double winRate, double maxDrawdownPct, double sharpeRatio, double cagr) {
+double BacktestEngine::computeScore(double totalReturnPct, double winRate, double maxDrawdownPct, double sharpeRatio,
+                                    double cagr) {
     // Total Return: clamp [-50, 100], map to [0, 1]
     const double retNorm = std::clamp((totalReturnPct + 50.0) / 150.0, 0.0, 1.0);
 
@@ -216,8 +218,8 @@ double BacktestEngine::computeScore(double totalReturnPct, double winRate, doubl
     const double cagrNorm = std::clamp((cagr + 20.0) / 60.0, 0.0, 1.0);
 
     // Weighted sum: Total Return(30%), MDD(25%), Sharpe(20%), WinRate(15%), CAGR(10%)
-    const double weighted = (retNorm * 0.30) + (mddNorm * 0.25) + (sharpeNorm * 0.20) + (wrNorm * 0.15) + (cagrNorm * 0.10);
+    const double weighted =
+        (retNorm * 0.30) + (mddNorm * 0.25) + (sharpeNorm * 0.20) + (wrNorm * 0.15) + (cagrNorm * 0.10);
 
     return std::clamp(weighted * 100.0, 0.0, 100.0);
 }
-

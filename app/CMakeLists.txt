@@ -14,6 +14,8 @@ macro(BUILD_APP "NAME")
     ${APP} PRIVATE
       ${CMAKE_SOURCE_DIR}/lib/sma_crossover
       ${CMAKE_SOURCE_DIR}/lib/rsi
+      ${CMAKE_SOURCE_DIR}/lib/macd
+      ${CMAKE_SOURCE_DIR}/lib/bollinger
   )
   set_target_properties(
     ${APP} PROPERTIES
@@ -31,3 +33,7 @@ BUILD_APP(macro_backtest)
 BUILD_APP(macro_sweep)
 BUILD_APP(qld_dca_backtest)
 BUILD_APP(buy_and_hold)
+BUILD_APP(kis_stock)
+BUILD_APP(test_indicators)
+BUILD_APP(strategy_sweep)
+BUILD_APP(run_strategy)
