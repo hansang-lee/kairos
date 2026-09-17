@@ -1,12 +1,12 @@
 #include <algorithm>
 #include <cmath>
 #include <ctime>
-#include <fstream>
 #include <iomanip>
 #include <iostream>
 
 #include <nlohmann/json.hpp>
 
+#include "common/util.hpp"
 #include "macro_scorer.hpp"
 #include "yfinance.hpp"
 
@@ -167,6 +167,48 @@ double scoreRisk(const std::map<std::string, std::shared_ptr<FredSeriesInfo>>& d
     return MacroScorer::clamp(s);
 }
 
+struct MacroInputs {
+    std::map<std::string, std::shared_ptr<FredSeriesInfo>> fredData;
+    std::shared_ptr<FearAndGreedInfo>                      fngData;
+};
+
+/* Fetch the fixed set of FRED series plus the CNN Fear & Greed index used by macro analysis. */
+MacroInputs fetchMacroData(const std::string& apiKey) {
+    // clang-format off
+    const std::vector<std::string> seriesIds = {
+        "UNRATE", "PAYEMS", "INDPRO",
+        "CPIAUCSL", "CPILFESL", "PCEPI",
+        "M2REAL", "WM2NS", "FEDFUNDS",
+        "UMCSENT",
+        "T10Y2Y", "BAMLH0A0HYM2"
+    };
+    // clang-format on
+
+    std::cerr << "Fetching FRED data..." << std::endl;
+
+    MacroInputs inputs;
+    for (const auto& id : seriesIds) {
+        auto result = yFinance::getFredSeries(id, apiKey, "", "", "m");
+        if (result && !result->values.empty()) {
+            inputs.fredData[id] = result;
+            std::cerr << "  [OK] " << id << " (" << result->values.size() << " observations)" << std::endl;
+        } else {
+            std::cerr << "  [WARN] " << id << " - no data" << std::endl;
+        }
+    }
+
+    std::cerr << "Fetching Fear & Greed Index..." << std::endl;
+    inputs.fngData = yFinance::getFearAndGreedIndex();
+    if (inputs.fngData) {
+        std::cerr << "  [OK] FNG score: " << inputs.fngData->score << " (" << inputs.fngData->rating << ")"
+                  << std::endl;
+    } else {
+        std::cerr << "  [WARN] FNG - no data" << std::endl;
+    }
+
+    return inputs;
+}
+
 }  // namespace
 
 MacroScores MacroScorer::computeScores(const std::map<std::string, std::shared_ptr<FredSeriesInfo>>& data,
@@ -286,66 +328,24 @@ std::string MacroScorer::regimeToString(Regime regime) {
 }
 
 bool MacroScorer::analyze(const std::string& apiKey, const std::string& configPath) {
-    /* Load config */
-    nlohmann::json config;
-    {
-        std::ifstream f(configPath);
-        if (!f.is_open()) {
-            std::cerr << "Error: Cannot open config file: " << configPath << std::endl;
-            return false;
-        }
-        try {
-            f >> config;
-        } catch (const nlohmann::json::parse_error& e) {
-            std::cerr << "Config parse error: " << e.what() << std::endl;
-            return false;
-        }
+    const auto config = util::loadJsonConfig(configPath);
+    if (!config) {
+        return false;
     }
 
-    /* Fetch FRED data */
-    // clang-format off
-    const std::vector<std::string> seriesIds = {
-        "UNRATE", "PAYEMS", "INDPRO",
-        "CPIAUCSL", "CPILFESL", "PCEPI",
-        "M2REAL", "WM2NS", "FEDFUNDS",
-        "UMCSENT",
-        "T10Y2Y", "BAMLH0A0HYM2"
-    };
-    // clang-format on
-
-    std::cerr << "Fetching FRED data..." << std::endl;
-
-    std::map<std::string, std::shared_ptr<FredSeriesInfo>> fredData;
-    for (const auto& id : seriesIds) {
-        auto result = yFinance::getFredSeries(id, apiKey, "", "", "m");
-        if (result && !result->values.empty()) {
-            fredData[id] = result;
-            std::cerr << "  [OK] " << id << " (" << result->values.size() << " observations)" << std::endl;
-        } else {
-            std::cerr << "  [WARN] " << id << " - no data" << std::endl;
-        }
-    }
-
-    /* Fetch FNG data */
-    std::cerr << "Fetching Fear & Greed Index..." << std::endl;
-    auto fngData = yFinance::getFearAndGreedIndex();
-    if (fngData) {
-        std::cerr << "  [OK] FNG score: " << fngData->score << " (" << fngData->rating << ")" << std::endl;
-    } else {
-        std::cerr << "  [WARN] FNG - no data" << std::endl;
-    }
+    const auto inputs = fetchMacroData(apiKey);
 
     /* Compute scores */
-    auto scores = computeScores(fredData, fngData);
+    auto scores = computeScores(inputs.fredData, inputs.fngData);
 
     /* Apply weights */
-    scores.composite = computeComposite(scores, config);
+    scores.composite = computeComposite(scores, *config);
 
     /* Detect regime */
-    auto regime = detectRegime(scores, config);
+    auto regime = detectRegime(scores, *config);
 
     /* Get allocation */
-    auto alloc = getAllocation(regime, config);
+    auto alloc = getAllocation(regime, *config);
 
     /* Print results */
     // clang-format off
@@ -393,64 +393,22 @@ bool MacroScorer::analyze(const std::string& apiKey, const std::string& configPa
 }
 
 nlohmann::json MacroScorer::analyzeJson(const std::string& apiKey, const std::string& configPath) {
-    /* Load config */
-    nlohmann::json config;
-    {
-        std::ifstream f(configPath);
-        if (!f.is_open()) {
-            std::cerr << "Error: Cannot open config file: " << configPath << std::endl;
-            return {};
-        }
-        try {
-            f >> config;
-        } catch (const nlohmann::json::parse_error& e) {
-            std::cerr << "Config parse error: " << e.what() << std::endl;
-            return {};
-        }
+    const auto config = util::loadJsonConfig(configPath);
+    if (!config) {
+        return {};
     }
 
-    /* Fetch FRED data */
-    // clang-format off
-    const std::vector<std::string> seriesIds = {
-        "UNRATE", "PAYEMS", "INDPRO",
-        "CPIAUCSL", "CPILFESL", "PCEPI",
-        "M2REAL", "WM2NS", "FEDFUNDS",
-        "UMCSENT",
-        "T10Y2Y", "BAMLH0A0HYM2"
-    };
-    // clang-format on
-
-    std::cerr << "Fetching FRED data..." << std::endl;
-
-    std::map<std::string, std::shared_ptr<FredSeriesInfo>> fredData;
-    for (const auto& id : seriesIds) {
-        auto result = yFinance::getFredSeries(id, apiKey, "", "", "m");
-        if (result && !result->values.empty()) {
-            fredData[id] = result;
-            std::cerr << "  [OK] " << id << " (" << result->values.size() << " observations)" << std::endl;
-        } else {
-            std::cerr << "  [WARN] " << id << " - no data" << std::endl;
-        }
-    }
-
-    /* Fetch FNG data */
-    std::cerr << "Fetching Fear & Greed Index..." << std::endl;
-    auto fngData = yFinance::getFearAndGreedIndex();
-    if (fngData) {
-        std::cerr << "  [OK] FNG score: " << fngData->score << " (" << fngData->rating << ")" << std::endl;
-    } else {
-        std::cerr << "  [WARN] FNG - no data" << std::endl;
-    }
+    const auto inputs = fetchMacroData(apiKey);
 
     /* Compute scores */
-    auto scores      = computeScores(fredData, fngData);
-    scores.composite = computeComposite(scores, config);
+    auto scores      = computeScores(inputs.fredData, inputs.fngData);
+    scores.composite = computeComposite(scores, *config);
 
     /* Detect regime */
-    auto regime = detectRegime(scores, config);
+    auto regime = detectRegime(scores, *config);
 
     /* Get allocation */
-    auto alloc = getAllocation(regime, config);
+    auto alloc = getAllocation(regime, *config);
 
     /* Build JSON */
     // Timestamp
@@ -477,8 +435,8 @@ nlohmann::json MacroScorer::analyzeJson(const std::string& apiKey, const std::st
                             {"bonds", static_cast<int>(alloc.bonds)},
                             {"cash", static_cast<int>(alloc.cash)}};
 
-    if (fngData) {
-        result["fng"] = {{"score", fngData->score}, {"rating", fngData->rating}};
+    if (inputs.fngData) {
+        result["fng"] = {{"score", inputs.fngData->score}, {"rating", inputs.fngData->rating}};
     } else {
         result["fng"] = nullptr;
     }
@@ -486,8 +444,8 @@ nlohmann::json MacroScorer::analyzeJson(const std::string& apiKey, const std::st
     /* Details and Summary */
     nlohmann::json details   = nlohmann::json::object();
     auto           addDetail = [&](const std::string& key, const std::string& id) {
-        if (fredData.count(id)) {
-            const auto& series = fredData.at(id);
+        if (inputs.fredData.count(id)) {
+            const auto& series = inputs.fredData.at(id);
             double      val    = latestValue(series);
             double      roc    = rateOfChange(series);
             details[key]       = {{"value", val}, {"change", roc}};

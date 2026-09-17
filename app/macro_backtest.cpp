@@ -1,5 +1,4 @@
 #include <cstdlib>
-#include <fstream>
 #include <iostream>
 #include <map>
 #include <set>
@@ -68,15 +67,11 @@ int main(int argc, char* argv[]) {
     }
 
     /* Load config */
-    nlohmann::json config;
-    {
-        std::ifstream f(configPath);
-        if (!f.is_open()) {
-            std::cerr << "Error: Cannot open config: " << configPath << std::endl;
-            return 1;
-        }
-        f >> config;
+    const auto configOpt = util::loadJsonConfig(configPath);
+    if (!configOpt) {
+        return 1;
     }
+    const auto& config = *configOpt;
 
     const auto& bt        = config["backtest"];
     std::string startDate = bt.value("start_date", "2015-01-01");

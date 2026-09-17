@@ -1,6 +1,5 @@
 #include <algorithm>
 #include <cstdlib>
-#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <map>
@@ -109,15 +108,11 @@ int main(int argc, char* argv[]) {
         sweepPath = argv[1];
 
     /* ---- Load sweep config ---- */
-    nlohmann::json sweepCfg;
-    {
-        std::ifstream f(sweepPath);
-        if (!f.is_open()) {
-            std::cerr << "Error: Cannot open: " << sweepPath << std::endl;
-            return 1;
-        }
-        f >> sweepCfg;
+    const auto sweepCfgOpt = util::loadJsonConfig(sweepPath);
+    if (!sweepCfgOpt) {
+        return 1;
     }
+    const auto& sweepCfg = *sweepCfgOpt;
 
     // Parse portfolios
     struct PortfolioEntry {
@@ -142,14 +137,13 @@ int main(int argc, char* argv[]) {
     std::vector<StrategyEntry> strategies;
     for (const auto& s : sweepCfg["strategies"]) {
         StrategyEntry entry;
-        entry.name            = s["name"].get<std::string>();
-        std::string   cfgPath = util::resolveFromExe(s["config"].get<std::string>());
-        std::ifstream cf(cfgPath);
-        if (!cf.is_open()) {
-            std::cerr << "Error: Cannot open: " << cfgPath << std::endl;
+        entry.name             = s["name"].get<std::string>();
+        std::string cfgPath    = util::resolveFromExe(s["config"].get<std::string>());
+        const auto  strategyCfg = util::loadJsonConfig(cfgPath);
+        if (!strategyCfg) {
             return 1;
         }
-        cf >> entry.config;
+        entry.config = *strategyCfg;
         strategies.push_back(entry);
     }
 

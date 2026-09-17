@@ -2,10 +2,15 @@
 
 #include <ctime>
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <iomanip>
+#include <iostream>
+#include <optional>
 #include <sstream>
 #include <string>
+
+#include <nlohmann/json.hpp>
 
 namespace util {
 
@@ -67,6 +72,27 @@ struct Defer {
     auto exePath    = fs::read_symlink("/proc/self/exe");
     auto projectDir = exePath.parent_path().parent_path().parent_path();
     return (projectDir / relativePath).string();
+}
+
+/**
+ * @brief Open and parse a JSON config file, printing a consistent error on failure.
+ * @param path Path to the JSON file.
+ * @return Parsed JSON, or std::nullopt if the file can't be opened or parsed.
+ */
+[[nodiscard]] inline std::optional<nlohmann::json> loadJsonConfig(const std::string& path) {
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        std::cerr << "Error: Cannot open config file: " << path << std::endl;
+        return std::nullopt;
+    }
+    try {
+        nlohmann::json j;
+        file >> j;
+        return j;
+    } catch (const nlohmann::json::parse_error& e) {
+        std::cerr << "Error: JSON parse error in " << path << ": " << e.what() << std::endl;
+        return std::nullopt;
+    }
 }
 
 }  // namespace util

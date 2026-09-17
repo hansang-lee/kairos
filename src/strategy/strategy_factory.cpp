@@ -1,9 +1,9 @@
 #include "strategy/strategy_factory.hpp"
 
-#include <fstream>
 #include <iostream>
 
 #include "bollinger_strategy.hpp"
+#include "common/util.hpp"
 #include "macd_strategy.hpp"
 #include "rsi_strategy.hpp"
 #include "sma_crossover.hpp"
@@ -38,36 +38,26 @@ std::unique_ptr<IStrategy> StrategyProfile::createStrategy() const {
 
 PortfolioConfig PortfolioConfig::loadFromFile(const std::string& configPath) {
     PortfolioConfig cfg;
-    std::ifstream file(configPath);
-    if (!file.is_open()) {
-        std::cerr << "PortfolioConfig: Cannot open file " << configPath << std::endl;
+    const auto      j = util::loadJsonConfig(configPath);
+    if (!j || !j->contains("strategies") || !(*j)["strategies"].is_array()) {
         return cfg;
     }
 
-    try {
-        nlohmann::json j;
-        file >> j;
+    for (const auto& item : (*j)["strategies"]) {
+        StrategyProfile p;
+        p.id          = item.value("id", 0);
+        p.name        = item.value("name", "");
+        p.ticker      = item.value("ticker", "");
+        p.market      = item.value("market", "KRX");
+        p.type        = item.value("type", "");
+        p.positionPct = item.value("position_pct", 1.0);
+        p.stopLossPct = item.value("stop_loss_pct", 0.0);
+        p.description = item.value("description", "");
 
-        if (j.contains("strategies") && j["strategies"].is_array()) {
-            for (const auto& item : j["strategies"]) {
-                StrategyProfile p;
-                p.id          = item.value("id", 0);
-                p.name        = item.value("name", "");
-                p.ticker      = item.value("ticker", "");
-                p.market      = item.value("market", "KRX");
-                p.type        = item.value("type", "");
-                p.positionPct = item.value("position_pct", 1.0);
-                p.stopLossPct = item.value("stop_loss_pct", 0.0);
-                p.description = item.value("description", "");
-
-                if (item.contains("params") && item["params"].is_object()) {
-                    p.params = item["params"];
-                }
-                cfg.profiles_.push_back(p);
-            }
+        if (item.contains("params") && item["params"].is_object()) {
+            p.params = item["params"];
         }
-    } catch (const std::exception& e) {
-        std::cerr << "PortfolioConfig: JSON parse error: " << e.what() << std::endl;
+        cfg.profiles_.push_back(p);
     }
 
     return cfg;
