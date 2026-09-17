@@ -11,11 +11,11 @@
 libyfinance는 C++17로 구현된 고성능 퀀트 투자 프레임워크입니다.
 
 **핵심 기능:**
-- **7가지 기술 지표** — SMA, EMA, RSI, MACD, Bollinger Bands, ATR, VWAP, Stochastic
-- **4가지 트레이딩 전략** — SMA Crossover, RSI, MACD, Bollinger Bands
+- **24가지 기술 지표** — 추세(SMA/EMA/WMA/ADX/Parabolic SAR/SuperTrend/Aroon), 모멘텀(RSI/MACD/ROC/CCI/Williams %R/TRIX/Stochastic), 거래량(VWAP/OBV/MFI/CMF/A·D Line), 변동성(Bollinger/ATR/StdDev/Keltner/Donchian)
+- **15가지 트레이딩 전략** — 카테고리(스윙/추세추종/포지션)별로 분류 (아래 [전략 카테고리](#-전략-카테고리) 참고)
 - **백테스트 엔진** — 수수료/슬리피지 반영, 종합 스코어(0~100) 산출
 - **매크로 분석** — FRED 12개 경제 지표 + CNN Fear & Greed → 4국면 판정
-- **한투 OpenAPI 연동** — 국장 시세 데이터 수집 (KIS REST API)
+- **한투 OpenAPI 연동** — 국장 시세 데이터 수집 + 모의투자 주문/잔고 조회 (KIS REST API)
 - **동적 전략 관리** — JSON 기반 포트폴리오 설정으로 전략 동적 로딩
 - **자동 대시보드** — GitHub Actions 기반 일일 매크로 리포트
 
@@ -27,32 +27,32 @@ libyfinance는 C++17로 구현된 고성능 퀀트 투자 프레임워크입니�
 libyfinance/
 ├── include/                     # C++ 헤더
 │   ├── yfinance.hpp             # Yahoo Finance / FRED / CNN F&G API 클라이언트
-│   ├── indicator.hpp            # 기술 지표 (SMA, EMA, RSI, MACD, BB, ATR, VWAP, Stochastic)
+│   ├── indicator.hpp            # 기술 지표 24종 (추세/모멘텀/거래량/변동성)
 │   ├── stock_info.hpp           # StockInfo 구조체 (OHLCV 시계열)
 │   ├── fng_info.hpp             # FearAndGreedInfo 구조체
 │   ├── fred_info.hpp            # FredSeriesInfo 구조체
 │   ├── macro_scorer.hpp         # 5축 매크로 스코어 + 4국면 판정
 │   ├── strategy/
 │   │   ├── istrategy.hpp        # IStrategy 순수 가상 인터페이스
-│   │   └── strategy_factory.hpp # JSON 기반 전략 팩토리
+│   │   └── strategy_factory.hpp # JSON 기반 전략 팩토리 (category 필드 포함)
 │   ├── backtest/
 │   │   └── backtest_engine.hpp  # 단일종목 백테스트 엔진
 │   ├── macro/
 │   │   └── macro_backtester.hpp # 매크로 포트폴리오 백테스트
 │   ├── broker/
-│   │   └── kis_auth.hpp         # 한투 OpenAPI OAuth2 인증
+│   │   ├── kis_auth.hpp         # 한투 OpenAPI OAuth2 인증
+│   │   └── kis_trader.hpp       # 한투 모의/실전 주문·잔고조회
 │   └── data/
 │       ├── idata_provider.hpp   # 데이터 소스 인터페이스
 │       └── kis_provider.hpp     # 한투 시세 데이터 수집
 │
 ├── src/                         # C++ 구현체
-├── lib/                         # 전략 구현체
-│   ├── sma_crossover/           # SMA(20/50) 골든/데드 크로스
-│   ├── rsi/                     # RSI(14, 30/70) 과매수/과매도
-│   ├── macd/                    # MACD(12/26/9) 시그널 크로스
-│   └── bollinger/               # Bollinger Bands(20, 2σ) 밴드 이탈
+├── lib/                         # 전략 구현체 (15개, 전략별 hpp/cpp 디렉토리)
+│   │                             # 스윙: rsi, bollinger, stochastic_reversal, williams_r, cci_reversal, mfi_reversal
+│   │                             # 추세추종: sma_crossover, macd, adx_trend, supertrend_follow, aroon_trend, psar_trend
+│   │                             # 포지션: donchian_breakout, obv_trend, keltner_breakout
 │
-├── app/                         # CLI 실행 파일 (13개)
+├── app/                         # CLI 실행 파일 (14개)
 ├── config/                      # JSON 설정 파일
 │   ├── portfolio.json           # 전략 프로필 (동적 로딩)
 │   ├── macro_allocation.json    # 매크로 배분 설정
@@ -106,6 +106,15 @@ sudo apt install cmake ninja-build libcurl4-openssl-dev nlohmann-json3-dev
 ```bash
 # .env 파일에 KIS 크레덴셜 설정 필요 (.env.example 참조)
 ./build/Release/app/kis_stock 005930 2024-01-01 2024-12-31
+```
+
+### 모의투자 주문 / 잔고조회 (KIS API)
+
+```bash
+# .env에 KIS_PAPER_* 크레덴셜 설정 필요 (기본은 모의투자 모드)
+./build/Release/app/kis_order balance
+./build/Release/app/kis_order buy  005930 1        # 시장가 매수 1주
+./build/Release/app/kis_order sell 005930 1 75000  # 75,000원 지정가 매도 1주
 ```
 
 ### 백테스트
@@ -176,6 +185,7 @@ JSON으로 전략을 정의하면 코드 수정 없이 전략 추가/변경이 �
       "ticker": "005930",
       "market": "KRX",
       "type": "rsi",
+      "category": "swing",
       "params": { "period": 14, "oversold": 30.0, "overbought": 70.0 },
       "position_pct": 0.5,
       "stop_loss_pct": 3.0
@@ -184,22 +194,54 @@ JSON으로 전략을 정의하면 코드 수정 없이 전략 추가/변경이 �
 }
 ```
 
-**지원 전략 타입:** `sma_crossover`, `rsi`, `macd`, `bollinger`
+**지원 전략 타입:** `sma_crossover`, `rsi`, `macd`, `bollinger`, `stochastic_reversal`, `williams_r`, `cci_reversal`, `mfi_reversal`, `adx_trend`, `supertrend`, `aroon_trend`, `psar_trend`, `donchian_breakout`, `obv_trend`, `keltner_breakout` (`params`의 기본값은 `src/strategy/strategy_factory.cpp` 참고)
+
+---
+
+## 🗂️ 전략 카테고리
+
+일봉(OHLCV) 데이터 + 하루 1회 실행(cron/수동) 구조로는 틱단타·초단타·분단위 데이지트레이딩을 실제로 검증할 수 없어(오더북/분봉 데이터가 없음) 이번 확장에서는 제외했고, 대신 일봉으로 실제 작동·검증 가능한 3개 카테고리로 정리했습니다. 틱단타를 실제로 하려면 KIS 분봉 API + 상시 실행 프로세스가 별도로 필요합니다.
+
+| 카테고리 | 보유 기간 | 성격 | 전략 |
+|---|---|---|---|
+| **swing** (스윙) | 며칠~1~2주 | 평균회귀 (과매수/과매도 반전) | rsi, bollinger, stochastic_reversal, williams_r, cci_reversal, mfi_reversal |
+| **trend** (추세추종) | 1주~수주 | 추세 방향 추종 | sma_crossover, macd, adx_trend, supertrend, aroon_trend, psar_trend |
+| **position** (포지션) | 수주~수개월 | 변동성 돌파 / 거래량 확인 | donchian_breakout, obv_trend, keltner_breakout |
+
+`config/portfolio.json`의 각 전략 프로필에 `category` 필드로 태깅되어 있고, `run_strategy --list`에서 바로 확인할 수 있습니다.
 
 ---
 
 ## 📊 기술 지표
 
-| 지표 | 함수 | 용도 |
-|------|------|------|
-| SMA | `indicator::sma(prices, window)` | 단순 이동평균 |
-| EMA | `indicator::ema(prices, window)` | 지수 이동평균 |
-| RSI | `indicator::rsi(prices, period)` | 과매수/과매도 판단 |
-| MACD | `indicator::macd(prices, fast, slow, signal)` | 추세 전환 포착 |
-| Bollinger Bands | `indicator::bollinger(prices, period, stddev)` | 변동성 밴드 |
-| ATR | `indicator::atr(high, low, close, period)` | 변동성 측정 |
-| VWAP | `indicator::vwap(high, low, close, volume)` | 기관 매매 기준가 |
-| Stochastic | `indicator::stochastic(high, low, close, k, d)` | 과매수/과매도 |
+전부 일봉 OHLCV만으로 계산됩니다 (오더북/틱 데이터 불필요). `app/test_indicators.cpp`에서 24종 전체를 스모크 테스트합니다.
+
+| 분류 | 지표 | 함수 |
+|---|---|---|
+| 추세 | SMA, EMA, WMA | `sma`/`ema`/`wma(prices, window)` |
+| 추세 | ADX/DMI | `adx(high, low, close, period)` → `{plusDI, minusDI, adx}` |
+| 추세 | Parabolic SAR | `parabolicSar(high, low, afStep, afMax)` |
+| 추세 | SuperTrend | `superTrend(high, low, close, period, multiplier)` |
+| 추세 | Aroon | `aroon(high, low, period)` → `{up, down}` |
+| 모멘텀 | RSI | `rsi(prices, period)` |
+| 모멘텀 | MACD | `macd(prices, fast, slow, signal)` |
+| 모멘텀 | Stochastic | `stochastic(high, low, close, k, d)` |
+| 모멘텀 | ROC | `roc(prices, period)` |
+| 모멘텀 | CCI | `cci(high, low, close, period)` |
+| 모멘텀 | Williams %R | `williamsR(high, low, close, period)` |
+| 모멘텀 | TRIX | `trix(prices, period)` |
+| 거래량 | VWAP | `vwap(high, low, close, volume)` |
+| 거래량 | OBV | `obv(close, volume)` |
+| 거래량 | MFI | `mfi(high, low, close, volume, period)` |
+| 거래량 | CMF | `cmf(high, low, close, volume, period)` |
+| 거래량 | A/D Line | `adLine(high, low, close, volume)` |
+| 변동성 | Bollinger Bands | `bollinger(prices, period, stddev)` → `{upper, middle, lower}` |
+| 변동성 | ATR | `atr(high, low, close, period)` |
+| 변동성 | Rolling StdDev | `stddev(prices, window)` |
+| 변동성 | Keltner Channels | `keltner(high, low, close, emaPeriod, atrPeriod, multiplier)` |
+| 변동성 | Donchian Channels | `donchian(high, low, period)` |
+
+모두 `namespace indicator` (`include/indicator.hpp`), 헤더 온리.
 
 ---
 
@@ -284,6 +326,7 @@ if (type == "my_strategy") {
 |----|------|
 | `stock` | Yahoo Finance 주식 데이터 조회 |
 | `kis_stock` | 한투 API 국장 주식 데이터 조회 |
+| `kis_order` | 한투 모의/실전 주문(매수/매도) 및 잔고조회 |
 | `fng` | CNN Fear & Greed Index 조회 |
 | `fred` | FRED 경제 지표 조회 |
 | `backtest` | 단일 전략 백테스트 |

@@ -7,6 +7,7 @@
       "ticker": "005930",
       "market": "KRX",
       "type": "rsi",
+      "category": "swing",
       "params": {
         "period": 14,
         "oversold": 30.0,
@@ -22,6 +23,7 @@
       "ticker": "AAPL",
       "market": "US",
       "type": "bollinger",
+      "category": "swing",
       "params": {
         "period": 20,
         "std_dev": 2.0
@@ -36,6 +38,7 @@
       "ticker": "000660",
       "market": "KRX",
       "type": "macd",
+      "category": "trend",
       "params": {
         "fast": 12,
         "slow": 26,
@@ -51,6 +54,7 @@
       "ticker": "QQQ",
       "market": "US",
       "type": "rsi",
+      "category": "swing",
       "params": {
         "period": 14,
         "oversold": 30.0,
@@ -66,6 +70,7 @@
       "ticker": "SPY",
       "market": "US",
       "type": "sma_crossover",
+      "category": "trend",
       "params": {
         "short_window": 20,
         "long_window": 50
@@ -73,6 +78,175 @@
       "position_pct": 1.0,
       "stop_loss_pct": 4.0,
       "description": "S&P 500 중기 골든크로스 추세 추종 전략"
+    },
+    {
+      "id": 6,
+      "name": "Hyundai Motor Stochastic Reversal",
+      "ticker": "005380",
+      "market": "KRX",
+      "type": "stochastic_reversal",
+      "category": "swing",
+      "params": {
+        "k_period": 14,
+        "d_period": 3,
+        "oversold": 20.0,
+        "overbought": 80.0
+      },
+      "position_pct": 0.5,
+      "stop_loss_pct": 4.0,
+      "description": "현대차 스토캐스틱 %K/%D 과매도권 반등 매수 / 과매수권 반락 매도"
+    },
+    {
+      "id": 7,
+      "name": "Microsoft Williams %R Reversal",
+      "ticker": "MSFT",
+      "market": "US",
+      "type": "williams_r",
+      "category": "swing",
+      "params": {
+        "period": 14,
+        "oversold": -80.0,
+        "overbought": -20.0
+      },
+      "position_pct": 0.5,
+      "stop_loss_pct": 4.0,
+      "description": "마이크로소프트 Williams %R 과매도 탈출 매수 / 과매수 탈출 매도"
+    },
+    {
+      "id": 8,
+      "name": "NAVER CCI Reversal",
+      "ticker": "035420",
+      "market": "KRX",
+      "type": "cci_reversal",
+      "category": "swing",
+      "params": {
+        "period": 20,
+        "oversold": -100.0,
+        "overbought": 100.0
+      },
+      "position_pct": 0.5,
+      "stop_loss_pct": 4.0,
+      "description": "네이버 CCI -100 상향 돌파 매수 / +100 하향 이탈 매도"
+    },
+    {
+      "id": 9,
+      "name": "NVIDIA MFI Reversal",
+      "ticker": "NVDA",
+      "market": "US",
+      "type": "mfi_reversal",
+      "category": "swing",
+      "params": {
+        "period": 14,
+        "oversold": 20.0,
+        "overbought": 80.0
+      },
+      "position_pct": 0.4,
+      "stop_loss_pct": 5.0,
+      "description": "엔비디아 거래량 가중 RSI(MFI) 과매도/과매수 반전 매매"
+    },
+    {
+      "id": 10,
+      "name": "LG Chem ADX Trend",
+      "ticker": "051910",
+      "market": "KRX",
+      "type": "adx_trend",
+      "category": "trend",
+      "params": {
+        "period": 14,
+        "adx_threshold": 25.0
+      },
+      "position_pct": 0.5,
+      "stop_loss_pct": 5.0,
+      "description": "LG화학 +DI/-DI 크로스 + ADX 25 이상 추세 강도 확인 추세추종"
+    },
+    {
+      "id": 11,
+      "name": "Tesla SuperTrend Follow",
+      "ticker": "TSLA",
+      "market": "US",
+      "type": "supertrend",
+      "category": "trend",
+      "params": {
+        "period": 10,
+        "multiplier": 3.0
+      },
+      "position_pct": 0.4,
+      "stop_loss_pct": 6.0,
+      "description": "테슬라 SuperTrend 상승/하락 전환 추세추종 (변동성 큰 종목이라 비중 축소)"
+    },
+    {
+      "id": 12,
+      "name": "Kia Aroon Trend",
+      "ticker": "000270",
+      "market": "KRX",
+      "type": "aroon_trend",
+      "category": "trend",
+      "params": {
+        "period": 25,
+        "strength_threshold": 70.0
+      },
+      "position_pct": 0.5,
+      "stop_loss_pct": 5.0,
+      "description": "기아 Aroon Up/Down 크로스 + 강도 70 이상 추세추종"
+    },
+    {
+      "id": 13,
+      "name": "AMD Parabolic SAR Trend",
+      "ticker": "AMD",
+      "market": "US",
+      "type": "psar_trend",
+      "category": "trend",
+      "params": {
+        "af_step": 0.02,
+        "af_max": 0.2
+      },
+      "position_pct": 0.4,
+      "stop_loss_pct": 6.0,
+      "description": "AMD Parabolic SAR 추세 전환 추종 (변동성 큰 종목이라 비중 축소)"
+    },
+    {
+      "id": 14,
+      "name": "POSCO Holdings Donchian Breakout",
+      "ticker": "005490",
+      "market": "KRX",
+      "type": "donchian_breakout",
+      "category": "position",
+      "params": {
+        "period": 20
+      },
+      "position_pct": 0.5,
+      "stop_loss_pct": 6.0,
+      "description": "포스코홀딩스 20일 신고가/신저가 돌파 터틀 스타일 포지션 매매"
+    },
+    {
+      "id": 15,
+      "name": "Vanguard S&P 500 ETF OBV Trend Confirm",
+      "ticker": "VOO",
+      "market": "US",
+      "type": "obv_trend",
+      "category": "position",
+      "params": {
+        "sma_period": 20
+      },
+      "position_pct": 1.0,
+      "stop_loss_pct": 4.0,
+      "description": "VOO 가격추세 + OBV 거래량추세 동반 확인 포지션 매매"
+    },
+    {
+      "id": 16,
+      "name": "Kakao Keltner Channel Breakout",
+      "ticker": "035720",
+      "market": "KRX",
+      "type": "keltner_breakout",
+      "category": "position",
+      "params": {
+        "ema_period": 20,
+        "atr_period": 10,
+        "multiplier": 2.0
+      },
+      "position_pct": 0.5,
+      "stop_loss_pct": 6.0,
+      "description": "카카오 Keltner 채널 상단/하단 돌파 변동성 포지션 매매"
     }
   ]
 }

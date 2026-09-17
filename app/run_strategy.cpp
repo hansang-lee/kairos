@@ -17,7 +17,8 @@ void printList(const PortfolioConfig& config) {
               << std::setw(6)  << "ID"
               << std::setw(10) << "Market"
               << std::setw(10) << "Ticker"
-              << std::setw(16) << "Type"
+              << std::setw(10) << "Category"
+              << std::setw(21) << "Type"
               << std::setw(30) << "Name"
               << "Description\n";
     std::cout << std::string(96, '-') << "\n";
@@ -27,7 +28,8 @@ void printList(const PortfolioConfig& config) {
                   << std::setw(6)  << ("[" + std::to_string(p.id) + "]")
                   << std::setw(10) << p.market
                   << std::setw(10) << p.ticker
-                  << std::setw(16) << p.type
+                  << std::setw(10) << p.category
+                  << std::setw(21) << p.type
                   << std::setw(30) << p.name
                   << p.description << "\n";
     }

@@ -28,6 +28,17 @@ add_library(${PROJECT_NAME} SHARED
   lib/rsi/rsi_strategy.cpp
   lib/macd/macd_strategy.cpp
   lib/bollinger/bollinger_strategy.cpp
+  lib/stochastic_reversal/stochastic_reversal.cpp
+  lib/williams_r/williams_r_strategy.cpp
+  lib/cci_reversal/cci_reversal.cpp
+  lib/mfi_reversal/mfi_reversal.cpp
+  lib/adx_trend/adx_trend.cpp
+  lib/supertrend_follow/supertrend_follow.cpp
+  lib/aroon_trend/aroon_trend.cpp
+  lib/psar_trend/psar_trend.cpp
+  lib/donchian_breakout/donchian_breakout.cpp
+  lib/obv_trend/obv_trend.cpp
+  lib/keltner_breakout/keltner_breakout.cpp
   src/strategy/strategy_factory.cpp
 )
 
@@ -40,6 +51,17 @@ target_include_directories(${PROJECT_NAME}
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/rsi
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/macd
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/bollinger
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/stochastic_reversal
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/williams_r
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/cci_reversal
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/mfi_reversal
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/adx_trend
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/supertrend_follow
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/aroon_trend
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/psar_trend
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/donchian_breakout
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/obv_trend
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/keltner_breakout
 )
 
 target_link_libraries(${PROJECT_NAME}

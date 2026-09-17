@@ -16,6 +16,17 @@ macro(BUILD_APP "NAME")
       ${CMAKE_SOURCE_DIR}/lib/rsi
       ${CMAKE_SOURCE_DIR}/lib/macd
       ${CMAKE_SOURCE_DIR}/lib/bollinger
+      ${CMAKE_SOURCE_DIR}/lib/stochastic_reversal
+      ${CMAKE_SOURCE_DIR}/lib/williams_r
+      ${CMAKE_SOURCE_DIR}/lib/cci_reversal
+      ${CMAKE_SOURCE_DIR}/lib/mfi_reversal
+      ${CMAKE_SOURCE_DIR}/lib/adx_trend
+      ${CMAKE_SOURCE_DIR}/lib/supertrend_follow
+      ${CMAKE_SOURCE_DIR}/lib/aroon_trend
+      ${CMAKE_SOURCE_DIR}/lib/psar_trend
+      ${CMAKE_SOURCE_DIR}/lib/donchian_breakout
+      ${CMAKE_SOURCE_DIR}/lib/obv_trend
+      ${CMAKE_SOURCE_DIR}/lib/keltner_breakout
   )
   set_target_properties(
     ${APP} PROPERTIES

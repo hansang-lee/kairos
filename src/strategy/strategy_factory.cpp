@@ -2,11 +2,22 @@
 
 #include <iostream>
 
+#include "adx_trend.hpp"
+#include "aroon_trend.hpp"
 #include "bollinger_strategy.hpp"
+#include "cci_reversal.hpp"
 #include "common/util.hpp"
+#include "donchian_breakout.hpp"
+#include "keltner_breakout.hpp"
 #include "macd_strategy.hpp"
+#include "mfi_reversal.hpp"
+#include "obv_trend.hpp"
+#include "psar_trend.hpp"
 #include "rsi_strategy.hpp"
 #include "sma_crossover.hpp"
+#include "stochastic_reversal.hpp"
+#include "supertrend_follow.hpp"
+#include "williams_r_strategy.hpp"
 
 std::unique_ptr<IStrategy> StrategyProfile::createStrategy() const {
     if (type == "rsi") {
@@ -31,6 +42,65 @@ std::unique_ptr<IStrategy> StrategyProfile::createStrategy() const {
         const std::size_t longWin  = params.value("long_window", 50);
         return std::make_unique<SmaCrossover>(shortWin, longWin);
     }
+    if (type == "stochastic_reversal" || type == "stochastic") {
+        const std::size_t kPeriod    = params.value("k_period", 14);
+        const std::size_t dPeriod    = params.value("d_period", 3);
+        const double      oversold   = params.value("oversold", 20.0);
+        const double      overbought = params.value("overbought", 80.0);
+        return std::make_unique<StochasticReversal>(kPeriod, dPeriod, oversold, overbought);
+    }
+    if (type == "williams_r") {
+        const std::size_t period     = params.value("period", 14);
+        const double      oversold   = params.value("oversold", -80.0);
+        const double      overbought = params.value("overbought", -20.0);
+        return std::make_unique<WilliamsRStrategy>(period, oversold, overbought);
+    }
+    if (type == "cci_reversal" || type == "cci") {
+        const std::size_t period     = params.value("period", 20);
+        const double      oversold   = params.value("oversold", -100.0);
+        const double      overbought = params.value("overbought", 100.0);
+        return std::make_unique<CciReversal>(period, oversold, overbought);
+    }
+    if (type == "mfi_reversal" || type == "mfi") {
+        const std::size_t period     = params.value("period", 14);
+        const double      oversold   = params.value("oversold", 20.0);
+        const double      overbought = params.value("overbought", 80.0);
+        return std::make_unique<MfiReversal>(period, oversold, overbought);
+    }
+    if (type == "adx_trend" || type == "adx") {
+        const std::size_t period       = params.value("period", 14);
+        const double      adxThreshold = params.value("adx_threshold", 25.0);
+        return std::make_unique<AdxTrend>(period, adxThreshold);
+    }
+    if (type == "supertrend") {
+        const std::size_t period     = params.value("period", 10);
+        const double      multiplier = params.value("multiplier", 3.0);
+        return std::make_unique<SuperTrendFollow>(period, multiplier);
+    }
+    if (type == "aroon_trend" || type == "aroon") {
+        const std::size_t period            = params.value("period", 25);
+        const double      strengthThreshold = params.value("strength_threshold", 70.0);
+        return std::make_unique<AroonTrend>(period, strengthThreshold);
+    }
+    if (type == "psar_trend" || type == "psar") {
+        const double afStep = params.value("af_step", 0.02);
+        const double afMax  = params.value("af_max", 0.2);
+        return std::make_unique<PsarTrend>(afStep, afMax);
+    }
+    if (type == "donchian_breakout" || type == "donchian") {
+        const std::size_t period = params.value("period", 20);
+        return std::make_unique<DonchianBreakout>(period);
+    }
+    if (type == "obv_trend" || type == "obv") {
+        const std::size_t smaPeriod = params.value("sma_period", 20);
+        return std::make_unique<ObvTrendConfirm>(smaPeriod);
+    }
+    if (type == "keltner_breakout" || type == "keltner") {
+        const std::size_t emaPeriod  = params.value("ema_period", 20);
+        const std::size_t atrPeriod  = params.value("atr_period", 10);
+        const double      multiplier = params.value("multiplier", 2.0);
+        return std::make_unique<KeltnerBreakout>(emaPeriod, atrPeriod, multiplier);
+    }
 
     std::cerr << "StrategyProfile: Unknown strategy type '" << type << "'" << std::endl;
     return nullptr;
@@ -50,6 +120,7 @@ PortfolioConfig PortfolioConfig::loadFromFile(const std::string& configPath) {
         p.ticker      = item.value("ticker", "");
         p.market      = item.value("market", "KRX");
         p.type        = item.value("type", "");
+        p.category    = item.value("category", "");
         p.positionPct = item.value("position_pct", 1.0);
         p.stopLossPct = item.value("stop_loss_pct", 0.0);
         p.description = item.value("description", "");
