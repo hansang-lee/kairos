@@ -27,6 +27,7 @@ macro(BUILD_APP "NAME")
       ${CMAKE_SOURCE_DIR}/lib/donchian_breakout
       ${CMAKE_SOURCE_DIR}/lib/obv_trend
       ${CMAKE_SOURCE_DIR}/lib/keltner_breakout
+      ${CMAKE_SOURCE_DIR}/lib/ma_slope_trend
   )
   set_target_properties(
     ${APP} PROPERTIES

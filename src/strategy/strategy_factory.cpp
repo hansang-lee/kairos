@@ -9,6 +9,7 @@
 #include "common/util.hpp"
 #include "donchian_breakout.hpp"
 #include "keltner_breakout.hpp"
+#include "ma_slope_trend.hpp"
 #include "macd_strategy.hpp"
 #include "mfi_reversal.hpp"
 #include "obv_trend.hpp"
@@ -100,6 +101,16 @@ std::unique_ptr<IStrategy> StrategyProfile::createStrategy() const {
         const std::size_t atrPeriod  = params.value("atr_period", 10);
         const double      multiplier = params.value("multiplier", 2.0);
         return std::make_unique<KeltnerBreakout>(emaPeriod, atrPeriod, multiplier);
+    }
+    if (type == "ma_slope_trend" || type == "slope_trend") {
+        const std::size_t maPeriod       = params.value("ma_period", 20);
+        const std::size_t slopeWindow    = params.value("slope_window", 10);
+        const double      entryThreshold = params.value("entry_threshold", 0.15);
+        const double      exitThreshold  = params.value("exit_threshold", -0.05);
+        const std::size_t adxPeriod      = params.value("adx_period", 14);
+        const double      adxThreshold   = params.value("adx_threshold", 20.0);
+        return std::make_unique<MaSlopeTrend>(maPeriod, slopeWindow, entryThreshold, exitThreshold, adxPeriod,
+                                              adxThreshold);
     }
 
     std::cerr << "StrategyProfile: Unknown strategy type '" << type << "'" << std::endl;

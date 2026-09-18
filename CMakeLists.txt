@@ -39,6 +39,7 @@ add_library(${PROJECT_NAME} SHARED
   lib/donchian_breakout/donchian_breakout.cpp
   lib/obv_trend/obv_trend.cpp
   lib/keltner_breakout/keltner_breakout.cpp
+  lib/ma_slope_trend/ma_slope_trend.cpp
   src/strategy/strategy_factory.cpp
 )
 
@@ -62,6 +63,7 @@ target_include_directories(${PROJECT_NAME}
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/donchian_breakout
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/obv_trend
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/keltner_breakout
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/ma_slope_trend
 )
 
 target_link_libraries(${PROJECT_NAME}

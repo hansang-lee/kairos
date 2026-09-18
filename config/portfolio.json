@@ -247,6 +247,25 @@
       "position_pct": 0.5,
       "stop_loss_pct": 6.0,
       "description": "카카오 Keltner 채널 상단/하단 돌파 변동성 포지션 매매"
+    },
+    {
+      "id": 17,
+      "name": "SK Hynix MA Slope Trend",
+      "ticker": "000660",
+      "market": "KRX",
+      "type": "ma_slope_trend",
+      "category": "trend",
+      "params": {
+        "ma_period": 20,
+        "slope_window": 10,
+        "entry_threshold": 0.15,
+        "exit_threshold": -0.05,
+        "adx_period": 14,
+        "adx_threshold": 20.0
+      },
+      "position_pct": 0.5,
+      "stop_loss_pct": 5.0,
+      "description": "SK하이닉스 20일 이동평균 회귀 기울기 + ADX 추세강도 필터 (히스테리시스로 잦은 손절 완화). MACD 전략(#3)과 동일 종목 직접 비교용"
     }
   ]
 }

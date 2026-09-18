@@ -125,6 +125,11 @@ int main() {
     std::cout << "23. Keltner(20, 10, 2.0) count: " << keltVal.middle.size() << " | Upper: " << keltVal.upper.back()
               << " | Middle: " << keltVal.middle.back() << " | Lower: " << keltVal.lower.back() << std::endl;
 
-    std::cout << "\nAll 24 technical indicators calculated and verified successfully!" << std::endl;
+    // 24. MA Slope (regression slope of a moving average, % per bar)
+    auto maSlopeVal = indicator::maSlope(close, 20, 10);
+    std::cout << "24. MA Slope(20, 10) count: " << maSlopeVal.size() << " | Latest: " << maSlopeVal.back() << " %/bar"
+              << std::endl;
+
+    std::cout << "\nAll 25 technical indicators calculated and verified successfully!" << std::endl;
     return 0;
 }

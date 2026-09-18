@@ -1015,4 +1015,55 @@ struct KeltnerResult {
     return {std::move(upper), std::move(middle), std::move(lower)};
 }
 
+/**
+ * @brief Compute the linear-regression slope of a moving average, normalized to
+ *        %-per-bar relative to the MA's own level (so a threshold is comparable
+ *        across tickers/price levels). Smoother than a point-to-point slope,
+ *        since it fits a line across `slopeWindow` MA points rather than reacting
+ *        to any single bar.
+ * @param prices      Input price series.
+ * @param maPeriod    SMA period for the underlying moving average (e.g. 20).
+ * @param slopeWindow Number of MA points the regression line is fit over (e.g. 10).
+ * @return            Slope values (% per bar). result[0] corresponds to data index
+ *                     (maPeriod + slopeWindow - 2).
+ */
+[[nodiscard]] inline std::vector<double> maSlope(const std::vector<double>& prices, std::size_t maPeriod,
+                                                 std::size_t slopeWindow) {
+    if (slopeWindow < 2) {
+        return {};
+    }
+
+    const auto ma = sma(prices, maPeriod);
+    if (ma.size() < slopeWindow) {
+        return {};
+    }
+
+    std::vector<double> result;
+    result.reserve(ma.size() - slopeWindow + 1);
+
+    const double n    = static_cast<double>(slopeWindow);
+    double       sumX = 0.0, sumXX = 0.0;
+    for (std::size_t j = 0; j < slopeWindow; ++j) {
+        const double x = static_cast<double>(j);
+        sumX += x;
+        sumXX += x * x;
+    }
+    const double denom = n * sumXX - sumX * sumX;
+
+    for (std::size_t i = slopeWindow - 1; i < ma.size(); ++i) {
+        double sumY = 0.0, sumXY = 0.0;
+        for (std::size_t j = 0; j < slopeWindow; ++j) {
+            const double x = static_cast<double>(j);
+            const double y = ma[i - slopeWindow + 1 + j];
+            sumY += y;
+            sumXY += x * y;
+        }
+        const double slope = (denom != 0.0) ? (n * sumXY - sumX * sumY) / denom : 0.0;
+        const double meanY = sumY / n;
+        result.push_back(meanY != 0.0 ? slope / meanY * 100.0 : 0.0);
+    }
+
+    return result;
+}
+
 }  // namespace indicator
