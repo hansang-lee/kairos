@@ -20,20 +20,48 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq cmake ninja-build libcurl4-openssl-dev nlohmann-json3-dev
 
-      - name: Build macro app
+      - name: Build macro + portfolio_report apps
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -G Ninja
-          cmake --build build --target macro
+          cmake --build build --target macro portfolio_report
 
       - name: Run macro analysis
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
         run: ./build/app/macro --json config/macro_allocation.json > docs/data.json
 
+      # Optional: only runs if KIS_PAPER_* secrets are configured. Never fails the
+      # job — the macro report above must still be committed even if this isn't
+      # set up yet, or KIS is briefly unreachable.
+      - name: Run portfolio report (paper account snapshot)
+        continue-on-error: true
+        env:
+          KIS_MODE: paper
+          KIS_PAPER_APP_KEY: ${{ secrets.KIS_PAPER_APP_KEY }}
+          KIS_PAPER_APP_SECRET: ${{ secrets.KIS_PAPER_APP_SECRET }}
+          KIS_PAPER_ACCOUNT_NO: ${{ secrets.KIS_PAPER_ACCOUNT_NO }}
+        run: ./build/app/portfolio_report > docs/portfolio.json
+
+      - name: Update portfolio history
+        run: |
+          if [ -s docs/portfolio.json ] && jq -e '.success == true' docs/portfolio.json > /dev/null 2>&1; then
+            [ -f docs/portfolio_history.json ] || echo '[]' > docs/portfolio_history.json
+            jq -s '
+              (.[0]) as $hist |
+              (.[1] | {date, total_return_pct, total_eval_krw}) as $today |
+              ($hist | map(select(.date != $today.date))) + [$today]
+            ' docs/portfolio_history.json docs/portfolio.json > /tmp/portfolio_history.json
+            mv /tmp/portfolio_history.json docs/portfolio_history.json
+          else
+            echo "Skipping history update: no successful portfolio.json this run."
+          fi
+
       - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add docs/data.json
+          [ -f docs/portfolio.json ] && git add docs/portfolio.json
+          [ -f docs/portfolio_history.json ] && git add docs/portfolio_history.json
           git diff --cached --quiet || git commit -m "chore: update daily macro report"
           git push
