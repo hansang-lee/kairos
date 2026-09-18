@@ -1,10 +1,10 @@
 # Build
 build/
 
-# Data & Cache
-data/
-cache/
-logs/
+# Data & Cache (repo-root only — do not shadow src/data, include/data, etc.)
+/data/
+/cache/
+/logs/
 
 # Secrets
 .env
