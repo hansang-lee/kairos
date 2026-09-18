@@ -465,6 +465,80 @@
             text-decoration: none;
         }
 
+        /* Portfolio */
+        .portfolio-summary {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .portfolio-return {
+            font-size: 2rem;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .portfolio-meta {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .return-chart-svg {
+            width: 100%;
+            height: 140px;
+            display: block;
+        }
+
+        .chart-line {
+            fill: none;
+            stroke-width: 2;
+        }
+
+        .chart-zero-line {
+            stroke: var(--border);
+            stroke-width: 1;
+            stroke-dasharray: 4 4;
+        }
+
+        .holdings-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+
+        .holdings-table th {
+            text-align: left;
+            color: var(--text-muted);
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.68rem;
+            letter-spacing: 0.05em;
+            padding: 0.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .holdings-table td {
+            padding: 0.6rem 0.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .holdings-table td.num {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .holdings-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .empty-msg {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
         /* Responsive */
         @media (max-width: 640px) {
             .grid-2 {
@@ -516,6 +590,22 @@
                 render(data);
             } catch (e) {
                 $content.innerHTML = `<div class="error-msg">Failed to load data: ${e.message}</div>`;
+            }
+
+            // Portfolio section is optional (separate pipeline) — don't let its
+            // absence or failure break the macro report above.
+            try {
+                const [presp, hresp] = await Promise.all([
+                    fetch('portfolio.json'),
+                    fetch('portfolio_history.json'),
+                ]);
+                if (presp.ok) {
+                    const portfolio = await presp.json();
+                    const history = hresp.ok ? await hresp.json() : [];
+                    if (portfolio.success) renderPortfolio(portfolio, history);
+                }
+            } catch (e) {
+                console.warn('Portfolio data unavailable:', e);
             }
 
             function render(d) {
@@ -680,6 +770,87 @@
                     </div>
                 </div>
             `;
+            }
+
+            function renderPortfolio(p, history) {
+                const returnPct = p.total_return_pct || 0;
+                const returnClass = returnPct >= 0 ? 'change-up' : 'change-down';
+                const sign = returnPct >= 0 ? '+' : '';
+
+                const html = `
+                <div class="card">
+                    <div class="card-title">모의투자 현황 (KRX)</div>
+                    <div class="portfolio-summary">
+                        <div class="portfolio-return ${returnClass}">${sign}${returnPct.toFixed(2)}%</div>
+                        <div class="portfolio-meta">
+                            원금 ${Math.round(p.initial_capital_krw).toLocaleString()}원 &rarr;
+                            총평가 ${Math.round(p.total_eval_krw).toLocaleString()}원
+                        </div>
+                    </div>
+                    ${buildReturnChart(history)}
+                </div>
+                <div class="card">
+                    <div class="card-title">보유 종목</div>
+                    ${buildHoldingsTable(p.holdings)}
+                </div>`;
+                $content.insertAdjacentHTML('beforeend', html);
+            }
+
+            function buildReturnChart(history) {
+                if (!history || history.length === 0) {
+                    return '<p class="empty-msg">아직 누적된 기록이 없습니다 (내일부터 쌓입니다).</p>';
+                }
+
+                const width = 600, height = 140, pad = 20;
+                const values = history.map(h => h.total_return_pct);
+                const minV = Math.min(0, ...values);
+                const maxV = Math.max(0, ...values);
+                const range = (maxV - minV) || 1;
+                const n = history.length;
+                const x = i => n === 1 ? width / 2 : pad + (i / (n - 1)) * (width - pad * 2);
+                const y = v => height - pad - ((v - minV) / range) * (height - pad * 2);
+                const zeroY = y(0);
+
+                const points = history.map((h, i) => `${x(i).toFixed(1)},${y(h.total_return_pct).toFixed(1)}`).join(' ');
+                const last = history[history.length - 1];
+                const lastColor = last.total_return_pct >= 0 ? 'var(--expansion)' : 'var(--recession)';
+
+                return `
+                <svg class="return-chart-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
+                    <line x1="${pad}" y1="${zeroY.toFixed(1)}" x2="${width - pad}" y2="${zeroY.toFixed(1)}" class="chart-zero-line" />
+                    <polyline points="${points}" class="chart-line" style="stroke:${lastColor}" />
+                    <circle cx="${x(n - 1).toFixed(1)}" cy="${y(last.total_return_pct).toFixed(1)}" r="4" fill="${lastColor}" />
+                </svg>`;
+            }
+
+            function buildHoldingsTable(holdings) {
+                if (!holdings || holdings.length === 0) {
+                    return '<p class="empty-msg">보유 종목 없음.</p>';
+                }
+
+                const rows = holdings.map(h => {
+                    const pl = h.profit_loss_pct || 0;
+                    const plClass = pl > 0 ? 'change-up' : pl < 0 ? 'change-down' : 'change-neutral';
+                    const sign = pl > 0 ? '+' : '';
+                    return `
+                    <tr>
+                        <td>${h.ticker}</td>
+                        <td>${h.name || ''}</td>
+                        <td>${h.strategy_name || '-'}</td>
+                        <td class="num">${h.quantity}</td>
+                        <td class="num">${Math.round(h.current_price).toLocaleString()}</td>
+                        <td class="num ${plClass}">${sign}${pl.toFixed(2)}%</td>
+                        <td class="num">${(h.weight_pct || 0).toFixed(1)}%</td>
+                    </tr>`;
+                }).join('');
+
+                return `
+                <table class="holdings-table">
+                    <thead>
+                        <tr><th>종목</th><th>이름</th><th>전략</th><th>수량</th><th>현재가</th><th>손익률</th><th>비중</th></tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>`;
             }
 
             function fngScoreColor(score) {
