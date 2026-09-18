@@ -266,6 +266,21 @@
       "position_pct": 0.5,
       "stop_loss_pct": 5.0,
       "description": "SK하이닉스 20일 이동평균 회귀 기울기 + ADX 추세강도 필터 (히스테리시스로 잦은 손절 완화). MACD 전략(#3)과 동일 종목 직접 비교용"
+    },
+    {
+      "id": 18,
+      "name": "Samsung Electronics Scalp SMA",
+      "ticker": "005930",
+      "market": "KRX",
+      "type": "sma_crossover",
+      "category": "scalp",
+      "params": {
+        "short_window": 3,
+        "long_window": 8
+      },
+      "position_pct": 0.2,
+      "stop_loss_pct": 1.0,
+      "description": "삼성전자 분봉 SMA(3/8) 초단타 크로스오버. app/scalp_trade로 실행 — 일봉이 아니라 당일 분봉 폴링 기반"
     }
   ]
 }

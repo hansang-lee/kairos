@@ -172,6 +172,123 @@ std::vector<DayBar> fetchChunk(const std::string& ticker, const std::string& sta
     return {};
 }
 
+/**
+ * @brief Perform one HTTP call for today's intraday minute chart.
+ */
+std::string fetchIntradayOnce(const std::string& ticker, const std::string& hourHHMMSS, const std::string& token,
+                              const KisAuth& auth) {
+    const std::string url = auth.getBaseUrl()
+                          + "/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice"
+                            "?FID_COND_MRKT_DIV_CODE=J"
+                            "&FID_INPUT_ISCD="
+                          + ticker + "&FID_INPUT_HOUR_1=" + hourHHMMSS + "&FID_PW_DATA_INCU_YN=Y&FID_ETC_CLS_CODE=";
+
+    CURL* curl = curl_easy_init();
+    if (!curl) {
+        return "";
+    }
+
+    std::string        response;
+    struct curl_slist* headers = nullptr;
+    headers                    = curl_slist_append(headers, "Content-Type: application/json; charset=utf-8");
+    headers                    = curl_slist_append(headers, ("authorization: Bearer " + token).c_str());
+    headers                    = curl_slist_append(headers, ("appkey: " + auth.getAppKey()).c_str());
+    headers                    = curl_slist_append(headers, ("appsecret: " + auth.getAppSecret()).c_str());
+    headers                    = curl_slist_append(headers, "tr_id: FHKST03010200");
+    headers                    = curl_slist_append(headers, "custtype: P");
+
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+
+    CURLcode res = curl_easy_perform(curl);
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+
+    if (res != CURLE_OK) {
+        std::cerr << "KisProvider intraday request failed: " << curl_easy_strerror(res) << std::endl;
+        return "";
+    }
+    return response;
+}
+
+/**
+ * @brief Fetch today's minute bars (up to ~30) as of the given HHMMSS, with the
+ *        same rate-limit retry/backoff as the daily-chart fetch.
+ * @return Bars in chronological (oldest-first) order, or empty on failure/no data.
+ */
+std::vector<DayBar> fetchIntradayChunk(const std::string& ticker, const std::string& hourHHMMSS) {
+    auto& auth = KisAuth::instance();
+    auth.loadFromEnv();
+    const std::string token = auth.getAccessToken();
+    if (token.empty()) {
+        std::cerr << "KisProvider: Failed to acquire access token." << std::endl;
+        return {};
+    }
+
+    constexpr int kMaxAttempts = 5;
+    for (int attempt = 0; attempt < kMaxAttempts; ++attempt) {
+        const std::string response = fetchIntradayOnce(ticker, hourHHMMSS, token, auth);
+        if (response.empty()) {
+            return {};
+        }
+
+        try {
+            const auto json = nlohmann::json::parse(response);
+            if (json.value("msg_cd", "") == "EGW00201") {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1500 * (attempt + 1)));
+                continue;
+            }
+            if (!json.contains("output2") || !json["output2"].is_array()) {
+                std::cerr << "KisProvider intraday error response: " << response << std::endl;
+                return {};
+            }
+
+            // Rows come newest-first; we want oldest-first.
+            std::vector<nlohmann::json> rows(json["output2"].begin(), json["output2"].end());
+            std::reverse(rows.begin(), rows.end());
+
+            std::vector<DayBar> bars;
+            for (const auto& item : rows) {
+                const std::string dateStr = item.value("stck_bsop_date", "");
+                const std::string hourStr = item.value("stck_cntg_hour", "");
+                if (dateStr.size() != 8 || hourStr.size() != 6) {
+                    continue;
+                }
+
+                std::tm tm  = {};
+                tm.tm_year  = std::stoi(dateStr.substr(0, 4)) - 1900;
+                tm.tm_mon   = std::stoi(dateStr.substr(4, 2)) - 1;
+                tm.tm_mday  = std::stoi(dateStr.substr(6, 2));
+                tm.tm_hour  = std::stoi(hourStr.substr(0, 2));
+                tm.tm_min   = std::stoi(hourStr.substr(2, 2));
+                tm.tm_sec   = std::stoi(hourStr.substr(4, 2));
+                tm.tm_isdst = 0;
+
+                DayBar bar;
+                // Matches parseKisDateToTimestamp's convention: KST wall-clock fields
+                // embedded via timegm rather than truly converted to UTC (relative
+                // ordering within a series is what matters here, not absolute TZ).
+                bar.ts     = timegm(&tm);
+                bar.open   = std::stod(item.value("stck_oprc", "0"));
+                bar.high   = std::stod(item.value("stck_hgpr", "0"));
+                bar.low    = std::stod(item.value("stck_lwpr", "0"));
+                bar.close  = std::stod(item.value("stck_prpr", "0"));
+                bar.volume = std::stoll(item.value("cntg_vol", "0"));
+                bars.push_back(bar);
+            }
+            return bars;
+        } catch (const std::exception& e) {
+            std::cerr << "KisProvider intraday parse exception: " << e.what() << std::endl;
+            return {};
+        }
+    }
+
+    std::cerr << "KisProvider: gave up after rate-limit retries (intraday)." << std::endl;
+    return {};
+}
+
 }  // namespace
 
 std::shared_ptr<StockInfo> KisProvider::getStockInfo(std::string_view ticker, std::string_view startDate,
@@ -240,6 +357,49 @@ std::shared_ptr<StockInfo> KisProvider::getStockInfo(std::string_view ticker, st
     data->timezone       = "Asia/Seoul";
 
     for (const auto& bar : allBars) {
+        data->timestamps.push_back(bar.ts);
+        data->open.push_back(bar.open);
+        data->high.push_back(bar.high);
+        data->low.push_back(bar.low);
+        data->close.push_back(bar.close);
+        data->volume.push_back(bar.volume);
+    }
+
+    if (!data->close.empty()) {
+        data->regularMarketPrice = data->close.back();
+        data->chartPreviousClose = data->close.size() > 1 ? data->close[data->close.size() - 2] : data->close.back();
+    }
+
+    return data;
+}
+
+std::shared_ptr<StockInfo> KisProvider::getIntradayBars(std::string_view ticker, std::string_view asOfTime) {
+    const std::string tickerStr = std::string(ticker);
+    std::string       hourStr   = normalizeDate(asOfTime);
+
+    if (hourStr.empty()) {
+        // "Now", as KST wall-clock HHMMSS (matches the timegm convention used elsewhere
+        // in this file: shift the UTC epoch forward 9h, then read the fields as-is).
+        const std::time_t kstNow = std::time(nullptr) + 9 * 3600;
+        std::tm*          tmPtr  = std::gmtime(&kstNow);
+        char              buf[7];
+        std::strftime(buf, sizeof(buf), "%H%M%S", tmPtr);
+        hourStr = buf;
+    }
+
+    const auto bars = fetchIntradayChunk(tickerStr, hourStr);
+    if (bars.empty()) {
+        return nullptr;
+    }
+
+    auto data            = std::make_shared<StockInfo>();
+    data->ticker         = tickerStr;
+    data->currency       = "KRW";
+    data->exchangeName   = "KRX";
+    data->instrumentType = "COMMON_STOCK";
+    data->timezone       = "Asia/Seoul";
+
+    for (const auto& bar : bars) {
         data->timestamps.push_back(bar.ts);
         data->open.push_back(bar.open);
         data->high.push_back(bar.high);

@@ -11,8 +11,9 @@
 libyfinance는 C++17로 구현된 고성능 퀀트 투자 프레임워크입니다.
 
 **핵심 기능:**
-- **24가지 기술 지표** — 추세(SMA/EMA/WMA/ADX/Parabolic SAR/SuperTrend/Aroon), 모멘텀(RSI/MACD/ROC/CCI/Williams %R/TRIX/Stochastic), 거래량(VWAP/OBV/MFI/CMF/A·D Line), 변동성(Bollinger/ATR/StdDev/Keltner/Donchian)
-- **15가지 트레이딩 전략** — 카테고리(스윙/추세추종/포지션)별로 분류 (아래 [전략 카테고리](#-전략-카테고리) 참고)
+- **25가지 기술 지표** — 추세(SMA/EMA/WMA/ADX/Parabolic SAR/SuperTrend/Aroon), 모멘텀(RSI/MACD/ROC/CCI/Williams %R/TRIX/Stochastic/MA 기울기), 거래량(VWAP/OBV/MFI/CMF/A·D Line), 변동성(Bollinger/ATR/StdDev/Keltner/Donchian)
+- **16가지 트레이딩 전략** — 카테고리(스윙/추세추종/포지션/초단타)별로 분류 (아래 [전략 카테고리](#-전략-카테고리) 참고)
+- **초단타(분봉) 실시간 실행** — `scalp_trade`로 KIS 분봉 폴링 + 모의투자 자동 주문 (KRX)
 - **백테스트 엔진** — 수수료/슬리피지 반영, 종합 스코어(0~100) 산출
 - **매크로 분석** — FRED 12개 경제 지표 + CNN Fear & Greed → 4국면 판정
 - **한투 OpenAPI 연동** — 국장 시세 데이터 수집 + 모의투자 주문/잔고 조회 (KIS REST API)
@@ -47,12 +48,12 @@ libyfinance/
 │       └── kis_provider.hpp     # 한투 시세 데이터 수집
 │
 ├── src/                         # C++ 구현체
-├── lib/                         # 전략 구현체 (15개, 전략별 hpp/cpp 디렉토리)
+├── lib/                         # 전략 구현체 (16개, 전략별 hpp/cpp 디렉토리)
 │   │                             # 스윙: rsi, bollinger, stochastic_reversal, williams_r, cci_reversal, mfi_reversal
 │   │                             # 추세추종: sma_crossover, macd, adx_trend, supertrend_follow, aroon_trend, psar_trend
 │   │                             # 포지션: donchian_breakout, obv_trend, keltner_breakout
 │
-├── app/                         # CLI 실행 파일 (14개)
+├── app/                         # CLI 실행 파일 (15개)
 ├── config/                      # JSON 설정 파일
 │   ├── portfolio.json           # 전략 프로필 (동적 로딩)
 │   ├── macro_allocation.json    # 매크로 배분 설정
@@ -194,21 +195,34 @@ JSON으로 전략을 정의하면 코드 수정 없이 전략 추가/변경이 �
 }
 ```
 
-**지원 전략 타입:** `sma_crossover`, `rsi`, `macd`, `bollinger`, `stochastic_reversal`, `williams_r`, `cci_reversal`, `mfi_reversal`, `adx_trend`, `supertrend`, `aroon_trend`, `psar_trend`, `donchian_breakout`, `obv_trend`, `keltner_breakout` (`params`의 기본값은 `src/strategy/strategy_factory.cpp` 참고)
+**지원 전략 타입:** `sma_crossover`, `rsi`, `macd`, `bollinger`, `stochastic_reversal`, `williams_r`, `cci_reversal`, `mfi_reversal`, `adx_trend`, `supertrend`, `aroon_trend`, `psar_trend`, `donchian_breakout`, `obv_trend`, `keltner_breakout`, `ma_slope_trend` (`params`의 기본값은 `src/strategy/strategy_factory.cpp` 참고)
 
 ---
 
 ## 🗂️ 전략 카테고리
 
-일봉(OHLCV) 데이터 + 하루 1회 실행(cron/수동) 구조로는 틱단타·초단타·분단위 데이지트레이딩을 실제로 검증할 수 없어(오더북/분봉 데이터가 없음) 이번 확장에서는 제외했고, 대신 일봉으로 실제 작동·검증 가능한 3개 카테고리로 정리했습니다. 틱단타를 실제로 하려면 KIS 분봉 API + 상시 실행 프로세스가 별도로 필요합니다.
+`IStrategy`는 `StockInfo`(OHLCV 시계열)에 대해 동작할 뿐 "일봉"이라는 가정이 코드에 없어서, 같은 전략 클래스를 분봉에 태워도 그대로 신호를 냅니다. 백테스트(과거 데이터 검증)는 일봉 전용 3개 카테고리로, 실시간 실행은 별도의 분봉 폴링 경로(`scalp_trade`)로 나눠져 있습니다.
 
-| 카테고리 | 보유 기간 | 성격 | 전략 |
-|---|---|---|---|
-| **swing** (스윙) | 며칠~1~2주 | 평균회귀 (과매수/과매도 반전) | rsi, bollinger, stochastic_reversal, williams_r, cci_reversal, mfi_reversal |
-| **trend** (추세추종) | 1주~수주 | 추세 방향 추종 | sma_crossover, macd, adx_trend, supertrend, aroon_trend, psar_trend |
-| **position** (포지션) | 수주~수개월 | 변동성 돌파 / 거래량 확인 | donchian_breakout, obv_trend, keltner_breakout |
+| 카테고리 | 보유 기간 | 성격 | 전략 | 실행 |
+|---|---|---|---|---|
+| **swing** (스윙) | 며칠~1~2주 | 평균회귀 (과매수/과매도 반전) | rsi, bollinger, stochastic_reversal, williams_r, cci_reversal, mfi_reversal | `run_strategy` (일봉) |
+| **trend** (추세추종) | 1주~수주 | 추세 방향 추종 | sma_crossover, macd, adx_trend, supertrend, aroon_trend, psar_trend, ma_slope_trend | `run_strategy` (일봉) |
+| **position** (포지션) | 수주~수개월 | 변동성 돌파 / 거래량 확인 | donchian_breakout, obv_trend, keltner_breakout | `run_strategy` (일봉) |
+| **scalp** (초단타) | 분 단위 | 분봉 폴링, 장중 실시간 매매 | sma_crossover (짧은 파라미터) | `scalp_trade` (분봉) |
 
 `config/portfolio.json`의 각 전략 프로필에 `category` 필드로 태깅되어 있고, `run_strategy --list`에서 바로 확인할 수 있습니다.
+
+### 초단타 (scalp) 실행
+
+```bash
+# .env에 KIS_PAPER_* 크레덴셜 필요. 기본은 dry-run(실주문 없음)
+./build/Release/app/scalp_trade --id 18 --interval 60
+
+# 실제로 모의투자 계좌에 주문을 내려면 --live 명시
+./build/Release/app/scalp_trade --id 18 --interval 60 --live --max-trades 10
+```
+
+KIS `inquire-time-itemchartprice`(TR_ID `FHKST03010200`)는 **당일 분봉만, 한 번에 최대 30건** 제공합니다. `scalp_trade`는 KRX 장중(09:00~15:30 KST, 평일)에만 폴링하고, 보유 여부·평균단가는 매번 `KisTrader::getBalance()`로 조회해 로컬 상태 파일 없이 KIS를 진실의 원천으로 씁니다. 해외주식(미국) 주문 API는 아직 없어 KRX 종목만 지원합니다.
 
 ---
 
@@ -336,7 +350,8 @@ if (type == "my_strategy") {
 | `macro_sweep` | 매크로 전략 프로파일 비교 |
 | `qld_dca_backtest` | QLD 적립식 투자 백테스트 |
 | `strategy_sweep` | 4전략 × 4종목 멀티 스윕 |
-| `run_strategy` | JSON 포트폴리오 기반 동적 전략 실행 |
+| `run_strategy` | JSON 포트폴리오 기반 동적 전략 실행 (일봉, `--start`/`--end`로 기간 지정) |
+| `scalp_trade` | 분봉 폴링 초단타 자동매매 (KRX, dry-run 기본) |
 | `test_indicators` | 기술 지표 검증 |
 
 ---
