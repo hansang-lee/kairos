@@ -29,8 +29,8 @@ struct StockHolding {
 
 struct AccountBalance {
     bool                      success         = false;
-    double                    cashBalance     = 0.0;  ///< dnca_tot_amt (예수금총금액)
-    double                    totalEvalAmount = 0.0;  ///< tot_evlu_amt (총평가금액)
+    double                    cashBalance     = 0.0;  ///< dnca_tot_amt (cash balance, 예수금총금액)
+    double                    totalEvalAmount = 0.0;  ///< tot_evlu_amt (total account value, 총평가금액)
     std::string               message;
     std::vector<StockHolding> holdings;
 };
@@ -39,12 +39,12 @@ struct AccountBalance {
  * @brief KIS domestic-stock cash order placement and balance inquiry.
  *
  * Reads credentials via KisAuth::instance() (paper vs real mode follows
- * KisAuth's KIS_MODE env setting — defaults to paper/모의투자).
+ * KisAuth's KIS_MODE env setting — defaults to paper trading / 모의투자).
  */
 class KisTrader {
    public:
     /**
-     * @brief Place a domestic stock cash order (주식주문 현금).
+     * @brief Place a domestic stock cash order (KIS: 주식주문 현금).
      * @param side     Buy or Sell.
      * @param ticker   6-digit KRX ticker (e.g. "005930").
      * @param quantity Number of shares.

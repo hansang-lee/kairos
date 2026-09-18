@@ -5,7 +5,7 @@
 #include "data/kis_provider.hpp"
 
 int main(int argc, char* argv[]) {
-    std::string ticker    = "005930";  // 삼성전자
+    std::string ticker    = "005930";  // Samsung Electronics
     std::string startDate = "2024-01-01";
     std::string endDate   = "2024-03-31";
 

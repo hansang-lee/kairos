@@ -17,12 +17,13 @@ struct Trade {
 };
 
 struct BacktestConfig {
-    double commissionRate    = 0.00015;  // 0.015% 수수료
-    double slippagePct       = 0.001;    // 0.1% 슬리피지
-    double positionPct       = 1.0;      // 포지션 비율 (1.0 = 전액)
+    double commissionRate    = 0.00015;  // 0.015% commission
+    double slippagePct       = 0.001;    // 0.1% slippage
+    double positionPct       = 1.0;      // position fraction (1.0 = full account)
     bool   reinvestDividends = false;
-    double stopLossPct       = 0.0;  // 손절 비율 (%, 0 = 비활성화). 매수가 대비 저가가 이 폭만큼
-        // 하락하면 그날 즉시 청산 — 전략의 SELL 신호를 기다리지 않음.
+    // Stop-loss (%, 0 = disabled). If the day's low falls this far below the entry
+    // price, the position is closed that same bar without waiting for a SELL signal.
+    double stopLossPct = 0.0;
 };
 
 struct BacktestResult {
