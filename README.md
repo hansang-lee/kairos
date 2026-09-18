@@ -334,6 +334,28 @@ if (type == "my_strategy") {
 
 ---
 
+## 📊 모의투자 대시보드 (로컬)
+
+이 PC를 서버처럼 켜두고 쓰는 실시간 대시보드입니다. `portfolio_report`를 주기적으로 실행해
+한투 모의계좌 잔고를 읽어오고, 누적 기록을 주식창 스타일 차트로 그립니다.
+
+```bash
+./make.sh                                   # portfolio_report 빌드 포함
+./scripts/dashboard_server.py               # 기본 포트 8800, 60초마다 갱신
+./scripts/dashboard_server.py --port 9000 --interval 30
+```
+
+브라우저에서 `http://localhost:8800` — 맨 위가 모의투자 현황(총평가금액 차트 + 원금 기준선 +
+1H/6H/1D/ALL 구간 선택 + 마우스 호버 툴팁), 그 아래가 보유 종목 표(종목/전략/매입가/현재가/
+손익률/비중), 그 아래가 기존 매크로 리포트입니다.
+
+- 계좌 스냅샷과 누적 기록은 `cache/`(gitignored)에 쌓이고 `/live/`로 서빙됩니다 — 계좌 정보가
+  저장소에 커밋되지 않습니다.
+- 페이지는 30초마다 자체적으로 다시 읽습니다.
+- 백그라운드로 계속 돌리려면 `tmux` 세션 안에서 실행하세요.
+
+---
+
 ## 📈 CLI 앱 목록
 
 | 앱 | 설명 |
@@ -352,6 +374,7 @@ if (type == "my_strategy") {
 | `strategy_sweep` | 4전략 × 4종목 멀티 스윕 |
 | `run_strategy` | JSON 포트폴리오 기반 동적 전략 실행 (일봉, `--start`/`--end`로 기간 지정) |
 | `scalp_trade` | 분봉 폴링 초단타 자동매매 (KRX, dry-run 기본) |
+| `portfolio_report` | 모의투자 계좌 스냅샷(원금 대비 수익률 + 보유종목) JSON 출력 |
 | `test_indicators` | 기술 지표 검증 |
 
 ---
