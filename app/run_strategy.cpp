@@ -1,3 +1,4 @@
+#include <ctime>
 #include <iomanip>
 #include <iostream>
 #include <memory>
@@ -8,6 +9,18 @@
 #include "data/kis_provider.hpp"
 #include "strategy/strategy_factory.hpp"
 #include "yfinance.hpp"
+
+namespace {
+
+std::string dateFromNow(int daysAgo) {
+    std::time_t t     = std::time(nullptr) - static_cast<std::time_t>(daysAgo) * 86400;
+    std::tm*    tmPtr = std::gmtime(&t);
+    char        buf[11];
+    std::strftime(buf, sizeof(buf), "%Y-%m-%d", tmPtr);
+    return std::string(buf);
+}
+
+}  // namespace
 
 void printList(const PortfolioConfig& config) {
     std::cout << "\n========================================================================================\n";
@@ -25,10 +38,13 @@ void printList(const PortfolioConfig& config) {
     std::cout << "\nUsage:\n";
     std::cout << "  ./run_strategy --id <number>   Run specific strategy by ID (e.g., --id 1)\n";
     std::cout << "  ./run_strategy --all           Run all strategies in portfolio\n";
-    std::cout << "  ./run_strategy --list          Show this list\n\n";
+    std::cout << "  ./run_strategy --list          Show this list\n";
+    std::cout << "  ./run_strategy --id 1 --start 2021-01-01 --end 2026-09-18   Custom backtest window\n";
+    std::cout << "                                  (default: last ~1 year)\n\n";
 }
 
-void executeProfile(const StrategyProfile& p, KisProvider& kis) {
+void executeProfile(const StrategyProfile& p, KisProvider& kis, const std::string& startDate,
+                    const std::string& endDate) {
     std::cout << "\n========================================================================================\n";
     std::cout << " 🚀 Executing Strategy #" << p.id << " : " << p.name << " (" << p.ticker << " [" << p.market
               << "])\n";
@@ -50,14 +66,16 @@ void executeProfile(const StrategyProfile& p, KisProvider& kis) {
         bConfig.commissionRate = 0.00015;
         bConfig.slippagePct    = 0.0005;
         bConfig.positionPct    = p.positionPct;
-        std::cout << "[*] Fetching Korean stock data via KisProvider..." << std::endl;
-        stock = kis.getStockInfo(p.ticker, "2023-09-01", "2024-09-01");
+        std::cout << "[*] Fetching Korean stock data via KisProvider (" << startDate << " ~ " << endDate << ")..."
+                  << std::endl;
+        stock = kis.getStockInfo(p.ticker, startDate, endDate);
     } else {
         bConfig.commissionRate = 0.0005;
         bConfig.slippagePct    = 0.0005;
         bConfig.positionPct    = p.positionPct;
-        std::cout << "[*] Fetching US stock data via Yahoo Finance..." << std::endl;
-        stock = yFinance::getStockInfo(p.ticker, "1d", "1y");
+        std::cout << "[*] Fetching US stock data via Yahoo Finance (" << startDate << " ~ " << endDate << ")..."
+                  << std::endl;
+        stock = yFinance::getStockInfo(p.ticker, startDate, endDate, "1d");
     }
 
     if (!stock || stock->close.empty()) {
@@ -102,6 +120,8 @@ int main(int argc, char* argv[]) {
     std::string configPath = "config/portfolio.json";
     int         targetId   = -1;
     bool        runAll     = false;
+    std::string startDate  = dateFromNow(365);  // default: last ~1 year
+    std::string endDate    = dateFromNow(0);
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -115,6 +135,10 @@ int main(int argc, char* argv[]) {
             runAll = true;
         } else if (arg == "--config" && i + 1 < argc) {
             configPath = argv[++i];
+        } else if (arg == "--start" && i + 1 < argc) {
+            startDate = argv[++i];
+        } else if (arg == "--end" && i + 1 < argc) {
+            endDate = argv[++i];
         } else if (arg == "--help" || arg == "-h") {
             auto cfg = PortfolioConfig::loadFromFile(configPath);
             printList(cfg);
@@ -140,7 +164,7 @@ int main(int argc, char* argv[]) {
 
     if (runAll) {
         for (const auto& p : config.getProfiles()) {
-            executeProfile(p, kis);
+            executeProfile(p, kis, startDate, endDate);
         }
     } else {
         const auto* profile = config.findById(targetId);
@@ -149,7 +173,7 @@ int main(int argc, char* argv[]) {
             printList(config);
             return 1;
         }
-        executeProfile(*profile, kis);
+        executeProfile(*profile, kis, startDate, endDate);
     }
 
     return 0;
