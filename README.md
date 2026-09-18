@@ -1,156 +1,160 @@
 # libyfinance
 
-> C++17 기반 퀀트 자동 거래 시스템 — 한국/미국 주식 시장 대상
+> A C++17 quant trading system for the Korean and US equity markets.
 
 [![Daily Macro Report](https://github.com/hslee/libyfinance/actions/workflows/macro-report.yml/badge.svg)](https://github.com/hslee/libyfinance/actions)
 
 ---
 
-## 📋 개요
+## 📋 Overview
 
-libyfinance는 C++17로 구현된 고성능 퀀트 투자 프레임워크입니다.
+libyfinance is a quant investing framework written in C++17.
 
-**핵심 기능:**
-- **25가지 기술 지표** — 추세(SMA/EMA/WMA/ADX/Parabolic SAR/SuperTrend/Aroon), 모멘텀(RSI/MACD/ROC/CCI/Williams %R/TRIX/Stochastic/MA 기울기), 거래량(VWAP/OBV/MFI/CMF/A·D Line), 변동성(Bollinger/ATR/StdDev/Keltner/Donchian)
-- **16가지 트레이딩 전략** — 카테고리(스윙/추세추종/포지션/초단타)별로 분류 (아래 [전략 카테고리](#-전략-카테고리) 참고)
-- **초단타(분봉) 실시간 실행** — `scalp_trade`로 KIS 분봉 폴링 + 모의투자 자동 주문 (KRX)
-- **백테스트 엔진** — 수수료/슬리피지 반영, 종합 스코어(0~100) 산출
-- **매크로 분석** — FRED 12개 경제 지표 + CNN Fear & Greed → 4국면 판정
-- **한투 OpenAPI 연동** — 국장 시세 데이터 수집 + 모의투자 주문/잔고 조회 (KIS REST API)
-- **동적 전략 관리** — JSON 기반 포트폴리오 설정으로 전략 동적 로딩
-- **자동 대시보드** — GitHub Actions 기반 일일 매크로 리포트
+**Core features:**
+- **25 technical indicators** — trend (SMA/EMA/WMA/ADX/Parabolic SAR/SuperTrend/Aroon), momentum (RSI/MACD/ROC/CCI/Williams %R/TRIX/Stochastic/MA slope), volume (VWAP/OBV/MFI/CMF/A-D Line), volatility (Bollinger/ATR/StdDev/Keltner/Donchian)
+- **16 trading strategies** — grouped by category (swing / trend / position / scalp); see [Strategy categories](#-strategy-categories)
+- **Live intraday scalping** — `scalp_trade` polls KIS minute bars and places paper-trading orders (KRX)
+- **Backtest engine** — models commission, slippage and stop-loss; reports a 0–100 composite score
+- **Macro analysis** — 12 FRED series + CNN Fear & Greed, mapped onto a 4-regime model
+- **KIS OpenAPI integration** — KRX market data plus paper/live order placement and balance inquiry
+- **Config-driven strategies** — portfolio profiles in JSON, so tickers and parameters change without touching code
+- **Dashboards** — a daily macro report via GitHub Actions, and a local real-time paper-trading dashboard
 
 ---
 
-## 🏛️ 아키텍처
+## 🏛️ Architecture
 
 ```
 libyfinance/
-├── include/                     # C++ 헤더
-│   ├── yfinance.hpp             # Yahoo Finance / FRED / CNN F&G API 클라이언트
-│   ├── indicator.hpp            # 기술 지표 24종 (추세/모멘텀/거래량/변동성)
-│   ├── stock_info.hpp           # StockInfo 구조체 (OHLCV 시계열)
-│   ├── fng_info.hpp             # FearAndGreedInfo 구조체
-│   ├── fred_info.hpp            # FredSeriesInfo 구조체
-│   ├── macro_scorer.hpp         # 5축 매크로 스코어 + 4국면 판정
+├── include/                     # C++ headers
+│   ├── yfinance.hpp             # Yahoo Finance / FRED / CNN F&G API client
+│   ├── indicator.hpp            # 25 technical indicators (trend/momentum/volume/volatility)
+│   ├── stock_info.hpp           # StockInfo struct (OHLCV time series)
+│   ├── fng_info.hpp             # FearAndGreedInfo struct
+│   ├── fred_info.hpp            # FredSeriesInfo struct
+│   ├── macro_scorer.hpp         # 5-axis macro score + 4-regime classification
 │   ├── strategy/
-│   │   ├── istrategy.hpp        # IStrategy 순수 가상 인터페이스
-│   │   └── strategy_factory.hpp # JSON 기반 전략 팩토리 (category 필드 포함)
+│   │   ├── istrategy.hpp        # IStrategy pure virtual interface
+│   │   └── strategy_factory.hpp # JSON-driven strategy factory (incl. category field)
 │   ├── backtest/
-│   │   └── backtest_engine.hpp  # 단일종목 백테스트 엔진
+│   │   └── backtest_engine.hpp  # Single-ticker backtest engine
 │   ├── macro/
-│   │   └── macro_backtester.hpp # 매크로 포트폴리오 백테스트
+│   │   └── macro_backtester.hpp # Macro portfolio backtester
 │   ├── broker/
-│   │   ├── kis_auth.hpp         # 한투 OpenAPI OAuth2 인증
-│   │   └── kis_trader.hpp       # 한투 모의/실전 주문·잔고조회
+│   │   ├── kis_auth.hpp         # KIS OpenAPI OAuth2 authentication
+│   │   └── kis_trader.hpp       # KIS paper/live orders + balance inquiry
 │   └── data/
-│       ├── idata_provider.hpp   # 데이터 소스 인터페이스
-│       └── kis_provider.hpp     # 한투 시세 데이터 수집
+│       ├── idata_provider.hpp   # Data source interface
+│       └── kis_provider.hpp     # KIS market data (daily + intraday minute bars)
 │
-├── src/                         # C++ 구현체
-├── lib/                         # 전략 구현체 (16개, 전략별 hpp/cpp 디렉토리)
-│   │                             # 스윙: rsi, bollinger, stochastic_reversal, williams_r, cci_reversal, mfi_reversal
-│   │                             # 추세추종: sma_crossover, macd, adx_trend, supertrend_follow, aroon_trend, psar_trend
-│   │                             # 포지션: donchian_breakout, obv_trend, keltner_breakout
+├── src/                         # C++ implementations
+├── lib/                         # Strategy implementations (16, one hpp/cpp dir each)
+│   │                             # swing:    rsi, bollinger, stochastic_reversal, williams_r, cci_reversal, mfi_reversal
+│   │                             # trend:    sma_crossover, macd, adx_trend, supertrend_follow, aroon_trend, psar_trend, ma_slope_trend
+│   │                             # position: donchian_breakout, obv_trend, keltner_breakout
 │
-├── app/                         # CLI 실행 파일 (15개)
-├── config/                      # JSON 설정 파일
-│   ├── portfolio.json           # 전략 프로필 (동적 로딩)
-│   ├── macro_allocation.json    # 매크로 배분 설정
-│   └── strategies/              # 매크로 전략 프로파일 (aggressive/balanced/defensive)
+├── app/                         # CLI executables (16)
+├── scripts/                     # dashboard_server.py (local dashboard)
+├── config/                      # JSON configuration
+│   ├── portfolio.json           # Strategy profiles (loaded at runtime)
+│   ├── macro_allocation.json    # Macro allocation settings
+│   └── strategies/              # Macro strategy profiles (aggressive/balanced/defensive)
 │
-├── docs/                        # API 문서 + GitHub Pages 대시보드
-└── .github/workflows/           # CI/CD (매크로 일일 리포트)
+├── docs/                        # API docs + GitHub Pages dashboard
+└── .github/workflows/           # CI/CD (daily macro report)
 ```
 
 ---
 
-## 🚀 빌드
+## 🚀 Build
 
-### 사전 요구사항
+### Prerequisites
 
 ```bash
 sudo apt install cmake ninja-build libcurl4-openssl-dev nlohmann-json3-dev
 ```
 
-### 빌드 실행
+### Building
 
 ```bash
-# Release 빌드 (기본)
+# Release build (default)
 ./make.sh
 
-# Debug 빌드
+# Debug build
 ./make.sh Debug
 ```
 
-빌드 산출물: `build/Release/` (또는 `build/Debug/`)
+Build output: `build/Release/` (or `build/Debug/`).
 
-### Docker 빌드
+### Docker
 
 ```bash
-./docker.sh build    # 이미지 빌드
-./docker.sh run      # 컨테이너 실행
+./docker.sh build    # build the image
+./docker.sh run      # run the container
 ```
 
 ---
 
-## 📖 사용법
+## 📖 Usage
 
-### 미국 주식 조회
+### US stock data
 
 ```bash
 ./build/Release/app/stock AAPL 1d 1y
 ```
 
-### 한국 주식 조회 (KIS API)
+### Korean stock data (KIS API)
 
 ```bash
-# .env 파일에 KIS 크레덴셜 설정 필요 (.env.example 참조)
+# Requires KIS credentials in .env (see .env.example)
 ./build/Release/app/kis_stock 005930 2024-01-01 2024-12-31
 ```
 
-### 모의투자 주문 / 잔고조회 (KIS API)
+### Paper-trading orders / balance (KIS API)
 
 ```bash
-# .env에 KIS_PAPER_* 크레덴셜 설정 필요 (기본은 모의투자 모드)
+# Requires KIS_PAPER_* credentials in .env (paper mode is the default)
 ./build/Release/app/kis_order balance
-./build/Release/app/kis_order buy  005930 1        # 시장가 매수 1주
-./build/Release/app/kis_order sell 005930 1 75000  # 75,000원 지정가 매도 1주
+./build/Release/app/kis_order buy  005930 1        # market buy, 1 share
+./build/Release/app/kis_order sell 005930 1 75000  # limit sell at 75,000 KRW, 1 share
 ```
 
-### 백테스트
+### Backtest
 
 ```bash
-# SMA Crossover 전략으로 AAPL 1년 백테스트
+# Backtest the SMA crossover strategy on AAPL over 1 year
 ./build/Release/app/backtest AAPL sma 1y
 ```
 
-### 전략 스윕 (멀티 전략 × 멀티 종목 비교)
+### Strategy sweep (multi-strategy × multi-ticker comparison)
 
 ```bash
 ./build/Release/app/strategy_sweep
 ```
 
-### 동적 전략 실행 (포트폴리오 기반)
+### Portfolio-driven strategy runs
 
 ```bash
-# 전략 목록 조회
+# List registered strategies
 ./build/Release/app/run_strategy --list
 
-# 특정 전략 실행 (ID 기반)
+# Run one strategy by ID
 ./build/Release/app/run_strategy --id 1
 
-# 전체 전략 실행
+# Run every strategy in the portfolio
 ./build/Release/app/run_strategy --all
 
-# 커스텀 설정 파일 사용
+# Custom backtest window (default: last ~1 year)
+./build/Release/app/run_strategy --id 1 --start 2021-01-01 --end 2026-09-18
+
+# Custom config file
 ./build/Release/app/run_strategy --config my_portfolio.json --all
 ```
 
-### 매크로 경제 분석
+### Macro analysis
 
 ```bash
-# FRED API 키 필요
+# Requires a FRED API key
 export FRED_API_KEY=your_key
 ./build/Release/app/macro config/macro_allocation.json
 ```
@@ -163,22 +167,23 @@ export FRED_API_KEY=your_key
 
 ---
 
-## ⚙️ 설정
+## ⚙️ Configuration
 
-### `.env` — 환경변수 (gitignored)
+### `.env` — environment variables (gitignored)
 
-`.env.example`을 복사하여 `.env`를 생성하고, 실제 키 값을 입력하세요.
+Copy `.env.example` to `.env` and fill in real keys.
 
 ```bash
 cp .env.example .env
 ```
 
-### `config/portfolio.json` — 전략 프로필
+### `config/portfolio.json` — strategy profiles
 
-JSON으로 전략을 정의하면 코드 수정 없이 전략 추가/변경이 가능합니다:
+Strategies are defined in JSON, so tickers and parameters can be added or changed without code edits:
 
 ```json
 {
+  "initial_capital_krw": 10000000,
   "strategies": [
     {
       "id": 1,
@@ -195,75 +200,76 @@ JSON으로 전략을 정의하면 코드 수정 없이 전략 추가/변경이 �
 }
 ```
 
-**지원 전략 타입:** `sma_crossover`, `rsi`, `macd`, `bollinger`, `stochastic_reversal`, `williams_r`, `cci_reversal`, `mfi_reversal`, `adx_trend`, `supertrend`, `aroon_trend`, `psar_trend`, `donchian_breakout`, `obv_trend`, `keltner_breakout`, `ma_slope_trend` (`params`의 기본값은 `src/strategy/strategy_factory.cpp` 참고)
+`initial_capital_krw` is the principal the dashboard measures returns against (the paper account's seed money).
+
+**Supported strategy types:** `sma_crossover`, `rsi`, `macd`, `bollinger`, `stochastic_reversal`, `williams_r`, `cci_reversal`, `mfi_reversal`, `adx_trend`, `supertrend`, `aroon_trend`, `psar_trend`, `donchian_breakout`, `obv_trend`, `keltner_breakout`, `ma_slope_trend` (parameter defaults live in `src/strategy/strategy_factory.cpp`).
 
 ---
 
-## 🗂️ 전략 카테고리
+## 🗂️ Strategy categories
 
-`IStrategy`는 `StockInfo`(OHLCV 시계열)에 대해 동작할 뿐 "일봉"이라는 가정이 코드에 없어서, 같은 전략 클래스를 분봉에 태워도 그대로 신호를 냅니다. 백테스트(과거 데이터 검증)는 일봉 전용 3개 카테고리로, 실시간 실행은 별도의 분봉 폴링 경로(`scalp_trade`)로 나눠져 있습니다.
+`IStrategy` operates on a `StockInfo` (an OHLCV time series) and never assumes daily bars — feeding it minute bars produces signals just the same. Backtesting (historical validation) uses the three daily-bar categories; live intraday execution goes through a separate minute-bar polling path (`scalp_trade`).
 
-| 카테고리 | 보유 기간 | 성격 | 전략 | 실행 |
+| Category | Holding period | Character | Strategies | Runner |
 |---|---|---|---|---|
-| **swing** (스윙) | 며칠~1~2주 | 평균회귀 (과매수/과매도 반전) | rsi, bollinger, stochastic_reversal, williams_r, cci_reversal, mfi_reversal | `run_strategy` (일봉) |
-| **trend** (추세추종) | 1주~수주 | 추세 방향 추종 | sma_crossover, macd, adx_trend, supertrend, aroon_trend, psar_trend, ma_slope_trend | `run_strategy` (일봉) |
-| **position** (포지션) | 수주~수개월 | 변동성 돌파 / 거래량 확인 | donchian_breakout, obv_trend, keltner_breakout | `run_strategy` (일봉) |
-| **scalp** (초단타) | 분 단위 | 분봉 폴링, 장중 실시간 매매 | sma_crossover (짧은 파라미터) | `scalp_trade` (분봉) |
+| **swing** | days to 1–2 weeks | mean reversion (overbought/oversold) | rsi, bollinger, stochastic_reversal, williams_r, cci_reversal, mfi_reversal | `run_strategy` (daily) |
+| **trend** | 1 week to several weeks | trend following | sma_crossover, macd, adx_trend, supertrend, aroon_trend, psar_trend, ma_slope_trend | `run_strategy` (daily) |
+| **position** | weeks to months | volatility breakout / volume confirmation | donchian_breakout, obv_trend, keltner_breakout | `run_strategy` (daily) |
+| **scalp** | minutes | minute-bar polling, intraday live trading | sma_crossover (short parameters) | `scalp_trade` (intraday) |
 
-`config/portfolio.json`의 각 전략 프로필에 `category` 필드로 태깅되어 있고, `run_strategy --list`에서 바로 확인할 수 있습니다.
+Every profile in `config/portfolio.json` carries a `category` field, visible directly in `run_strategy --list`.
 
-### 초단타 (scalp) 실행
+### Running the scalper
 
 ```bash
-# .env에 KIS_PAPER_* 크레덴셜 필요. 기본은 dry-run(실주문 없음)
+# Requires KIS_PAPER_* credentials in .env. Dry-run by default (no real orders).
 ./build/Release/app/scalp_trade --id 18 --interval 60
 
-# 실제로 모의투자 계좌에 주문을 내려면 --live 명시
+# Add --live to actually place orders on the paper account
 ./build/Release/app/scalp_trade --id 18 --interval 60 --live --max-trades 10
 ```
 
-KIS `inquire-time-itemchartprice`(TR_ID `FHKST03010200`)는 **당일 분봉만, 한 번에 최대 30건** 제공합니다. `scalp_trade`는 KRX 장중(09:00~15:30 KST, 평일)에만 폴링하고, 보유 여부·평균단가는 매번 `KisTrader::getBalance()`로 조회해 로컬 상태 파일 없이 KIS를 진실의 원천으로 씁니다. 해외주식(미국) 주문 API는 아직 없어 KRX 종목만 지원합니다.
+KIS's `inquire-time-itemchartprice` (TR_ID `FHKST03010200`) serves **today's minute bars only, ~30 per call**. `scalp_trade` polls only during KRX hours (09:00–15:30 KST, weekdays) and re-reads holdings and average price from `KisTrader::getBalance()` on every cycle, treating KIS as the source of truth rather than keeping local position state. Overseas (US) order placement is not implemented, so only KRX tickers are supported.
 
 ---
 
-## 📊 기술 지표
+## 📊 Technical indicators
 
-전부 일봉 OHLCV만으로 계산됩니다 (오더북/틱 데이터 불필요). `app/test_indicators.cpp`에서 24종 전체를 스모크 테스트합니다.
+All of them are computed from daily OHLCV alone — no order book or tick data required. `app/test_indicators.cpp` smoke-tests all 25.
 
-| 분류 | 지표 | 함수 |
+| Group | Indicator | Function |
 |---|---|---|
-| 추세 | SMA, EMA, WMA | `sma`/`ema`/`wma(prices, window)` |
-| 추세 | ADX/DMI | `adx(high, low, close, period)` → `{plusDI, minusDI, adx}` |
-| 추세 | Parabolic SAR | `parabolicSar(high, low, afStep, afMax)` |
-| 추세 | SuperTrend | `superTrend(high, low, close, period, multiplier)` |
-| 추세 | Aroon | `aroon(high, low, period)` → `{up, down}` |
-| 모멘텀 | RSI | `rsi(prices, period)` |
-| 모멘텀 | MACD | `macd(prices, fast, slow, signal)` |
-| 모멘텀 | Stochastic | `stochastic(high, low, close, k, d)` |
-| 모멘텀 | ROC | `roc(prices, period)` |
-| 모멘텀 | CCI | `cci(high, low, close, period)` |
-| 모멘텀 | Williams %R | `williamsR(high, low, close, period)` |
-| 모멘텀 | TRIX | `trix(prices, period)` |
-| 거래량 | VWAP | `vwap(high, low, close, volume)` |
-| 거래량 | OBV | `obv(close, volume)` |
-| 거래량 | MFI | `mfi(high, low, close, volume, period)` |
-| 거래량 | CMF | `cmf(high, low, close, volume, period)` |
-| 거래량 | A/D Line | `adLine(high, low, close, volume)` |
-| 변동성 | Bollinger Bands | `bollinger(prices, period, stddev)` → `{upper, middle, lower}` |
-| 변동성 | ATR | `atr(high, low, close, period)` |
-| 변동성 | Rolling StdDev | `stddev(prices, window)` |
-| 변동성 | Keltner Channels | `keltner(high, low, close, emaPeriod, atrPeriod, multiplier)` |
-| 변동성 | Donchian Channels | `donchian(high, low, period)` |
+| Trend | SMA, EMA, WMA | `sma`/`ema`/`wma(prices, window)` |
+| Trend | ADX/DMI | `adx(high, low, close, period)` → `{plusDI, minusDI, adx}` |
+| Trend | Parabolic SAR | `parabolicSar(high, low, afStep, afMax)` |
+| Trend | SuperTrend | `superTrend(high, low, close, period, multiplier)` |
+| Trend | Aroon | `aroon(high, low, period)` → `{up, down}` |
+| Momentum | RSI | `rsi(prices, period)` |
+| Momentum | MACD | `macd(prices, fast, slow, signal)` |
+| Momentum | Stochastic | `stochastic(high, low, close, k, d)` |
+| Momentum | ROC | `roc(prices, period)` |
+| Momentum | CCI | `cci(high, low, close, period)` |
+| Momentum | Williams %R | `williamsR(high, low, close, period)` |
+| Momentum | TRIX | `trix(prices, period)` |
+| Momentum | MA slope | `maSlope(prices, maPeriod, slopeWindow)` (regression slope, % per bar) |
+| Volume | VWAP | `vwap(high, low, close, volume)` |
+| Volume | OBV | `obv(close, volume)` |
+| Volume | MFI | `mfi(high, low, close, volume, period)` |
+| Volume | CMF | `cmf(high, low, close, volume, period)` |
+| Volume | A/D Line | `adLine(high, low, close, volume)` |
+| Volatility | Bollinger Bands | `bollinger(prices, period, stddev)` → `{upper, middle, lower}` |
+| Volatility | ATR | `atr(high, low, close, period)` |
+| Volatility | Rolling StdDev | `stddev(prices, window)` |
+| Volatility | Keltner Channels | `keltner(high, low, close, emaPeriod, atrPeriod, multiplier)` |
+| Volatility | Donchian Channels | `donchian(high, low, period)` |
 
-모두 `namespace indicator` (`include/indicator.hpp`), 헤더 온리.
+All live in `namespace indicator` (`include/indicator.hpp`), header-only.
 
 ---
 
-## 🧩 전략 개발 가이드
+## 🧩 Adding a strategy
 
-새로운 전략을 추가하려면:
-
-### 1. 전략 파일 생성
+### 1. Create the strategy files
 
 ```
 lib/my_strategy/
@@ -271,7 +277,7 @@ lib/my_strategy/
 └── my_strategy.cpp
 ```
 
-### 2. IStrategy 인터페이스 구현
+### 2. Implement IStrategy
 
 ```cpp
 #pragma once
@@ -286,141 +292,155 @@ public:
     [[nodiscard]] std::size_t warmupPeriod() const override;
     [[nodiscard]] Signal evaluate(const StockInfo& data, std::size_t index) override;
 private:
-    // 캐시된 지표 값
+    // cached indicator values
 };
 ```
 
-### 3. CMakeLists.txt 등록
+Cache indicator arrays in `init()` and map data indices to them in `evaluate()`. Follow the existing
+`startIndex_` convention: `evaluate(index)` must only read values derived from data up to `index - 1`,
+so a signal never peeks at the bar it trades on.
 
-루트 `CMakeLists.txt`:
+### 3. Register in CMakeLists.txt
+
+Root `CMakeLists.txt`:
 ```cmake
 add_library(${PROJECT_NAME} SHARED
-  # ... 기존 소스 ...
+  # ... existing sources ...
   lib/my_strategy/my_strategy.cpp
 )
 target_include_directories(${PROJECT_NAME} PRIVATE
-  # ... 기존 경로 ...
+  # ... existing paths ...
   ${CMAKE_CURRENT_SOURCE_DIR}/lib/my_strategy
 )
 ```
 
-`app/CMakeLists.txt`의 `BUILD_APP` 매크로 내:
+Inside the `BUILD_APP` macro in `app/CMakeLists.txt`:
 ```cmake
 target_include_directories(${APP} PRIVATE
-  # ... 기존 경로 ...
+  # ... existing paths ...
   ${CMAKE_SOURCE_DIR}/lib/my_strategy
 )
 ```
 
-### 4. StrategyFactory에 등록
+### 4. Register in StrategyFactory
 
-`src/strategy/strategy_factory.cpp`에 분기 추가:
+Add a branch in `src/strategy/strategy_factory.cpp`:
 ```cpp
 if (type == "my_strategy") {
     return std::make_unique<MyStrategy>(/* params from JSON */);
 }
 ```
 
-### 5. portfolio.json에 프로필 추가
+### 5. Add a profile to portfolio.json
 
 ```json
 {
-  "id": 6,
+  "id": 19,
   "type": "my_strategy",
   "ticker": "AAPL",
+  "category": "swing",
   "params": { /* strategy-specific */ }
 }
 ```
 
 ---
 
-## 📊 모의투자 대시보드 (로컬)
+## 📊 Paper-trading dashboard (local)
 
-이 PC를 서버처럼 켜두고 쓰는 실시간 대시보드입니다. `portfolio_report`를 주기적으로 실행해
-한투 모의계좌 잔고를 읽어오고, 누적 기록을 주식창 스타일 차트로 그립니다.
+A real-time dashboard for running this machine as a server. It re-runs `portfolio_report` on a timer to
+read the KIS paper account and plots the accumulated history as a stock-app style chart.
 
 ```bash
-./make.sh                                   # portfolio_report 빌드 포함
-./scripts/dashboard_server.py               # 기본 포트 8800, 60초마다 갱신
+./make.sh                                   # builds portfolio_report too
+./scripts/dashboard_server.py               # port 8800, refreshes every 60s
 ./scripts/dashboard_server.py --port 9000 --interval 30
 ```
 
-브라우저에서 `http://localhost:8800` — 맨 위가 모의투자 현황(총평가금액 차트 + 원금 기준선 +
-1H/6H/1D/ALL 구간 선택 + 마우스 호버 툴팁), 그 아래가 보유 종목 표(종목/전략/매입가/현재가/
-손익률/비중), 그 아래가 기존 매크로 리포트입니다.
+Open `http://localhost:8800`. Top section is the paper account (account-value chart with a dashed
+principal baseline, 1H/6H/1D/ALL range buttons, hover tooltip), below it the holdings table
+(ticker / strategy / average price / current price / P&L % / weight), and below that the existing
+macro report.
 
-- 계좌 스냅샷과 누적 기록은 `cache/`(gitignored)에 쌓이고 `/live/`로 서빙됩니다 — 계좌 정보가
-  저장소에 커밋되지 않습니다.
-- 페이지는 30초마다 자체적으로 다시 읽습니다.
-- 백그라운드로 계속 돌리려면 `tmux` 세션 안에서 실행하세요.
+- Snapshots and rolling history are written to `cache/` (gitignored) and served under `/live/`, so
+  account data is never committed to the repository.
+- The page re-fetches every 30 seconds on its own.
+- To keep it running in the background, start it inside a `tmux` session.
+- External network access is deliberately not set up yet — the server has no authentication. See
+  Phase 3-D in [docs/PLAN.md](docs/PLAN.md) before exposing it.
 
 ---
 
-## 📈 CLI 앱 목록
+## 📈 CLI applications
 
-| 앱 | 설명 |
+| App | Description |
 |----|------|
-| `stock` | Yahoo Finance 주식 데이터 조회 |
-| `kis_stock` | 한투 API 국장 주식 데이터 조회 |
-| `kis_order` | 한투 모의/실전 주문(매수/매도) 및 잔고조회 |
-| `fng` | CNN Fear & Greed Index 조회 |
-| `fred` | FRED 경제 지표 조회 |
-| `backtest` | 단일 전략 백테스트 |
-| `buy_and_hold` | 바이앤홀드 벤치마크 |
-| `macro` | 매크로 경제 분석 (5축 점수 + 4국면) |
-| `macro_backtest` | 매크로 기반 포트폴리오 백테스트 |
-| `macro_sweep` | 매크로 전략 프로파일 비교 |
-| `qld_dca_backtest` | QLD 적립식 투자 백테스트 |
-| `strategy_sweep` | 4전략 × 4종목 멀티 스윕 |
-| `run_strategy` | JSON 포트폴리오 기반 동적 전략 실행 (일봉, `--start`/`--end`로 기간 지정) |
-| `scalp_trade` | 분봉 폴링 초단타 자동매매 (KRX, dry-run 기본) |
-| `portfolio_report` | 모의투자 계좌 스냅샷(원금 대비 수익률 + 보유종목) JSON 출력 |
-| `test_indicators` | 기술 지표 검증 |
+| `stock` | Yahoo Finance stock data |
+| `kis_stock` | KRX stock data via the KIS API |
+| `kis_order` | KIS paper/live orders (buy/sell) and balance inquiry |
+| `fng` | CNN Fear & Greed Index |
+| `fred` | FRED economic series |
+| `backtest` | Single-strategy backtest |
+| `buy_and_hold` | Buy-and-hold benchmark |
+| `macro` | Macro analysis (5-axis score + 4 regimes) |
+| `macro_backtest` | Macro-driven portfolio backtest |
+| `macro_sweep` | Macro strategy profile comparison |
+| `qld_dca_backtest` | QLD dollar-cost-averaging backtest |
+| `strategy_sweep` | Multi-strategy × multi-ticker sweep |
+| `run_strategy` | Portfolio-driven strategy runs (daily bars; `--start`/`--end` for the window) |
+| `scalp_trade` | Intraday scalping via minute-bar polling (KRX, dry-run by default) |
+| `portfolio_report` | Paper-account snapshot as JSON (return vs principal + holdings) |
+| `test_indicators` | Technical indicator smoke tests |
 
 ---
 
-## 🗺️ 개발 로드맵
+## 🗺️ Roadmap
 
-| Phase | 내용 | 상태 |
-|-------|------|------|
-| **1-A** | GTest 테스트 프레임워크 | 🔲 미구현 |
-| **1-B** | 백테스트 현실성 (수수료/슬리피지) | ✅ 완료 |
-| **1-C** | 추가 기술 지표 (MACD, BB, ATR, ...) | ✅ 완료 |
-| **1-D** | 한국 시장 데이터 수집 (KIS API) | ✅ 완료 |
-| **2-A** | 브로커 추상화 (IBroker) | 🔲 미구현 |
-| **2-B** | 주문 관리 (OrderManager, RiskManager) | 🔲 미구현 |
-| **2-C** | 자동매매 데몬 (trader) | 🔲 미구현 |
-| **3** | 대시보드 & 알림 (Go 서버, Telegram) | 🔲 미구현 |
-| **4** | AI/적응형 전략 (Python ML) | 🔲 미구현 |
-| **5** | 상용화 (멀티테넌트) | 🔲 미구현 |
+| Phase | Item | Status |
+|-------|------|--------|
+| **1-A** | GTest test framework | 🔲 not started |
+| **1-B** | Realistic backtests (commission/slippage/stop-loss) | ✅ done |
+| **1-C** | Additional technical indicators | ✅ done |
+| **1-D** | Korean market data collection (KIS API) | ✅ done |
+| **2-A** | Broker abstraction (IBroker) | 🔲 not started |
+| **2-B** | Order management (OrderManager, RiskManager) | 🔲 not started |
+| **2-C** | Automated trading daemon | 🟡 partial — `scalp_trade` covers the intraday KRX path |
+| **3** | Dashboard & alerts | 🟡 partial — local dashboard done; Go server, Telegram, external access pending |
+| **4** | AI / adaptive strategies (Python ML) | 🔲 not started |
+| **5** | Multi-tenant productization | 🔲 not started |
 
-> 상세 기획: [docs/PLAN.md](docs/PLAN.md)
+> Full plan: [docs/PLAN.md](docs/PLAN.md)
 
 ---
 
-## 📁 주요 데이터 흐름
+## 📁 Data flow
 
 ```
 Yahoo Finance ─┐
 FRED API ──────┤                    ┌─── BacktestEngine ──→ BacktestResult
 CNN F&G ───────┼→ StockInfo/Macro  ─┤
-KIS OpenAPI ───┘                    └─── StrategyFactory ──→ run_strategy
+KIS OpenAPI ───┘                    └─── StrategyFactory ──→ run_strategy / scalp_trade
+                                                                  │
+                                                     KisTrader ───┴──→ paper account
+                                                                         │
+                                                  portfolio_report ──────┴──→ dashboard
 ```
 
 ---
 
-## 🔧 개발 환경
+## 🔧 Development environment
 
-| 항목 | 값 |
+| Item | Value |
 |------|------|
-| **C++ 표준** | C++17 |
-| **빌드** | CMake 3.16+ / Ninja |
-| **의존성** | libcurl, nlohmann-json |
-| **포맷터** | clang-format (120자, 4칸 들여쓰기) |
+| **C++ standard** | C++17 |
+| **Build** | CMake 3.16+ / Ninja |
+| **Dependencies** | libcurl, nlohmann-json |
+| **Formatter** | clang-format (120 columns, 4-space indent) |
 | **CI/CD** | GitHub Actions |
+
+> Note: documentation and commit messages are written in English; the dashboard UI is Korean.
 
 ---
 
-## 📄 라이선스
+## 📄 License
 
 Private project.
