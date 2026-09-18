@@ -466,41 +466,135 @@
         }
 
         /* Portfolio */
-        .portfolio-summary {
+        .portfolio-head {
             display: flex;
-            align-items: baseline;
+            align-items: flex-end;
             justify-content: space-between;
             flex-wrap: wrap;
-            gap: 0.5rem;
-            margin-bottom: 1rem;
+            gap: 0.75rem;
+            margin-bottom: 1.25rem;
         }
 
-        .portfolio-return {
-            font-size: 2rem;
+        .portfolio-value {
+            font-size: 2.1rem;
             font-weight: 700;
             font-variant-numeric: tabular-nums;
+            line-height: 1.1;
+        }
+
+        .portfolio-delta {
+            font-size: 1rem;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+            margin-top: 0.25rem;
         }
 
         .portfolio-meta {
-            font-size: 0.8rem;
+            font-size: 0.78rem;
             color: var(--text-muted);
+            text-align: right;
+            line-height: 1.7;
         }
 
-        .return-chart-svg {
+        .portfolio-meta b {
+            color: var(--text);
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .chart-wrap {
+            position: relative;
             width: 100%;
-            height: 140px;
+        }
+
+        .stock-chart {
+            width: 100%;
+            height: 280px;
             display: block;
+            overflow: visible;
+        }
+
+        .chart-grid-line {
+            stroke: rgba(255, 255, 255, 0.05);
+            stroke-width: 1;
+        }
+
+        .chart-base-line {
+            stroke: var(--text-muted);
+            stroke-width: 1;
+            stroke-dasharray: 5 5;
+            opacity: 0.55;
+        }
+
+        .chart-axis-label {
+            fill: var(--text-muted);
+            font-size: 10px;
+            font-variant-numeric: tabular-nums;
         }
 
         .chart-line {
             fill: none;
             stroke-width: 2;
+            stroke-linejoin: round;
+            stroke-linecap: round;
         }
 
-        .chart-zero-line {
-            stroke: var(--border);
+        .chart-crosshair {
+            stroke: var(--text-muted);
             stroke-width: 1;
-            stroke-dasharray: 4 4;
+            stroke-dasharray: 3 3;
+            opacity: 0;
+        }
+
+        .chart-hover-dot {
+            opacity: 0;
+        }
+
+        .chart-tooltip {
+            position: absolute;
+            pointer-events: none;
+            background: rgba(10, 14, 26, 0.95);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.45rem 0.6rem;
+            font-size: 0.72rem;
+            line-height: 1.5;
+            white-space: nowrap;
+            opacity: 0;
+            transition: opacity 0.12s;
+            transform: translate(-50%, -130%);
+            font-variant-numeric: tabular-nums;
+            z-index: 5;
+        }
+
+        .chart-range {
+            display: flex;
+            gap: 0.4rem;
+            margin-top: 0.75rem;
+            justify-content: flex-end;
+        }
+
+        .range-btn {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            border-radius: 6px;
+            padding: 0.25rem 0.6rem;
+            font-size: 0.72rem;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .range-btn:hover {
+            background: var(--surface-hover);
+            color: var(--text);
+        }
+
+        .range-btn.active {
+            background: var(--accent-glow);
+            border-color: var(--accent);
+            color: var(--text);
         }
 
         .holdings-table {
@@ -534,9 +628,21 @@
             border-bottom: none;
         }
 
+        .strategy-tag {
+            display: inline-block;
+            font-size: 0.68rem;
+            padding: 0.15rem 0.45rem;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-muted);
+            margin-left: 0.35rem;
+        }
+
         .empty-msg {
             color: var(--text-muted);
             font-size: 0.85rem;
+            padding: 1.5rem 0;
+            text-align: center;
         }
 
         /* Responsive */
@@ -564,6 +670,8 @@
             <div class="updated-at" id="updatedAt">Loading...</div>
         </header>
 
+        <div id="portfolio"></div>
+
         <div id="content">
             <div class="loading">
                 <div class="spinner"></div>
@@ -574,14 +682,19 @@
         <footer>
             Powered by <a href="https://fred.stlouisfed.org/" target="_blank">FRED</a> &amp;
             <a href="https://edition.cnn.com/markets/fear-and-greed" target="_blank">CNN Fear &amp; Greed</a>
-            &mdash; Auto-updated daily via GitHub Actions
+            &mdash; 매크로: GitHub Actions 일 1회 &middot; 모의투자: 로컬 대시보드 서버 실시간
         </footer>
     </div>
 
     <script>
         (async function () {
             const $content = document.getElementById('content');
+            const $portfolio = document.getElementById('portfolio');
             const $updated = document.getElementById('updatedAt');
+
+            let rangeMinutes = 0;          // 0 = ALL
+            let portfolioState = { p: null, history: [] };
+            const REFRESH_MS = 30000;
 
             try {
                 const resp = await fetch('data.json');
@@ -592,21 +705,27 @@
                 $content.innerHTML = `<div class="error-msg">Failed to load data: ${e.message}</div>`;
             }
 
-            // Portfolio section is optional (separate pipeline) — don't let its
-            // absence or failure break the macro report above.
-            try {
-                const [presp, hresp] = await Promise.all([
-                    fetch('portfolio.json'),
-                    fetch('portfolio_history.json'),
-                ]);
-                if (presp.ok) {
-                    const portfolio = await presp.json();
-                    const history = hresp.ok ? await hresp.json() : [];
-                    if (portfolio.success) renderPortfolio(portfolio, history);
+            // Portfolio data: prefer the live local server (/live/), fall back to the
+            // static files. Never let its absence break the macro report below.
+            async function loadJson(paths) {
+                for (const path of paths) {
+                    try {
+                        const resp = await fetch(path + '?t=' + Date.now());
+                        if (resp.ok) return await resp.json();
+                    } catch (e) { /* try the next path */ }
                 }
-            } catch (e) {
-                console.warn('Portfolio data unavailable:', e);
+                return null;
             }
+
+            async function loadPortfolio() {
+                const p = await loadJson(['live/portfolio.json', 'portfolio.json']);
+                if (!p || !p.success) return;
+                const history = (await loadJson(['live/portfolio_history.json', 'portfolio_history.json'])) || [];
+                renderPortfolio(p, history);
+            }
+
+            await loadPortfolio();
+            setInterval(loadPortfolio, REFRESH_MS);
 
             function render(d) {
                 /* Timestamp */
@@ -773,71 +892,205 @@
             }
 
             function renderPortfolio(p, history) {
+                portfolioState = { p, history };
+                const principal = p.initial_capital_krw || 0;
+                const total = p.total_eval_krw || 0;
                 const returnPct = p.total_return_pct || 0;
-                const returnClass = returnPct >= 0 ? 'change-up' : 'change-down';
+                const gain = total - principal;
+                const cls = returnPct >= 0 ? 'change-up' : 'change-down';
                 const sign = returnPct >= 0 ? '+' : '';
+                const asOf = p.timestamp ? new Date(p.timestamp).toLocaleString('ko-KR', {
+                    month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+                }) : '';
 
-                const html = `
+                $portfolio.innerHTML = `
                 <div class="card">
-                    <div class="card-title">모의투자 현황 (KRX)</div>
-                    <div class="portfolio-summary">
-                        <div class="portfolio-return ${returnClass}">${sign}${returnPct.toFixed(2)}%</div>
+                    <div class="card-title">모의투자 현황 (KRX · 한투 모의계좌)</div>
+                    <div class="portfolio-head">
+                        <div>
+                            <div class="portfolio-value">${Math.round(total).toLocaleString()}<span style="font-size:1rem;color:var(--text-muted)"> 원</span></div>
+                            <div class="portfolio-delta ${cls}">${sign}${Math.round(gain).toLocaleString()}원 (${sign}${returnPct.toFixed(2)}%)</div>
+                        </div>
                         <div class="portfolio-meta">
-                            원금 ${Math.round(p.initial_capital_krw).toLocaleString()}원 &rarr;
-                            총평가 ${Math.round(p.total_eval_krw).toLocaleString()}원
+                            원금 <b>${Math.round(principal).toLocaleString()}원</b><br>
+                            예수금 <b>${Math.round(p.cash_balance_krw || 0).toLocaleString()}원</b><br>
+                            ${asOf ? `기준 ${asOf}` : ''}
                         </div>
                     </div>
-                    ${buildReturnChart(history)}
+                    <div class="chart-wrap" id="chartWrap">
+                        ${buildStockChart(history, principal)}
+                        <div class="chart-tooltip" id="chartTooltip"></div>
+                    </div>
+                    ${history && history.length > 1 ? `
+                    <div class="chart-range">
+                        ${[['1H', 60], ['6H', 360], ['1D', 1440], ['ALL', 0]].map(([label, mins]) =>
+                            `<button class="range-btn ${rangeMinutes === mins ? 'active' : ''}" data-range="${mins}">${label}</button>`
+                        ).join('')}
+                    </div>` : ''}
                 </div>
                 <div class="card">
                     <div class="card-title">보유 종목</div>
-                    ${buildHoldingsTable(p.holdings)}
+                    ${buildHoldingsTable(p.holdings, total)}
                 </div>`;
-                $content.insertAdjacentHTML('beforeend', html);
+
+                attachChartHandlers(history, principal);
             }
 
-            function buildReturnChart(history) {
+            function filterHistory(history) {
+                if (!history || !rangeMinutes) return history || [];
+                const cutoff = (Date.now() / 1000) - rangeMinutes * 60;
+                const filtered = history.filter(h => (h.ts || 0) >= cutoff);
+                return filtered.length >= 2 ? filtered : history.slice(-2);
+            }
+
+            function buildStockChart(rawHistory, principal) {
+                const history = filterHistory(rawHistory);
                 if (!history || history.length === 0) {
-                    return '<p class="empty-msg">아직 누적된 기록이 없습니다 (내일부터 쌓입니다).</p>';
+                    return '<p class="empty-msg">아직 기록이 없습니다 — 대시보드 서버가 돌기 시작하면 쌓입니다.</p>';
                 }
 
-                const width = 600, height = 140, pad = 20;
-                const values = history.map(h => h.total_return_pct);
-                const minV = Math.min(0, ...values);
-                const maxV = Math.max(0, ...values);
-                const range = (maxV - minV) || 1;
-                const n = history.length;
-                const x = i => n === 1 ? width / 2 : pad + (i / (n - 1)) * (width - pad * 2);
-                const y = v => height - pad - ((v - minV) / range) * (height - pad * 2);
-                const zeroY = y(0);
+                const W = 760, H = 280;
+                const padL = 70, padR = 14, padT = 14, padB = 26;
+                const plotW = W - padL - padR;
+                const plotH = H - padT - padB;
 
-                const points = history.map((h, i) => `${x(i).toFixed(1)},${y(h.total_return_pct).toFixed(1)}`).join(' ');
-                const last = history[history.length - 1];
-                const lastColor = last.total_return_pct >= 0 ? 'var(--expansion)' : 'var(--recession)';
+                const values = history.map(h => h.total_eval_krw);
+                let minV = Math.min(principal, ...values);
+                let maxV = Math.max(principal, ...values);
+                if (maxV === minV) { maxV = minV + 1; }
+                const headroom = (maxV - minV) * 0.12;
+                minV -= headroom;
+                maxV += headroom;
+
+                const n = history.length;
+                const x = i => n === 1 ? padL + plotW / 2 : padL + (i / (n - 1)) * plotW;
+                const y = v => padT + (1 - (v - minV) / (maxV - minV)) * plotH;
+
+                const last = history[n - 1];
+                const up = last.total_eval_krw >= principal;
+                const color = up ? 'var(--expansion)' : 'var(--recession)';
+                const rawColor = up ? '#34d399' : '#f87171';
+
+                /* Y grid + labels */
+                const ticks = 4;
+                let grid = '';
+                for (let t = 0; t <= ticks; t++) {
+                    const v = minV + (maxV - minV) * (t / ticks);
+                    const yy = y(v);
+                    grid += `<line class="chart-grid-line" x1="${padL}" y1="${yy.toFixed(1)}" x2="${W - padR}" y2="${yy.toFixed(1)}" />`;
+                    grid += `<text class="chart-axis-label" x="${padL - 8}" y="${(yy + 3).toFixed(1)}" text-anchor="end">${Math.round(v / 10000).toLocaleString()}만</text>`;
+                }
+
+                /* X labels: first / middle / last */
+                const labelIdx = n === 1 ? [0] : [0, Math.floor((n - 1) / 2), n - 1];
+                const xLabels = labelIdx.map(i => {
+                    const t = history[i].time || '';
+                    const short = t.length >= 16 ? t.slice(5) : t;
+                    const anchor = i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle';
+                    return `<text class="chart-axis-label" x="${x(i).toFixed(1)}" y="${H - 8}" text-anchor="${anchor}">${short}</text>`;
+                }).join('');
+
+                const linePts = history.map((h, i) => `${x(i).toFixed(1)},${y(h.total_eval_krw).toFixed(1)}`).join(' ');
+                const baseY = y(principal);
+                const areaPts = `${x(0).toFixed(1)},${baseY.toFixed(1)} ${linePts} ${x(n - 1).toFixed(1)},${baseY.toFixed(1)}`;
 
                 return `
-                <svg class="return-chart-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
-                    <line x1="${pad}" y1="${zeroY.toFixed(1)}" x2="${width - pad}" y2="${zeroY.toFixed(1)}" class="chart-zero-line" />
-                    <polyline points="${points}" class="chart-line" style="stroke:${lastColor}" />
-                    <circle cx="${x(n - 1).toFixed(1)}" cy="${y(last.total_return_pct).toFixed(1)}" r="4" fill="${lastColor}" />
+                <svg class="stock-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" id="stockChart">
+                    <defs>
+                        <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stop-color="${rawColor}" stop-opacity="0.28" />
+                            <stop offset="100%" stop-color="${rawColor}" stop-opacity="0.02" />
+                        </linearGradient>
+                    </defs>
+                    ${grid}
+                    <polygon points="${areaPts}" fill="url(#areaGrad)" />
+                    <line class="chart-base-line" x1="${padL}" y1="${baseY.toFixed(1)}" x2="${W - padR}" y2="${baseY.toFixed(1)}" />
+                    <text class="chart-axis-label" x="${W - padR}" y="${(baseY - 5).toFixed(1)}" text-anchor="end">원금</text>
+                    <polyline points="${linePts}" class="chart-line" style="stroke:${color}" />
+                    <circle cx="${x(n - 1).toFixed(1)}" cy="${y(last.total_eval_krw).toFixed(1)}" r="4" fill="${color}" />
+                    <line class="chart-crosshair" id="crosshair" x1="0" y1="${padT}" x2="0" y2="${padT + plotH}" />
+                    <circle class="chart-hover-dot" id="hoverDot" r="4" fill="${color}" stroke="var(--bg)" stroke-width="2" />
+                    ${xLabels}
                 </svg>`;
             }
 
-            function buildHoldingsTable(holdings) {
+            function attachChartHandlers(rawHistory, principal) {
+                const svg = document.getElementById('stockChart');
+                const wrap = document.getElementById('chartWrap');
+                const tip = document.getElementById('chartTooltip');
+                const cross = document.getElementById('crosshair');
+                const dot = document.getElementById('hoverDot');
+
+                document.querySelectorAll('.range-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        rangeMinutes = Number(btn.dataset.range);
+                        renderPortfolio(portfolioState.p, portfolioState.history);
+                    });
+                });
+
+                if (!svg || !wrap || !tip || !cross || !dot) return;
+
+                const history = filterHistory(rawHistory);
+                const n = history.length;
+                if (n === 0) return;
+
+                const W = 760, padL = 70, padR = 14, plotW = W - padL - padR;
+
+                svg.addEventListener('mousemove', ev => {
+                    const rect = svg.getBoundingClientRect();
+                    const relX = (ev.clientX - rect.left) / rect.width * W;
+                    let i = n === 1 ? 0 : Math.round((relX - padL) / plotW * (n - 1));
+                    i = Math.max(0, Math.min(n - 1, i));
+                    const h = history[i];
+
+                    const px = n === 1 ? padL + plotW / 2 : padL + (i / (n - 1)) * plotW;
+                    const pxRatio = px / W;
+                    cross.setAttribute('x1', px);
+                    cross.setAttribute('x2', px);
+                    cross.style.opacity = '0.6';
+
+                    const cy = Number(svg.querySelector('.chart-line').getAttribute('points').split(' ')[i].split(',')[1]);
+                    dot.setAttribute('cx', px);
+                    dot.setAttribute('cy', cy);
+                    dot.style.opacity = '1';
+
+                    const gain = h.total_eval_krw - principal;
+                    const gCls = gain >= 0 ? 'change-up' : 'change-down';
+                    const gSign = gain >= 0 ? '+' : '';
+                    tip.innerHTML = `<div style="color:var(--text-muted)">${h.time || ''}</div>
+                        <div><b>${Math.round(h.total_eval_krw).toLocaleString()}원</b></div>
+                        <div class="${gCls}">${gSign}${Math.round(gain).toLocaleString()}원 (${gSign}${(h.total_return_pct || 0).toFixed(2)}%)</div>`;
+                    tip.style.left = (pxRatio * rect.width) + 'px';
+                    tip.style.top = (cy / 280 * rect.height) + 'px';
+                    tip.style.opacity = '1';
+                });
+
+                svg.addEventListener('mouseleave', () => {
+                    tip.style.opacity = '0';
+                    cross.style.opacity = '0';
+                    dot.style.opacity = '0';
+                });
+            }
+
+            function buildHoldingsTable(holdings, total) {
                 if (!holdings || holdings.length === 0) {
-                    return '<p class="empty-msg">보유 종목 없음.</p>';
+                    return '<p class="empty-msg">보유 종목 없음 — 아직 체결된 주문이 없습니다.</p>';
                 }
 
                 const rows = holdings.map(h => {
                     const pl = h.profit_loss_pct || 0;
                     const plClass = pl > 0 ? 'change-up' : pl < 0 ? 'change-down' : 'change-neutral';
                     const sign = pl > 0 ? '+' : '';
+                    const strategy = h.strategy_name
+                        ? `${h.strategy_name}${h.category ? `<span class="strategy-tag">${h.category}</span>` : ''}`
+                        : '<span style="color:var(--text-muted)">—</span>';
                     return `
                     <tr>
                         <td>${h.ticker}</td>
                         <td>${h.name || ''}</td>
-                        <td>${h.strategy_name || '-'}</td>
+                        <td>${strategy}</td>
                         <td class="num">${h.quantity}</td>
+                        <td class="num">${Math.round(h.avg_price).toLocaleString()}</td>
                         <td class="num">${Math.round(h.current_price).toLocaleString()}</td>
                         <td class="num ${plClass}">${sign}${pl.toFixed(2)}%</td>
                         <td class="num">${(h.weight_pct || 0).toFixed(1)}%</td>
@@ -847,7 +1100,7 @@
                 return `
                 <table class="holdings-table">
                     <thead>
-                        <tr><th>종목</th><th>이름</th><th>전략</th><th>수량</th><th>현재가</th><th>손익률</th><th>비중</th></tr>
+                        <tr><th>종목</th><th>이름</th><th>전략</th><th>수량</th><th>매입가</th><th>현재가</th><th>손익률</th><th>비중</th></tr>
                     </thead>
                     <tbody>${rows}</tbody>
                 </table>`;
