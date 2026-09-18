@@ -1,62 +1,81 @@
-# libyfinance 프로젝트 기획서 (확정 v1.0)
+# libyfinance Project Plan (v1.0, finalized)
 
-> **프로젝트명**: libyfinance  
-> **위치**: `/home/a17637/.hslee/private/libyfinance`  
-> **목적**: 대한민국/미국 주식 시장 퀀트 기반 자동 거래 시스템  
-> **확정일**: 2026-09-13  
+> **Project**: libyfinance
+> **Location**: `/home/hslee/workspace/libyfinance`
+> **Goal**: A quant-driven automated trading system for the Korean and US equity markets
+> **Finalized**: 2026-09-13
+
+> [!NOTE]
+> **Implementation status (updated 2026-09-19).** This document is the original plan as
+> written on 2026-09-13; the phase bodies below are left as authored. What has actually
+> shipped since then:
+> - **Phase 1-B, 1-C, 1-D — done.** Backtests model commission/slippage/stop-loss; 25
+>   indicators; KIS daily data with pagination past the ~100-bar-per-call cap.
+> - **Phase 2 — partially done, but not as designed.** There is no `IBroker` abstraction
+>   yet. Instead `KisTrader` (`include/broker/kis_trader.hpp`) talks to KIS directly for
+>   cash orders and balance inquiry, and `scalp_trade` runs an intraday loop against it.
+>   `OrderManager` / `PositionSizer` / `RiskManager` do not exist; position state is read
+>   back from KIS on every cycle instead of being tracked locally.
+> - **Phase 3 — partially done, but not as designed.** No Go server. The dashboard is
+>   `scripts/dashboard_server.py` (local Python) plus `docs/index.html`, fed by
+>   `portfolio_report`. Telegram alerts and external access (3-D) are still open.
+> - **Phase 1-A (tests), Phase 4, Phase 5 — not started.**
+>
+> Treat the phase bodies as intent, not as a description of the current code. `README.md`
+> describes what exists today.
 
 ---
 
-## 1. 확정된 기술 결정사항
+## 1. Technology decisions
 
-| 항목 | 결정 | 비고 |
+| Item | Decision | Notes |
 |------|------|------|
-| **핵심 엔진 언어** | C++ (유지) | 백테스트, 지표 연산, 전략 로직 등 성능 중요 영역 |
-| **보조 언어** | Python | 데이터 분석, 전략 프로토타이핑, ML/AI, 유틸리티 스크립트 |
-| **서버/웹** | Go | REST API 서버, 대시보드 백엔드, WebSocket 프록시 |
-| **장기 검토** | Rust | 성능 크리티컬 모듈의 점진적 전환 후보 |
-| **국장 브로커** | 한국투자증권 OpenAPI | 국장 + 미장 모두 지원, 모의투자 완벽 지원 |
-| **미장 브로커** | 한국투자증권 (해외주식 API) | 동일 인프라로 미장 커버, 추후 IBKR/Alpaca 확장 가능 |
-| **DB (Phase 1~3)** | SQLite | 로컬 거래 기록, 포트폴리오 상태 저장 |
-| **DB (Phase 5)** | PostgreSQL | 멀티테넌트 전환 시 마이그레이션 |
-| **알림** | Telegram Bot | 개인 사용 최적, 추후 Slack/Discord 확장 |
-| **CI/CD** | GitHub Actions (기존 유지 + 확장) | 테스트 자동화, 대시보드 배포 |
+| **Core engine language** | C++ (keep) | Backtests, indicator math, strategy logic — the performance-sensitive parts |
+| **Secondary language** | Python | Data analysis, strategy prototyping, ML/AI, utility scripts |
+| **Server/web** | Go | REST API server, dashboard backend, WebSocket proxy |
+| **Long-term candidate** | Rust | Possible incremental migration for performance-critical modules |
+| **KR broker** | Korea Investment & Securities (KIS) OpenAPI | Covers both KR and US markets, with full paper-trading support |
+| **US broker** | KIS (overseas stock API) | Same infrastructure covers US; IBKR/Alpaca possible later |
+| **DB (phases 1–3)** | SQLite | Local trade records and portfolio state |
+| **DB (phase 5)** | PostgreSQL | Migration target when going multi-tenant |
+| **Alerts** | Telegram Bot | Best fit for personal use; Slack/Discord later |
+| **CI/CD** | GitHub Actions (keep + extend) | Test automation, dashboard deployment |
 
 ---
 
-## 2. 현재 코드베이스 분석 요약
+## 2. Codebase analysis (as of 2026-09-13)
 
-### 2.1 기존 아키텍처
+### 2.1 Architecture at the time
 ```
 libyfinance/                    # C++17, CMake + Ninja
-├── include/                    # 헤더 파일
-│   ├── yfinance.hpp            # 정적 API 클라이언트 (Yahoo, FRED, CNN F&G)
-│   ├── indicator.hpp           # 기술 지표 (SMA, RSI) - 헤더 온리
-│   ├── stock_info.hpp          # StockInfo 구조체 (OHLCV 시계열)
-│   ├── fng_info.hpp            # FearAndGreedInfo 구조체
-│   ├── fred_info.hpp           # FredSeriesInfo 구조체
-│   ├── macro_scorer.hpp        # 5축 매크로 스코어 + 4국면 판정
-│   ├── strategy/istrategy.hpp  # IStrategy 순수 가상 인터페이스
-│   ├── backtest/backtest_engine.hpp  # 단일종목 백테스트 엔진
-│   └── macro/macro_backtester.hpp    # 포트폴리오 백테스트 엔진
-├── src/                        # 구현체
-│   ├── yfinance.cpp            # libcurl + nlohmann/json API 호출
+├── include/                    # Headers
+│   ├── yfinance.hpp            # Static API client (Yahoo, FRED, CNN F&G)
+│   ├── indicator.hpp           # Technical indicators (SMA, RSI) — header-only
+│   ├── stock_info.hpp          # StockInfo struct (OHLCV time series)
+│   ├── fng_info.hpp            # FearAndGreedInfo struct
+│   ├── fred_info.hpp           # FredSeriesInfo struct
+│   ├── macro_scorer.hpp        # 5-axis macro score + 4-regime classification
+│   ├── strategy/istrategy.hpp  # IStrategy pure virtual interface
+│   ├── backtest/backtest_engine.hpp  # Single-ticker backtest engine
+│   └── macro/macro_backtester.hpp    # Portfolio backtest engine
+├── src/                        # Implementations
+│   ├── yfinance.cpp            # libcurl + nlohmann/json API calls
 │   ├── backtest/backtest_engine.cpp
 │   └── macro/
 │       ├── macro_backtester.cpp
 │       └── macro_scorer.cpp
-├── lib/                        # 전략 구현체
-│   ├── rsi/                    # RSI(14, 30/70) 전략
-│   └── sma_crossover/          # SMA(20/50) 골든/데스크로스 전략
-├── app/                        # CLI 실행 파일 (9개)
-├── config/                     # JSON 설정 (매크로 가중치, 전략 프로파일)
-├── docs/                       # API 문서 + GitHub Pages 대시보드
-└── .github/workflows/          # 일일 매크로 리포트 CI
+├── lib/                        # Strategy implementations
+│   ├── rsi/                    # RSI(14, 30/70) strategy
+│   └── sma_crossover/          # SMA(20/50) golden/death cross strategy
+├── app/                        # CLI executables (9)
+├── config/                     # JSON config (macro weights, strategy profiles)
+├── docs/                       # API docs + GitHub Pages dashboard
+└── .github/workflows/          # Daily macro report CI
 ```
 
-### 2.2 핵심 인터페이스 (현재)
+### 2.2 Core interfaces (at the time)
 
-#### IStrategy (전략 인터페이스)
+#### IStrategy
 ```cpp
 enum class Signal { BUY, SELL, HOLD };
 
@@ -79,19 +98,19 @@ public:
 // BacktestResult: ticker, totalReturnPct, winRate, maxDrawdownPct, sharpeRatio, score(0~100), trades[]
 ```
 
-#### 전략 등록 방식
-- **현재**: 정적 링크 (CMakeLists.txt에 소스 직접 명시)
-- 새 전략 추가 시: `lib/<name>/` 생성 → 루트 & app CMakeLists.txt에 수동 등록
+#### Strategy registration
+- **Then**: static linking (sources listed explicitly in CMakeLists.txt)
+- Adding a strategy: create `lib/<name>/`, then register manually in the root and app CMakeLists.txt
 
 ---
 
-## 3. 목표 디렉토리 구조
+## 3. Target directory layout
 
 ```
 libyfinance/
-├── include/                         # C++ 헤더 (기존 유지 + 확장)
+├── include/                         # C++ headers (existing + extensions)
 │   ├── yfinance.hpp
-│   ├── indicator.hpp                # → 추가 지표 (MACD, BB, ATR 등)
+│   ├── indicator.hpp                # → more indicators (MACD, BB, ATR, ...)
 │   ├── stock_info.hpp
 │   ├── fng_info.hpp
 │   ├── fred_info.hpp
@@ -99,23 +118,23 @@ libyfinance/
 │   ├── strategy/
 │   │   └── istrategy.hpp
 │   ├── backtest/
-│   │   └── backtest_engine.hpp      # → 수수료/슬리피지/포지션사이징 확장
+│   │   └── backtest_engine.hpp      # → commission/slippage/position sizing
 │   ├── macro/
 │   │   └── macro_backtester.hpp
-│   ├── broker/                      # [NEW] 브로커 추상화 계층
-│   │   ├── ibroker.hpp              # 브로커 인터페이스
-│   │   ├── kis_broker.hpp           # 한투 OpenAPI 구현체
-│   │   └── paper_broker.hpp         # Paper Trading 구현체
-│   ├── order/                       # [NEW] 주문 관리
-│   │   ├── order_manager.hpp        # 주문 생성/추적/체결확인
-│   │   ├── position_sizer.hpp       # 포지션 사이징 (Kelly, 고정비율 등)
-│   │   └── risk_manager.hpp         # 리스크 관리 (손절, MDD 제한)
-│   └── data/                        # [NEW] 데이터 추상화
-│       ├── idata_provider.hpp       # 데이터 소스 인터페이스
-│       ├── yahoo_provider.hpp       # 야후 파이낸스 (기존 yfinance 리팩토링)
-│       └── kis_provider.hpp         # 한투 시세 데이터
+│   ├── broker/                      # [NEW] Broker abstraction layer
+│   │   ├── ibroker.hpp              # Broker interface
+│   │   ├── kis_broker.hpp           # KIS OpenAPI implementation
+│   │   └── paper_broker.hpp         # Paper trading implementation
+│   ├── order/                       # [NEW] Order management
+│   │   ├── order_manager.hpp        # Order creation / tracking / fill confirmation
+│   │   ├── position_sizer.hpp       # Position sizing (Kelly, fixed fraction, ...)
+│   │   └── risk_manager.hpp         # Risk controls (stop-loss, MDD limits)
+│   └── data/                        # [NEW] Data abstraction
+│       ├── idata_provider.hpp       # Data source interface
+│       ├── yahoo_provider.hpp       # Yahoo Finance (refactor of existing yfinance)
+│       └── kis_provider.hpp         # KIS market data
 │
-├── src/                             # C++ 구현체 (기존 유지 + 확장)
+├── src/                             # C++ implementations (existing + extensions)
 │   ├── yfinance.cpp
 │   ├── backtest/
 │   ├── macro/
@@ -129,7 +148,7 @@ libyfinance/
 │   └── data/                        # [NEW]
 │       └── kis_provider.cpp
 │
-├── lib/                             # 전략 구현체 (기존 유지 + 확장)
+├── lib/                             # Strategy implementations (existing + extensions)
 │   ├── rsi/
 │   ├── sma_crossover/
 │   ├── macd/                        # [NEW]
@@ -137,128 +156,128 @@ libyfinance/
 │   ├── momentum/                    # [NEW]
 │   └── mean_reversion/              # [NEW]
 │
-├── app/                             # CLI 실행 파일 (기존 유지 + 확장)
-│   ├── (기존 9개 유지)
-│   ├── trader.cpp                   # [NEW] 자동매매 데몬
-│   └── paper_trader.cpp             # [NEW] 모의투자 데몬
+├── app/                             # CLI executables (existing + extensions)
+│   ├── (existing 9 kept)
+│   ├── trader.cpp                   # [NEW] Live trading daemon
+│   └── paper_trader.cpp             # [NEW] Paper trading daemon
 │
-├── python/                          # [NEW] Python 보조 모듈
+├── python/                          # [NEW] Python support modules
 │   ├── pyproject.toml
 │   ├── libyfinance/
 │   │   ├── __init__.py
-│   │   ├── analysis/                # 데이터 분석, 시각화
+│   │   ├── analysis/                # Data analysis, visualization
 │   │   │   ├── portfolio_analyzer.py
 │   │   │   └── report_generator.py
-│   │   ├── ml/                      # ML/AI 전략 (Phase 4)
-│   │   │   ├── param_optimizer.py   # Bayesian Optimization
-│   │   │   ├── regime_classifier.py # ML 국면 분류
-│   │   │   └── strategy_selector.py # 적응형 전략 선택
+│   │   ├── ml/                      # ML/AI strategies (Phase 4)
+│   │   │   ├── param_optimizer.py   # Bayesian optimization
+│   │   │   ├── regime_classifier.py # ML regime classification
+│   │   │   └── strategy_selector.py # Adaptive strategy selection
 │   │   └── utils/
-│   │       ├── telegram_bot.py      # 알림 봇
-│   │       └── db.py                # SQLite 유틸리티
+│   │       ├── telegram_bot.py      # Alert bot
+│   │       └── db.py                # SQLite utilities
 │   └── tests/
 │
-├── server/                          # [NEW] Go 웹 서버 (Phase 3)
+├── server/                          # [NEW] Go web server (Phase 3)
 │   ├── go.mod
 │   ├── cmd/
-│   │   └── dashboard/main.go        # 대시보드 서버 엔트리
+│   │   └── dashboard/main.go        # Dashboard server entry point
 │   ├── internal/
-│   │   ├── api/                     # REST API 핸들러
+│   │   ├── api/                     # REST API handlers
 │   │   │   ├── portfolio.go
 │   │   │   ├── trades.go
 │   │   │   └── strategies.go
-│   │   ├── ws/                      # WebSocket (실시간 데이터 중계)
+│   │   ├── ws/                      # WebSocket (real-time relay)
 │   │   │   └── hub.go
 │   │   └── middleware/
-│   │       └── auth.go              # (Phase 5) 인증
-│   ├── web/                         # 프론트엔드 정적 파일
+│   │       └── auth.go              # (Phase 5) authentication
+│   ├── web/                         # Frontend static files
 │   │   └── (HTML/CSS/JS)
 │   └── templates/
 │
-├── config/                          # 설정 (기존 유지 + 확장)
+├── config/                          # Config (existing + extensions)
 │   ├── macro_allocation.json
 │   ├── macro_sweep.json
-│   ├── strategies/                  # 매크로 전략 프로파일
+│   ├── strategies/                  # Macro strategy profiles
 │   │   ├── aggressive.json
 │   │   ├── balanced.json
 │   │   └── defensive.json
-│   ├── broker/                      # [NEW] 브로커 설정
-│   │   ├── kis_real.json            # 실전 투자 설정
-│   │   └── kis_paper.json           # 모의 투자 설정
-│   ├── trading/                     # [NEW] 거래 설정
-│   │   ├── risk_limits.json         # 리스크 한도
-│   │   └── schedule.json            # 거래 스케줄
-│   └── alerts/                      # [NEW] 알림 설정
+│   ├── broker/                      # [NEW] Broker config
+│   │   ├── kis_real.json            # Live trading settings
+│   │   └── kis_paper.json           # Paper trading settings
+│   ├── trading/                     # [NEW] Trading config
+│   │   ├── risk_limits.json         # Risk limits
+│   │   └── schedule.json            # Trading schedule
+│   └── alerts/                      # [NEW] Alert config
 │       └── telegram.json
 │
-├── tests/                           # [NEW] C++ 테스트
+├── tests/                           # [NEW] C++ tests
 │   ├── CMakeLists.txt
 │   ├── test_indicator.cpp
 │   ├── test_backtest_engine.cpp
 │   ├── test_strategies.cpp
 │   ├── test_macro_scorer.cpp
 │   └── mock/
-│       └── mock_data.hpp            # 테스트용 mock JSON
+│       └── mock_data.hpp            # Mock JSON for tests
 │
-├── data/                            # [NEW] 로컬 데이터 저장소
-│   ├── trades.db                    # SQLite (거래 기록)
-│   └── cache/                       # API 응답 캐시
+├── data/                            # [NEW] Local data store
+│   ├── trades.db                    # SQLite (trade records)
+│   └── cache/                       # API response cache
 │
-├── docs/                            # (기존 유지 + 확장)
-├── .github/workflows/               # (기존 유지 + 확장)
+├── docs/                            # (existing + extensions)
+├── .github/workflows/               # (existing + extensions)
 ├── CMakeLists.txt
 ├── Dockerfile
 ├── docker.sh
 ├── make.sh
-└── .env.example                     # [NEW] 환경변수 템플릿
+└── .env.example                     # [NEW] Environment variable template
 ```
 
 ---
 
-## 4. 시스템 아키텍처
+## 4. System architecture
 
 ```mermaid
 flowchart TD
-    subgraph DataLayer["데이터 수집 계층 (C++)"]
-        YF["Yahoo Finance\n주가 OHLCV\n(기존 yfinance.cpp)"]
-        KIS_DATA["한투 OpenAPI\n국장/미장 시세\n(kis_provider.cpp)"]
-        FRED["FRED API\n거시경제 12개 지표\n(기존 yfinance.cpp)"]
-        FNG["CNN F&G\n심리 지표\n(기존 yfinance.cpp)"]
+    subgraph DataLayer["Data collection (C++)"]
+        YF["Yahoo Finance\nOHLCV prices\n(existing yfinance.cpp)"]
+        KIS_DATA["KIS OpenAPI\nKR/US quotes\n(kis_provider.cpp)"]
+        FRED["FRED API\n12 macro series\n(existing yfinance.cpp)"]
+        FNG["CNN F&G\nsentiment index\n(existing yfinance.cpp)"]
     end
 
-    subgraph CoreEngine["핵심 엔진 (C++)"]
-        IND["기술 지표 엔진\nSMA, RSI, MACD,\nBB, ATR, VWAP"]
-        MACRO["매크로 스코어러\n5축 점수 + 4국면 판정"]
-        BT["백테스트 엔진\n수수료/슬리피지 반영\n포지션 사이징"]
-        STR["전략 라이브러리\nIStrategy 구현체들"]
+    subgraph CoreEngine["Core engine (C++)"]
+        IND["Indicator engine\nSMA, RSI, MACD,\nBB, ATR, VWAP"]
+        MACRO["Macro scorer\n5-axis score + 4 regimes"]
+        BT["Backtest engine\ncommission/slippage\nposition sizing"]
+        STR["Strategy library\nIStrategy implementations"]
     end
 
-    subgraph Execution["주문 실행 계층 (C++)"]
-        OM["주문 매니저\nOrderManager"]
-        PS["포지션 사이저\nPositionSizer"]
-        RM["리스크 매니저\nRiskManager"]
-        subgraph Brokers["브로커 구현체"]
-            KIS_B["KisBroker\n한투 REST/WS"]
-            PAPER["PaperBroker\n모의투자"]
+    subgraph Execution["Order execution (C++)"]
+        OM["OrderManager"]
+        PS["PositionSizer"]
+        RM["RiskManager"]
+        subgraph Brokers["Broker implementations"]
+            KIS_B["KisBroker\nKIS REST/WS"]
+            PAPER["PaperBroker\npaper trading"]
         end
     end
 
-    subgraph AI_Layer["AI/분석 계층 (Python)"]
-        OPT["파라미터 최적화\nBayesian Opt"]
-        RC["국면 분류 ML"]
-        SS["전략 셀렉터"]
-        RPT["리포트 생성"]
+    subgraph AI_Layer["AI/analysis (Python)"]
+        OPT["Parameter optimization\nBayesian opt"]
+        RC["ML regime classifier"]
+        SS["Strategy selector"]
+        RPT["Report generation"]
     end
 
-    subgraph Server["웹 서버 (Go)"]
-        API["REST API\n포트폴리오/거래/전략"]
-        WS["WebSocket Hub\n실시간 데이터 중계"]
-        WEB["대시보드 프론트엔드\nHTML/CSS/JS"]
+    subgraph Server["Web server (Go)"]
+        API["REST API\nportfolio/trades/strategies"]
+        WS["WebSocket hub\nreal-time relay"]
+        WEB["Dashboard frontend\nHTML/CSS/JS"]
     end
 
-    subgraph Infra["인프라"]
-        DB["SQLite\n거래 기록/상태"]
-        TG["Telegram Bot\n알림"]
+    subgraph Infra["Infrastructure"]
+        DB["SQLite\ntrade records/state"]
+        TG["Telegram Bot\nalerts"]
         CI["GitHub Actions\nCI/CD"]
     end
 
@@ -274,31 +293,32 @@ flowchart TD
 
 ---
 
-## 5. Phase별 구체적 구현 계획
+## 5. Phase-by-phase implementation plan
 
 ---
 
-### Phase 1: 기반 강화
+### Phase 1: Foundations
 
 > [!IMPORTANT]
-> 실거래 전 필수 선행 작업. 기존 코드의 안정성과 현실성을 확보하는 단계.
+> Required before any live trading. This phase secures the stability and realism of the
+> existing code.
 
-#### 1-A. 테스트 프레임워크 도입
+#### 1-A. Test framework
 
-**목표**: GTest 기반 단위 테스트 환경 구축, 기존 핵심 로직 테스트 커버리지 확보
+**Goal**: Stand up GTest-based unit testing and get coverage over the existing core logic.
 
-| 태스크 | 파일 | 설명 |
+| Task | File | Description |
 |--------|------|------|
-| GTest 의존성 추가 | `CMakeLists.txt` | `FetchContent`로 googletest 다운로드 + 빌드 |
-| 테스트 빌드 설정 | `tests/CMakeLists.txt` | 테스트 타깃 정의, CTest 연동 |
-| 지표 테스트 | `tests/test_indicator.cpp` | SMA/RSI 연산을 수작업 계산 결과와 비교 검증 |
-| 백테스트 엔진 테스트 | `tests/test_backtest_engine.cpp` | 알려진 시나리오(상승장, 하락장, 횡보장)에서 기대 결과 검증 |
-| 전략 테스트 | `tests/test_strategies.cpp` | SMA Crossover, RSI 전략의 시그널 정확성 검증 |
-| 매크로 스코어 테스트 | `tests/test_macro_scorer.cpp` | 특정 입력에 대한 국면 판정 결과 검증 |
-| Mock 데이터 | `tests/mock/mock_data.hpp` | 테스트용 StockInfo, FredSeriesInfo JSON 생성 유틸리티 |
-| CI 테스트 워크플로우 | `.github/workflows/test.yml` | PR마다 `make.sh` + `ctest` 자동 실행 |
+| Add GTest dependency | `CMakeLists.txt` | Fetch and build googletest via `FetchContent` |
+| Test build setup | `tests/CMakeLists.txt` | Define the test target, wire up CTest |
+| Indicator tests | `tests/test_indicator.cpp` | Verify SMA/RSI against hand-computed values |
+| Backtest engine tests | `tests/test_backtest_engine.cpp` | Verify expected results on known scenarios (bull, bear, sideways) |
+| Strategy tests | `tests/test_strategies.cpp` | Verify signal correctness for SMA crossover and RSI |
+| Macro scorer tests | `tests/test_macro_scorer.cpp` | Verify regime classification for given inputs |
+| Mock data | `tests/mock/mock_data.hpp` | Helpers that build StockInfo / FredSeriesInfo JSON for tests |
+| CI test workflow | `.github/workflows/test.yml` | Run `make.sh` + `ctest` on every PR |
 
-**구현 세부사항**:
+**Implementation sketch**:
 ```cmake
 # tests/CMakeLists.txt
 include(FetchContent)
@@ -325,61 +345,61 @@ include(GoogleTest)
 gtest_discover_tests(libyfinance_tests)
 ```
 
-#### 1-B. 백테스트 현실성 향상
+#### 1-B. More realistic backtests
 
-**목표**: 거래 비용, 포지션 사이징을 반영하여 백테스트 결과의 신뢰성 향상
+**Goal**: Model trading costs and position sizing so backtest results can be trusted.
 
-| 태스크 | 변경 대상 | 설명 |
+| Task | Target | Description |
 |--------|-----------|------|
-| `BacktestConfig` 구조체 추가 | `include/backtest/backtest_engine.hpp` | 수수료율, 슬리피지, 세금률, 포지션사이징 방식 설정 |
-| `run()` 시그니처 확장 | `backtest_engine.hpp/cpp` | `run(strategy, data, config)` 오버로드 추가 |
-| 수수료 차감 로직 | `backtest_engine.cpp` | 매수/매도 시 `price *= (1 ± commission + slippage)` |
-| 부분 매매 지원 | `backtest_engine.cpp` | 전액이 아닌 비율/수량 기반 매매 |
-| 세금 반영 | `backtest_engine.cpp` | 매도 수익에 대한 양도세 차감 (설정 가능) |
-| `Trade` 구조체 확장 | `backtest_engine.hpp` | `commission`, `slippage`, `tax` 필드 추가 |
+| Add `BacktestConfig` struct | `include/backtest/backtest_engine.hpp` | Commission rate, slippage, tax rate, position sizing |
+| Extend `run()` signature | `backtest_engine.hpp/cpp` | Add a `run(strategy, data, config)` overload |
+| Commission handling | `backtest_engine.cpp` | On entry/exit, `price *= (1 ± commission + slippage)` |
+| Partial position support | `backtest_engine.cpp` | Trade a fraction/quantity rather than the full account |
+| Tax handling | `backtest_engine.cpp` | Deduct capital gains tax on sells (configurable) |
+| Extend `Trade` struct | `backtest_engine.hpp` | Add `commission`, `slippage`, `tax` fields |
 
-**인터페이스 설계**:
+**Interface design**:
 ```cpp
 struct BacktestConfig {
-    double commissionRate = 0.00015;  // 수수료율 (0.015%, 한투 기준)
-    double slippagePct    = 0.001;    // 슬리피지 (0.1%)
-    double taxRate        = 0.0;      // 양도세율 (국장 대주주 외 0%, 미장 22%)
-    double positionPct    = 1.0;      // 포지션 비율 (1.0 = 전액, 0.5 = 50%)
-    bool   reinvestDividends = false; // 배당 재투자 여부
+    double commissionRate = 0.00015;  // commission (0.015%, KIS rate)
+    double slippagePct    = 0.001;    // slippage (0.1%)
+    double taxRate        = 0.0;      // capital gains tax (0% KR retail, 22% US)
+    double positionPct    = 1.0;      // position fraction (1.0 = all-in, 0.5 = half)
+    bool   reinvestDividends = false; // reinvest dividends
 };
 ```
 
-#### 1-C. 추가 기술 지표
+#### 1-C. Additional technical indicators
 
-**목표**: `include/indicator.hpp`에 실전에서 자주 사용하는 지표 추가
+**Goal**: Add commonly used indicators to `include/indicator.hpp`.
 
-| 지표 | 함수 시그니처 | 설명 |
+| Indicator | Signature | Purpose |
 |------|--------------|------|
-| MACD | `macd(closes, fast, slow, signal)` → `{macd_line, signal_line, histogram}` | 추세 전환 포착 |
-| 볼린저 밴드 | `bollinger(closes, period, stddev)` → `{upper, middle, lower}` | 변동성 밴드 |
-| ATR | `atr(high, low, close, period)` → `vector<double>` | 변동성 측정, 손절폭 결정에 활용 |
-| VWAP | `vwap(high, low, close, volume)` → `vector<double>` | 기관 매매 기준가 |
-| 스토캐스틱 | `stochastic(high, low, close, k, d)` → `{k_line, d_line}` | 과매수/과매도 판단 |
+| MACD | `macd(closes, fast, slow, signal)` → `{macd_line, signal_line, histogram}` | Catch trend reversals |
+| Bollinger Bands | `bollinger(closes, period, stddev)` → `{upper, middle, lower}` | Volatility bands |
+| ATR | `atr(high, low, close, period)` → `vector<double>` | Volatility, used to size stops |
+| VWAP | `vwap(high, low, close, volume)` → `vector<double>` | Institutional reference price |
+| Stochastic | `stochastic(high, low, close, k, d)` → `{k_line, d_line}` | Overbought/oversold |
 
-#### 1-D. 한국 시장 데이터 수집
+#### 1-D. Korean market data
 
-**목표**: 한투 OpenAPI를 통해 국장 시세 데이터를 기존 `StockInfo`와 동일 포맷으로 수집
+**Goal**: Pull KRX market data through the KIS OpenAPI into the same `StockInfo` shape.
 
-| 태스크 | 파일 | 설명 |
+| Task | File | Description |
 |--------|------|------|
-| 데이터 소스 인터페이스 | `include/data/idata_provider.hpp` | `getStockInfo()` 가상 인터페이스 |
-| 야후 프로바이더 | `include/data/yahoo_provider.hpp` | 기존 `yFinance::getStockInfo` 래핑 |
-| 한투 프로바이더 | `include/data/kis_provider.hpp` + `src/data/kis_provider.cpp` | KIS REST API로 일봉/주봉 OHLCV 조회 |
-| 한투 인증 모듈 | `src/broker/kis_auth.cpp` | OAuth2 토큰 발급 + 24시간 캐싱 |
-| 환경변수 템플릿 | `.env.example` | `KIS_APP_KEY`, `KIS_APP_SECRET`, `KIS_ACCOUNT_NO` 등 |
+| Data source interface | `include/data/idata_provider.hpp` | Virtual `getStockInfo()` interface |
+| Yahoo provider | `include/data/yahoo_provider.hpp` | Wrap the existing `yFinance::getStockInfo` |
+| KIS provider | `include/data/kis_provider.hpp` + `src/data/kis_provider.cpp` | Daily/weekly OHLCV via the KIS REST API |
+| KIS auth module | `src/broker/kis_auth.cpp` | OAuth2 token issuance + 24h caching |
+| Env template | `.env.example` | `KIS_APP_KEY`, `KIS_APP_SECRET`, `KIS_ACCOUNT_NO`, ... |
 
-**IDataProvider 인터페이스 설계**:
+**IDataProvider design**:
 ```cpp
 struct IDataProvider {
     virtual ~IDataProvider() = default;
     [[nodiscard]] virtual std::string name() const = 0;
 
-    // 종목 시세 조회 (StockInfo 형식으로 통일)
+    // Quote lookup, normalized to StockInfo
     [[nodiscard]] virtual std::shared_ptr<StockInfo>
     getStockInfo(std::string_view ticker,
                  std::string_view startDate,
@@ -388,56 +408,63 @@ struct IDataProvider {
 };
 ```
 
-**한투 OpenAPI 연동 핵심 정보**:
+**KIS OpenAPI essentials**:
 ```
-# 엔드포인트
-실전: https://openapi.koreainvestment.com:9443
-모의: https://openapivts.koreainvestment.com:29443
+# Endpoints
+live:  https://openapi.koreainvestment.com:9443
+paper: https://openapivts.koreainvestment.com:29443
 
-# 인증
+# Authentication
 POST /oauth2/tokenP
 Body: {"grant_type":"client_credentials", "appkey":"...", "appsecret":"..."}
-→ access_token (24시간 유효, 1일 1회 발급 권장)
+→ access_token (valid 24h; issue at most once per day)
 
-# 공통 헤더
+# Common headers
 authorization: Bearer {token}
 appkey: {AppKey}
 appsecret: {AppSecret}
-tr_id: {거래고유ID}
+tr_id: {transaction id}
 custtype: P
 
-# Rate Limit
-실전: 20 TPS / 모의: 5 TPS
-→ Token Bucket 또는 최소 50ms(실전)/200ms(모의) 간격 필수
+# Rate limit
+live: 20 TPS / paper: 5 TPS
+→ Token bucket, or a minimum 50ms (live) / 200ms (paper) gap between calls
 ```
+
+> [!NOTE]
+> Observed in practice (2026-09): the paper endpoint throttles harder than "5 TPS" suggests —
+> sequential calls spaced ~600ms apart still returned `EGW00201` ("초당 거래건수를 초과하였습니다" — per-second call limit exceeded).
+> `KisProvider` handles this by detecting `msg_cd == EGW00201` and retrying with backoff rather
+> than treating the throttled response as "no more data".
 
 ---
 
-### Phase 2: 실거래 연동
+### Phase 2: Live trading integration
 
 > [!CAUTION]
-> 실제 자금이 관여됩니다. 반드시 Paper Trading(모의투자)으로 최소 3개월 검증 후 실전 전환하세요.
+> Real money is involved. Validate with paper trading for at least 3 months before switching
+> to live.
 
-#### 2-A. 브로커 추상화 계층
+#### 2-A. Broker abstraction layer
 
-**목표**: 모의/실전 투자를 동일 인터페이스로 처리하는 브로커 계층 구축
+**Goal**: Handle paper and live trading through one interface.
 
-**IBroker 인터페이스 설계**:
+**IBroker design**:
 ```cpp
 // include/broker/ibroker.hpp
 
 enum class OrderSide { BUY, SELL };
 enum class OrderType { MARKET, LIMIT };
 enum class OrderStatus { PENDING, FILLED, PARTIAL, CANCELLED, REJECTED };
-enum class Market { KR, US };  // 국장/미장
+enum class Market { KR, US };
 
 struct OrderRequest {
     Market      market;
-    std::string ticker;          // "005930" (삼성전자) 또는 "AAPL"
+    std::string ticker;          // "005930" (Samsung Electronics) or "AAPL"
     OrderSide   side;
     OrderType   type;
     int         quantity;
-    double      limitPrice = 0;  // LIMIT 주문 시 지정가
+    double      limitPrice = 0;  // limit price for LIMIT orders
 };
 
 struct OrderResult {
@@ -454,71 +481,82 @@ struct Position {
     std::string ticker;
     Market      market;
     int         quantity;
-    double      avgPrice;       // 평균 매수가
-    double      currentPrice;   // 현재가
-    double      pnl;            // 평가손익
-    double      pnlPct;         // 수익률 (%)
+    double      avgPrice;       // average entry price
+    double      currentPrice;
+    double      pnl;            // unrealized P&L
+    double      pnlPct;         // return (%)
 };
 
 struct AccountBalance {
-    double      totalAsset;     // 총 자산
-    double      cashBalance;    // 예수금
-    double      stockValue;     // 주식 평가액
+    double      totalAsset;     // total account value
+    double      cashBalance;    // cash
+    double      stockValue;     // securities value
     std::vector<Position> positions;
 };
 
 struct IBroker {
     virtual ~IBroker() = default;
     [[nodiscard]] virtual std::string name() const = 0;
-    [[nodiscard]] virtual bool isLive() const = 0;  // 실전 vs 모의
+    [[nodiscard]] virtual bool isLive() const = 0;  // live vs paper
 
-    // 주문
+    // Orders
     [[nodiscard]] virtual OrderResult submitOrder(const OrderRequest& req) = 0;
     [[nodiscard]] virtual OrderResult cancelOrder(const std::string& orderId) = 0;
     [[nodiscard]] virtual OrderResult getOrderStatus(const std::string& orderId) = 0;
 
-    // 잔고
+    // Balance
     [[nodiscard]] virtual AccountBalance getBalance() = 0;
     [[nodiscard]] virtual std::vector<Position> getPositions() = 0;
 };
 ```
 
-| 구현체 | 파일 | 설명 |
+| Implementation | File | Description |
 |--------|------|------|
-| `KisBroker` | `src/broker/kis_broker.cpp` | 한투 REST API 호출. 국장/미장 TR_ID 자동 분기 |
-| `PaperBroker` | `src/broker/paper_broker.cpp` | 한투 모의투자 API (`openapivts`, `V` 접두 TR_ID) |
+| `KisBroker` | `src/broker/kis_broker.cpp` | KIS REST calls; picks the KR/US TR_ID automatically |
+| `PaperBroker` | `src/broker/paper_broker.cpp` | KIS paper API (`openapivts`, `V`-prefixed TR_IDs) |
 
-**한투 API TR_ID 매핑**:
+**KIS TR_ID mapping**:
 ```
-                  실전           모의
-국장 매수      TTTC0802U     VTTC0802U
-국장 매도      TTTC0801U     VTTC0801U
-국장 정정/취소  TTTC0803U     VTTC0803U
-국장 잔고      TTTC8434R     VTTC8434R
-미장 매수      TTTT1002U     VTTT1002U
-미장 매도      TTTT1006U     VTTT1001U
-미장 잔고      TTTS3012R     VTTS3012R
-현재가(국장)   FHKST01010100  (동일)
-현재가(미장)   HHDFS00000300  (동일)
+                      live           paper
+KR buy             TTTC0802U      VTTC0802U
+KR sell            TTTC0801U      VTTC0801U
+KR modify/cancel   TTTC0803U      VTTC0803U
+KR balance         TTTC8434R      VTTC8434R
+US buy             TTTT1002U      VTTT1002U
+US sell            TTTT1006U      VTTT1001U
+US balance         TTTS3012R      VTTS3012R
+KR quote           FHKST01010100  (same)
+US quote           HHDFS00000300  (same)
 ```
 
-#### 2-B. 주문 관리 시스템
+> [!WARNING]
+> The KR buy/sell TR_IDs above are **outdated**. Verified against the official
+> `koreainvestment/open-trading-api` reference on 2026-09-17, the cash-order endpoint
+> (`/uapi/domestic-stock/v1/trading/order-cash`) now uses:
+> - live: sell `TTTC0011U`, buy `TTTC0012U`
+> - paper: sell `VTTC0011U`, buy `VTTC0012U`
+>
+> It also requires `EXCG_ID_DVSN_CD` (`KRX` / `NXT` / `SOR`), which the table above predates.
+> `KisTrader` uses the verified values. The balance TR_IDs (`TTTC8434R` / `VTTC8434R`) are
+> still correct. Always check the official repo before trusting a TR_ID from memory.
 
-| 모듈 | 파일 | 역할 |
+#### 2-B. Order management
+
+| Module | File | Role |
 |------|------|------|
-| `OrderManager` | `include/order/order_manager.hpp` | 전략 시그널 → 주문 변환, 체결 확인, 상태 추적 |
-| `PositionSizer` | `include/order/position_sizer.hpp` | 포지션 크기 결정 (고정비율, Kelly, 변동성 기반) |
-| `RiskManager` | `include/order/risk_manager.hpp` | 리스크 한도 검증 후 주문 승인/거부 |
+| `OrderManager` | `include/order/order_manager.hpp` | Strategy signal → order, fill confirmation, status tracking |
+| `PositionSizer` | `include/order/position_sizer.hpp` | Position size (fixed fraction, Kelly, volatility-targeted) |
+| `RiskManager` | `include/order/risk_manager.hpp` | Approve/reject orders against risk limits |
 
-**PositionSizer 인터페이스**:
+**PositionSizer interface**:
 ```cpp
 enum class SizingMethod { FIXED_PCT, KELLY, VOLATILITY_TARGET };
 
 struct PositionSizer {
     SizingMethod method = SizingMethod::FIXED_PCT;
-    double fixedPct     = 0.1;    // 전체 자산의 10%
-    double kellyFraction = 0.5;   // Half-Kelly
-    double volTarget     = 0.15;  // 연간 변동성 15% 목표
+    double fixedPct     = 0.1;    // 10% of total account
+    double kellyFraction = 0.5;   // half-Kelly
+    double volTarget     = 0.15;  // 15% annualized volatility target
 
     [[nodiscard]] int calculate(double cashBalance, double price,
                                 double winRate = 0, double avgWin = 0,
@@ -526,7 +564,7 @@ struct PositionSizer {
 };
 ```
 
-**RiskManager 설정** (`config/trading/risk_limits.json`):
+**RiskManager config** (`config/trading/risk_limits.json`):
 ```json
 {
     "max_daily_loss_pct": 3.0,
@@ -541,244 +579,261 @@ struct PositionSizer {
 }
 ```
 
-#### 2-C. 자동매매 데몬
+#### 2-C. Automated trading daemon
 
-| 파일 | 설명 |
+| File | Description |
 |------|------|
-| `app/trader.cpp` | 메인 트레이딩 루프. 설정 로드 → 데이터 수집 → 전략 실행 → 주문 → 대기 반복 |
-| `app/paper_trader.cpp` | `trader.cpp`와 동일 로직, `PaperBroker` 사용 |
-| `config/trading/schedule.json` | 실행 스케줄 (장 시작 전 데이터 수집, 장중 시그널 체크 주기 등) |
+| `app/trader.cpp` | Main trading loop: load config → collect data → run strategies → place orders → sleep, repeat |
+| `app/paper_trader.cpp` | Same logic as `trader.cpp`, backed by `PaperBroker` |
+| `config/trading/schedule.json` | Schedule (pre-market data collection, intraday signal-check interval, ...) |
 
-**Trading Loop 의사코드**:
+**Trading loop pseudocode**:
 ```
-1. 설정 로드 (broker, strategy, risk_limits, schedule)
-2. 브로커 초기화 (KisBroker 또는 PaperBroker)
+1. Load config (broker, strategy, risk_limits, schedule)
+2. Initialize broker (KisBroker or PaperBroker)
 3. LOOP:
-   a. 현재 시각 체크 → 거래 시간 외면 sleep
-   b. 시세 데이터 수집 (KIS 또는 Yahoo)
-   c. 보유 포지션 조회
-   d. 각 감시 종목에 대해:
+   a. Check the clock → sleep if outside trading hours
+   b. Collect market data (KIS or Yahoo)
+   c. Fetch current positions
+   d. For each watched ticker:
       - strategy.init(data) + strategy.evaluate(data, latest)
-      - signal == BUY → PositionSizer.calculate() → RiskManager.check()
+      - signal == BUY  → PositionSizer.calculate() → RiskManager.check()
                        → OrderManager.submit()
-      - signal == SELL → OrderManager.submit(전량 매도)
-   e. 체결 결과 확인 및 DB 기록
-   f. 알림 발송 (Telegram)
-   g. 다음 체크 시각까지 sleep
+      - signal == SELL → OrderManager.submit(close full position)
+   e. Confirm fills and record to the DB
+   f. Send alerts (Telegram)
+   g. Sleep until the next check
 ```
+
+> [!NOTE]
+> What actually shipped for this sub-phase is `app/scalp_trade.cpp`: the same loop shape
+> (market-hours gate → data → signal → order), but intraday minute bars, KRX only, no
+> `OrderManager`/`RiskManager`/`PositionSizer` layer, and holdings re-read from KIS each
+> cycle instead of being tracked locally. Dry-run is the default; `--live` is opt-in.
 
 ---
 
-### Phase 3: 대시보드 & 알림
+### Phase 3: Dashboard & alerts
 
-#### 3-A. Go 웹 서버
+#### 3-A. Go web server
 
-**목표**: 포트폴리오, 거래 내역, 전략 성과를 실시간으로 볼 수 있는 웹 대시보드
+**Goal**: A web dashboard showing portfolio, trade history and strategy performance in real time.
 
-| 모듈 | 파일 | 설명 |
+| Module | File | Description |
 |------|------|------|
-| 서버 엔트리 | `server/cmd/dashboard/main.go` | HTTP 서버 + 정적 파일 서빙 |
-| 포트폴리오 API | `server/internal/api/portfolio.go` | `GET /api/portfolio` - 잔고, 보유종목, PnL |
-| 거래 내역 API | `server/internal/api/trades.go` | `GET /api/trades` - 체결 내역 조회 (필터/페이징) |
-| 전략 API | `server/internal/api/strategies.go` | `GET /api/strategies` - 전략별 성과 |
-| 매크로 API | `server/internal/api/macro.go` | 기존 `docs/data.json` 연동 |
-| WebSocket | `server/internal/ws/hub.go` | 실시간 시세/체결 푸시 |
+| Server entry | `server/cmd/dashboard/main.go` | HTTP server + static file serving |
+| Portfolio API | `server/internal/api/portfolio.go` | `GET /api/portfolio` — balance, holdings, PnL |
+| Trades API | `server/internal/api/trades.go` | `GET /api/trades` — fill history (filter/paging) |
+| Strategies API | `server/internal/api/strategies.go` | `GET /api/strategies` — per-strategy performance |
+| Macro API | `server/internal/api/macro.go` | Wire up the existing `docs/data.json` |
+| WebSocket | `server/internal/ws/hub.go` | Push real-time quotes/fills |
 
-**REST API 설계**:
+**REST API design**:
 ```
-GET  /api/portfolio              → AccountBalance (잔고 + 보유종목)
-GET  /api/portfolio/history      → 일별 총자산 추이
-GET  /api/trades?from=&to=&ticker= → 거래 내역 (필터링)
-GET  /api/trades/summary         → 일별/월별 손익 요약
-GET  /api/strategies             → 활성 전략 목록 및 성과
-GET  /api/macro                  → 현재 매크로 국면/점수
-WS   /ws/realtime                → 실시간 시세 스트림
+GET  /api/portfolio              → AccountBalance (cash + holdings)
+GET  /api/portfolio/history      → daily total-asset history
+GET  /api/trades?from=&to=&ticker= → trade history (filtered)
+GET  /api/trades/summary         → daily/monthly P&L summary
+GET  /api/strategies             → active strategies and their performance
+GET  /api/macro                  → current macro regime/scores
+WS   /ws/realtime                → real-time quote stream
 ```
 
-**데이터 소스**: Go 서버는 SQLite DB (`data/trades.db`)를 읽고, C++ 트레이딩 데몬이 DB에 기록하는 구조.
+**Data source**: the Go server reads a SQLite DB (`data/trades.db`) that the C++ trading daemon writes to.
 
 ```
 [C++ trader] --write--> [SQLite DB] <--read-- [Go server] --serve--> [Browser]
 ```
 
-#### 3-B. 프론트엔드
+#### 3-B. Frontend
 
-**기존 `docs/index.html`** (매크로 대시보드)를 확장하거나, 별도의 SPA 구축.
+Either extend the existing `docs/index.html` (macro dashboard) or build a separate SPA.
 
-| 페이지 | 내용 |
+| Page | Contents |
 |--------|------|
-| **Overview** | 총 자산, 일일 PnL, 자산 배분 차트, 매크로 국면 배지 |
-| **Portfolio** | 보유 종목 테이블, 종목별 수익률, 섹터/시장별 비중 |
-| **Trades** | 체결 내역 테이블 (정렬/필터), 일별 거래 수익 차트 |
-| **Strategies** | 전략별 성과 비교 (수익률, 승률, 샤프), 시그널 히스토리 |
-| **Macro** | 기존 매크로 대시보드 통합 (국면, 점수, 배분 차트) |
-| **Settings** | 전략 선택, 리스크 한도, 알림 설정 |
-
-#### 3-C. Telegram 알림
-
-| 파일 | 설명 |
-|------|------|
-| `python/libyfinance/utils/telegram_bot.py` | Telegram Bot API 래퍼 |
-| `config/alerts/telegram.json` | `bot_token`, `chat_id`, 알림 종류별 활성화 여부 |
-
-**알림 종류**:
-```
-📈 매수 체결: [삼성전자] 10주 × 72,500원 (전략: SMA Crossover)
-📉 매도 체결: [AAPL] 5주 × $198.50 (수익: +3.2%)
-📊 일일 리포트: 총자산 ₩45,230,000 (+1.2%), 매크로: Expansion
-⚠️ 리스크 경고: 일일 손실 -2.5% (한도 -3.0%)
-🔴 장애 알림: KIS API 연결 실패 (3회 연속)
-```
-
-#### 3-D. 외부망 접속 (예정)
-
-**현재 상태**: `scripts/dashboard_server.py`가 로컬 PC에서만 접속 가능 (`http://localhost:8800`).
-집 밖/휴대폰에서도 모의투자 현황을 보려면 외부 접속 경로가 필요하다.
-
-**전제 조건**: 대시보드는 계좌 잔고·보유종목을 그대로 노출하므로, 인증 없이 외부에 열면 안 된다.
-현재 서버는 인증이 전혀 없고 `0.0.0.0` 바인딩이라, 아래 중 하나를 붙이기 전에는 공유기 포트포워딩 금지.
-
-| 방식 | 장점 | 단점 | 비고 |
-|------|------|------|------|
-| **Tailscale / WireGuard VPN** | 설정 간단, 인증 내장, 포트 개방 불필요 | 접속 기기마다 클라이언트 설치 | 개인용이면 가장 추천 |
-| **Cloudflare Tunnel** | 고정 IP 불필요, HTTPS 자동, Cloudflare Access로 인증 추가 가능 | 외부 서비스 의존 | 도메인 있으면 편함 |
-| **포트포워딩 + 리버스 프록시** | 외부 의존 없음 | 공인 IP/DDNS, TLS 인증서, 인증 직접 구성 필요 | 보안 부담 가장 큼 |
-
-**구현 시 할 일**:
-- [ ] 접속 방식 결정 (기본값: Tailscale)
-- [ ] `dashboard_server.py`에 인증 추가 (최소 Basic Auth, 또는 터널 단의 인증에 위임)
-- [ ] 바인딩 주소를 옵션화 (`--host`, 기본은 `127.0.0.1`로 변경 — 지금은 `0.0.0.0` 고정)
-- [ ] HTTPS (터널/프록시 위임 or self-signed)
-- [ ] 읽기 전용 보장 — 대시보드에서 주문을 낼 수 있는 경로는 만들지 않는다
-
----
-
-### Phase 4: AI / 적응형 전략
-
-#### 4-A. C++↔Python 연동 방식
-
-두 가지 접근법 중 택 1 (또는 병행):
-
-| 방식 | 구현 | 장점 | 단점 |
-|------|------|------|------|
-| **프로세스 통신** | C++ 트레이더가 Python 스크립트를 subprocess로 호출, JSON으로 데이터 교환 | 단순, 의존성 분리 | 호출 오버헤드 |
-| **공유 DB** | Python이 SQLite에 추천 결과를 쓰고, C++이 읽음 | 비동기 가능, 느슨한 결합 | 동기화 관리 필요 |
-
-> [!TIP]
-> Phase 4 초기에는 **프로세스 통신(subprocess + JSON)** 방식을 권장합니다. 
-> 단순하고 디버깅이 쉬우며, 추후 gRPC 등으로 전환 가능합니다.
-
-#### 4-B. 파라미터 최적화
-
-| 파일 | 설명 |
-|------|------|
-| `python/libyfinance/ml/param_optimizer.py` | Bayesian Optimization (optuna 활용) |
-
-**동작 흐름**:
-```
-1. Python이 파라미터 후보 생성 (예: SMA 단기=15, 장기=45)
-2. 파라미터를 JSON으로 직렬화 → C++ 백테스트 엔진 호출
-3. BacktestResult (score, sharpe, mdd) 수신
-4. Optuna가 다음 후보 결정
-5. 반복 (N trials)
-6. 최적 파라미터를 config/에 저장
-```
-
-#### 4-C. 적응형 전략 선택
-
-| 파일 | 설명 |
-|------|------|
-| `python/libyfinance/ml/strategy_selector.py` | 시장 상태에 따른 전략 추천 |
-
-**로직**:
-```
-1. 최근 N일 시장 데이터 특성 추출:
-   - 변동성 (ATR), 추세 강도 (ADX), 거래량 변화율
-   - 매크로 국면 (MacroScorer 결과)
-2. 과거 동일 조건에서 각 전략의 성과 비교 (lookback backtest)
-3. 최적 전략 또는 전략 가중치 조합 추천
-4. JSON으로 결과 출력 → C++ 트레이더가 적용
-```
-
-#### 4-D. 추가 전략 구현
-
-| 전략 | 디렉토리 | 핵심 로직 |
-|------|----------|-----------|
-| MACD | `lib/macd/` | MACD 라인이 시그널 라인 상향 돌파 시 BUY, 하향 시 SELL |
-| 볼린저 밴드 | `lib/bollinger/` | 하단 터치 시 BUY, 상단 터치 시 SELL (평균회귀) |
-| 모멘텀 | `lib/momentum/` | 3/6/12개월 수익률 상위 종목 매수, 하위 매도 |
-| 평균회귀 | `lib/mean_reversion/` | Z-score 기반 극단값에서 역방향 진입 |
-
-각 전략은 `IStrategy` 상속, `lib/<name>/<name>.hpp + .cpp` 구조, CMakeLists.txt에 등록.
-
----
-
-### Phase 5: 상용화 (멀티테넌트)
+| **Overview** | Total assets, daily PnL, allocation chart, macro regime badge |
+| **Portfolio** | Holdings table, per-ticker returns, sector/market weights |
+| **Trades** | Fill history table (sort/filter), daily trade P&L chart |
+| **Strategies** | Per-strategy comparison (return, win rate, Sharpe), signal history |
+| **Macro** | Existing macro dashboard, integrated (regime, scores, allocation chart) |
+| **Settings** | Strategy selection, risk limits, alert settings |
 
 > [!NOTE]
-> Phase 1~4 안정화 이후 진행. 여기서는 방향성만 정리합니다.
+> Shipped instead: `scripts/dashboard_server.py` (local Python server) + the portfolio
+> section of `docs/index.html`, fed by `portfolio_report` reading KIS directly — no Go
+> server, no SQLite. Covers Overview/Portfolio; Trades, Strategies and Settings are open.
 
-#### 5-A. 아키텍처 변경
+#### 3-C. Telegram alerts
 
+| File | Description |
+|------|------|
+| `python/libyfinance/utils/telegram_bot.py` | Telegram Bot API wrapper |
+| `config/alerts/telegram.json` | `bot_token`, `chat_id`, per-alert-type toggles |
+
+**Alert types**:
 ```
-[개인용 단일 프로세스]  →  [멀티테넌트 서비스]
-
-SQLite        → PostgreSQL
-Go 단일 서버  → Go + Docker Compose (→ K8s)
-파일 설정     → DB 기반 사용자별 설정
-없음          → OAuth2 인증 + JWT
-없음          → 구독/과금 시스템
+📈 Buy filled:    [Samsung Electronics] 10 sh × 72,500 KRW (strategy: SMA Crossover)
+📉 Sell filled:   [AAPL] 5 sh × $198.50 (profit: +3.2%)
+📊 Daily report:  Total ₩45,230,000 (+1.2%), macro: Expansion
+⚠️ Risk warning:  Daily loss -2.5% (limit -3.0%)
+🔴 Failure alert: KIS API connection failed (3 consecutive)
 ```
 
-#### 5-B. 주요 태스크
+#### 3-D. External network access (planned)
 
-| 영역 | 태스크 |
-|------|--------|
-| **인증** | OAuth2 (Google/Kakao) 로그인, JWT 토큰, 세션 관리 |
-| **멀티테넌트** | 사용자별 독립 포트폴리오, 전략 설정, API 키 (한투 계정) |
-| **과금** | 구독 Tier (Basic: 1전략, Pro: 무제한, Enterprise: 맞춤) |
-| **인프라** | Docker Compose → K8s, PostgreSQL, Redis (캐시), Prometheus + Grafana |
-| **보안** | API 키 암호화 저장, 감사 로그, 접근 제어 |
+**Current state**: `scripts/dashboard_server.py` is reachable from the local machine only
+(`http://localhost:8800`). Viewing the paper-trading dashboard from outside the house or from a
+phone needs an access path.
+
+**Precondition**: the dashboard exposes account balance and holdings verbatim, so it must not be
+opened to the internet without authentication. The server currently has no auth at all and binds
+`0.0.0.0` — do not port-forward it on the router until one of the options below is in place.
+
+| Approach | Pros | Cons | Notes |
+|------|------|------|------|
+| **Tailscale / WireGuard VPN** | Simple setup, auth built in, no open ports | Client needed on each device | Best fit for personal use |
+| **Cloudflare Tunnel** | No static IP needed, automatic HTTPS, Cloudflare Access for auth | Depends on a third party | Convenient if a domain is available |
+| **Port forwarding + reverse proxy** | No external dependency | Needs public IP/DDNS, TLS certs, self-managed auth | Highest security burden |
+
+**Checklist when implementing**:
+- [ ] Choose the access method (default: Tailscale)
+- [ ] Add authentication to `dashboard_server.py` (Basic Auth at minimum, or delegate to the tunnel)
+- [ ] Make the bind address an option (`--host`, defaulting to `127.0.0.1` — currently hardcoded `0.0.0.0`)
+- [ ] HTTPS (delegated to the tunnel/proxy, or self-signed)
+- [ ] Keep it read-only — never add a path that can place orders from the dashboard
 
 ---
 
-## 6. 의존성 요약
+### Phase 4: AI / adaptive strategies
+
+#### 4-A. C++ ↔ Python integration
+
+Pick one of the two (or run both):
+
+| Approach | Implementation | Pros | Cons |
+|------|------|------|------|
+| **Process IPC** | The C++ trader calls a Python script as a subprocess, exchanging JSON | Simple, dependencies stay separate | Call overhead |
+| **Shared DB** | Python writes recommendations to SQLite, C++ reads them | Async-friendly, loose coupling | Requires sync management |
+
+> [!TIP]
+> Start Phase 4 with **process IPC (subprocess + JSON)**. It is simple and easy to debug, and
+> can be swapped for gRPC later.
+
+#### 4-B. Parameter optimization
+
+| File | Description |
+|------|------|
+| `python/libyfinance/ml/param_optimizer.py` | Bayesian optimization (via optuna) |
+
+**Flow**:
+```
+1. Python proposes a parameter candidate (e.g. SMA short=15, long=45)
+2. Serialize to JSON → invoke the C++ backtest engine
+3. Receive BacktestResult (score, sharpe, mdd)
+4. Optuna picks the next candidate
+5. Repeat (N trials)
+6. Save the best parameters to config/
+```
+
+#### 4-C. Adaptive strategy selection
+
+| File | Description |
+|------|------|
+| `python/libyfinance/ml/strategy_selector.py` | Recommend strategies based on market state |
+
+**Logic**:
+```
+1. Extract features from the last N days:
+   - volatility (ATR), trend strength (ADX), volume change
+   - macro regime (MacroScorer output)
+2. Compare how each strategy performed under similar historical conditions (lookback backtest)
+3. Recommend the best strategy, or a weighted blend
+4. Emit JSON → the C++ trader applies it
+```
+
+#### 4-D. Additional strategies
+
+| Strategy | Directory | Core logic |
+|------|----------|-----------|
+| MACD | `lib/macd/` | BUY when the MACD line crosses above the signal line, SELL on the cross below |
+| Bollinger Bands | `lib/bollinger/` | BUY on lower-band touch, SELL on upper-band touch (mean reversion) |
+| Momentum | `lib/momentum/` | Buy the top 3/6/12-month performers, sell the bottom |
+| Mean reversion | `lib/mean_reversion/` | Fade extremes based on z-score |
+
+Each strategy subclasses `IStrategy`, lives in `lib/<name>/<name>.hpp + .cpp`, and is registered in CMakeLists.txt.
+
+> [!NOTE]
+> MACD and Bollinger shipped in Phase 1; 14 more strategies followed (see `README.md`).
+> Momentum and mean reversion as specified here are still open.
+
+---
+
+### Phase 5: Productization (multi-tenant)
+
+> [!NOTE]
+> Only after phases 1–4 are stable. This section captures direction, not detail.
+
+#### 5-A. Architecture changes
+
+```
+[single-user process]  →  [multi-tenant service]
+
+SQLite             → PostgreSQL
+single Go server   → Go + Docker Compose (→ K8s)
+file-based config  → per-user config in the DB
+none               → OAuth2 + JWT
+none               → subscription/billing
+```
+
+#### 5-B. Major tasks
+
+| Area | Tasks |
+|------|--------|
+| **Auth** | OAuth2 (Google/Kakao) login, JWT tokens, session management |
+| **Multi-tenancy** | Per-user portfolios, strategy settings, API keys (KIS accounts) |
+| **Billing** | Subscription tiers (Basic: 1 strategy, Pro: unlimited, Enterprise: custom) |
+| **Infrastructure** | Docker Compose → K8s, PostgreSQL, Redis (cache), Prometheus + Grafana |
+| **Security** | Encrypted API key storage, audit logs, access control |
+
+---
+
+## 6. Dependencies
 
 ### C++
-| 라이브러리 | 용도 | 설치 |
+| Library | Purpose | Install |
 |-----------|------|------|
-| `libcurl` | HTTP 요청 (기존) | `apt install libcurl4-openssl-dev` |
-| `nlohmann/json` | JSON 파싱 (기존) | `apt install nlohmann-json3-dev` |
-| `googletest` | 단위 테스트 (Phase 1) | CMake FetchContent |
-| `Boost.Beast` 또는 `ixwebsocket` | WebSocket (Phase 2) | KIS 실시간 체결 수신용 |
-| `SQLite3` | 로컬 DB (Phase 2) | `apt install libsqlite3-dev` |
+| `libcurl` | HTTP requests (existing) | `apt install libcurl4-openssl-dev` |
+| `nlohmann/json` | JSON parsing (existing) | `apt install nlohmann-json3-dev` |
+| `googletest` | Unit tests (Phase 1) | CMake FetchContent |
+| `Boost.Beast` or `ixwebsocket` | WebSocket (Phase 2) | For KIS real-time fills |
+| `SQLite3` | Local DB (Phase 2) | `apt install libsqlite3-dev` |
 
 ### Python
-| 패키지 | 용도 | Phase |
+| Package | Purpose | Phase |
 |--------|------|-------|
-| `httpx` | KIS API 호출 (비동기) | 2 |
-| `python-telegram-bot` | Telegram 알림 | 3 |
-| `optuna` | Bayesian Optimization | 4 |
-| `scikit-learn` | ML 국면 분류 | 4 |
-| `pandas` | 데이터 분석 | 4 |
+| `httpx` | KIS API calls (async) | 2 |
+| `python-telegram-bot` | Telegram alerts | 3 |
+| `optuna` | Bayesian optimization | 4 |
+| `scikit-learn` | ML regime classification | 4 |
+| `pandas` | Data analysis | 4 |
 
 ### Go
-| 패키지 | 용도 | Phase |
+| Package | Purpose | Phase |
 |--------|------|-------|
-| `net/http` (stdlib) | REST API 서버 | 3 |
-| `gorilla/websocket` 또는 `nhooyr.io/websocket` | WebSocket | 3 |
-| `mattn/go-sqlite3` | SQLite 연동 | 3 |
+| `net/http` (stdlib) | REST API server | 3 |
+| `gorilla/websocket` or `nhooyr.io/websocket` | WebSocket | 3 |
+| `mattn/go-sqlite3` | SQLite access | 3 |
 
 ---
 
-## 7. 환경변수 템플릿 (`.env.example`)
+## 7. Environment variable template (`.env.example`)
 
 ```bash
-# 한국투자증권 OpenAPI
+# Korea Investment & Securities OpenAPI
 KIS_APP_KEY=your_app_key
 KIS_APP_SECRET=your_app_secret
-KIS_ACCOUNT_NO=12345678        # 종합계좌번호 앞 8자리
-KIS_ACCOUNT_PROD=01             # 계좌상품코드
+KIS_ACCOUNT_NO=12345678        # first 8 digits of the account number
+KIS_ACCOUNT_PROD=01             # account product code
 KIS_MODE=paper                  # paper | live
 
 # FRED API
@@ -788,18 +843,19 @@ FRED_API_KEY=your_fred_api_key
 TELEGRAM_BOT_TOKEN=your_bot_token
 TELEGRAM_CHAT_ID=your_chat_id
 
-# 서버
+# Server
 DASHBOARD_PORT=8080
 DASHBOARD_HOST=0.0.0.0
 ```
 
 ---
 
-## 8. 작업 진행 규칙
+## 8. Working rules
 
-1. **각 Phase는 순차적으로 진행**. Phase N 완료 전 Phase N+1 시작 금지.
-2. **Phase 2 진입 전**: 모든 Phase 1 테스트 통과 + Paper Trading 환경 준비 완료.
-3. **Phase 2 → 실전 전환 전**: Paper Trading 최소 3개월 + 양수 수익률 달성.
-4. **코드 변경 시**: 관련 테스트 추가/수정 필수.
-5. **Git**: feature branch → PR → 테스트 통과 → merge.
-6. **설정 변경은 코드 변경 없이** 가능하도록 JSON/env 분리 원칙 유지.
+1. **Phases run in order.** Do not start phase N+1 before phase N is complete.
+2. **Before entering Phase 2**: all Phase 1 tests pass and the paper-trading environment is ready.
+3. **Before going live in Phase 2**: at least 3 months of paper trading with a positive return.
+4. **When changing code**: add or update the corresponding tests.
+5. **Git**: feature branch → PR → tests pass → merge.
+6. **Keep configuration in JSON/env** so settings can change without code changes.
+7. **Docs and commit messages are written in English**; the dashboard UI stays Korean.
