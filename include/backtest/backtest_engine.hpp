@@ -8,11 +8,12 @@
 #include "strategy/istrategy.hpp"
 
 struct Trade {
-    std::size_t buyIndex  = 0;
-    std::size_t sellIndex = 0;
-    double      buyPrice  = 0.0;
-    double      sellPrice = 0.0;
-    double      returnPct = 0.0;  // (sellPrice - buyPrice) / buyPrice * 100
+    std::size_t buyIndex   = 0;
+    std::size_t sellIndex  = 0;
+    double      buyPrice   = 0.0;
+    double      sellPrice  = 0.0;
+    double      returnPct  = 0.0;    // (sellPrice - buyPrice) / buyPrice * 100
+    bool        stoppedOut = false;  // true if this exit was forced by BacktestConfig::stopLossPct
 };
 
 struct BacktestConfig {
@@ -20,6 +21,8 @@ struct BacktestConfig {
     double slippagePct       = 0.001;    // 0.1% 슬리피지
     double positionPct       = 1.0;      // 포지션 비율 (1.0 = 전액)
     bool   reinvestDividends = false;
+    double stopLossPct       = 0.0;  // 손절 비율 (%, 0 = 비활성화). 매수가 대비 저가가 이 폭만큼
+        // 하락하면 그날 즉시 청산 — 전략의 SELL 신호를 기다리지 않음.
 };
 
 struct BacktestResult {

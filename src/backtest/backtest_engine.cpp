@@ -48,8 +48,41 @@ BacktestResult BacktestEngine::run(IStrategy& strategy, const StockInfo& data, c
     std::int64_t lowestTs = data.timestamps.empty() ? 0 : data.timestamps.front();
 
     for (std::size_t i = 0; i < n; ++i) {
-        const double price         = data.close[i];
-        const double currentEquity = inPos ? (shares * price) : capital;
+        const double price          = data.close[i];
+        bool         stoppedThisBar = false;
+
+        // Stop-loss: if the day's low breached the stop, exit immediately — this takes
+        // priority over the strategy's own signal, and must happen BEFORE this bar's
+        // equity snapshot below, so mark-to-market/drawdown reflects the capped exit
+        // rather than the (possibly much lower) close price on a gap-down day.
+        if (inPos && config.stopLossPct > 0.0 && i > buyIdx && i < data.low.size()) {
+            const double stopPrice = buyPrice * (1.0 - config.stopLossPct / 100.0);
+            if (data.low[i] <= stopPrice) {
+                const double effectiveSellPrice =
+                    stopPrice * (1.0 - config.slippagePct) * (1.0 - config.commissionRate);
+                capital += shares * effectiveSellPrice;
+
+                Trade trade;
+                trade.buyIndex   = buyIdx;
+                trade.sellIndex  = i;
+                trade.buyPrice   = buyPrice;
+                trade.sellPrice  = effectiveSellPrice;
+                trade.returnPct  = (effectiveSellPrice - buyPrice) / buyPrice * 100.0;
+                trade.stoppedOut = true;
+
+                result.trades.push_back(trade);
+
+                shares         = 0.0;
+                inPos          = false;
+                stoppedThisBar = true;
+            }
+        }
+
+        // Equity = idle cash (capital) + mark-to-market value of any open position.
+        // capital already excludes allocCapital once a position is opened, so this
+        // must be a sum, not a branch — otherwise a partial position (positionPct < 1.0)
+        // makes the un-invested cash vanish from the equity curve while inPos is true.
+        const double currentEquity = capital + (inPos ? (shares * price) : 0.0);
         equity.push_back(currentEquity);
 
         const std::int64_t ts = (i < data.timestamps.size()) ? data.timestamps[i] : 0;
@@ -62,7 +95,7 @@ BacktestResult BacktestEngine::run(IStrategy& strategy, const StockInfo& data, c
             lowestTs = ts;
         }
 
-        if (i < warmup) {
+        if (i < warmup || stoppedThisBar) {
             continue;
         }
 

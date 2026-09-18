@@ -13,25 +13,14 @@ void printList(const PortfolioConfig& config) {
     std::cout << "\n========================================================================================\n";
     std::cout << " 📋 REGISTERED PORTFOLIO STRATEGIES (from config/portfolio.json)\n";
     std::cout << "========================================================================================\n";
-    std::cout << std::left
-              << std::setw(6)  << "ID"
-              << std::setw(10) << "Market"
-              << std::setw(10) << "Ticker"
-              << std::setw(10) << "Category"
-              << std::setw(21) << "Type"
-              << std::setw(30) << "Name"
-              << "Description\n";
+    std::cout << std::left << std::setw(6) << "ID" << std::setw(10) << "Market" << std::setw(10) << "Ticker"
+              << std::setw(10) << "Category" << std::setw(21) << "Type" << std::setw(30) << "Name" << "Description\n";
     std::cout << std::string(96, '-') << "\n";
 
     for (const auto& p : config.getProfiles()) {
-        std::cout << std::left
-                  << std::setw(6)  << ("[" + std::to_string(p.id) + "]")
-                  << std::setw(10) << p.market
-                  << std::setw(10) << p.ticker
-                  << std::setw(10) << p.category
-                  << std::setw(21) << p.type
-                  << std::setw(30) << p.name
-                  << p.description << "\n";
+        std::cout << std::left << std::setw(6) << ("[" + std::to_string(p.id) + "]") << std::setw(10) << p.market
+                  << std::setw(10) << p.ticker << std::setw(10) << p.category << std::setw(21) << p.type
+                  << std::setw(30) << p.name << p.description << "\n";
     }
     std::cout << "\nUsage:\n";
     std::cout << "  ./run_strategy --id <number>   Run specific strategy by ID (e.g., --id 1)\n";
@@ -41,7 +30,8 @@ void printList(const PortfolioConfig& config) {
 
 void executeProfile(const StrategyProfile& p, KisProvider& kis) {
     std::cout << "\n========================================================================================\n";
-    std::cout << " 🚀 Executing Strategy #" << p.id << " : " << p.name << " (" << p.ticker << " [" << p.market << "])\n";
+    std::cout << " 🚀 Executing Strategy #" << p.id << " : " << p.name << " (" << p.ticker << " [" << p.market
+              << "])\n";
     std::cout << " Description: " << p.description << "\n";
     std::cout << " Params: " << p.params.dump() << " | Position: " << (p.positionPct * 100.0) << "%\n";
     std::cout << "========================================================================================\n";
@@ -53,7 +43,8 @@ void executeProfile(const StrategyProfile& p, KisProvider& kis) {
     }
 
     std::shared_ptr<StockInfo> stock;
-    BacktestConfig bConfig;
+    BacktestConfig             bConfig;
+    bConfig.stopLossPct = p.stopLossPct;
 
     if (p.market == "KRX") {
         bConfig.commissionRate = 0.00015;
@@ -77,7 +68,7 @@ void executeProfile(const StrategyProfile& p, KisProvider& kis) {
     std::cout << "[*] Data points: " << stock->close.size() << " bars (" << stock->currency << ")" << std::endl;
 
     BacktestEngine engine(10000.0);
-    const auto result = engine.run(*strat, *stock, bConfig);
+    const auto     result = engine.run(*strat, *stock, bConfig);
 
     std::cout << "\n--- [ Backtest Performance Metrics ] ---\n";
     std::cout << " • Total Return    : " << std::fixed << std::setprecision(2) << result.totalReturnPct << " %\n";
@@ -88,24 +79,29 @@ void executeProfile(const StrategyProfile& p, KisProvider& kis) {
     std::cout << " • Profit Factor   : " << std::setprecision(2) << result.profitFactor << "\n";
     std::cout << " • Total Trades    : " << result.trades.size() << " orders\n";
     std::cout << " • Composite Score : " << std::setprecision(1) << result.score << " / 100\n";
-    std::cout << " • Final Capital   : " << std::fixed << std::setprecision(2) << result.finalCapital << " " << stock->currency << "\n";
+    std::cout << " • Final Capital   : " << std::fixed << std::setprecision(2) << result.finalCapital << " "
+              << stock->currency << "\n";
+    std::cout << " • Peak Capital    : " << result.peakCapital << " (" << util::formatTime(result.peakTimestamp)
+              << ")\n";
+    std::cout << " • Lowest Capital  : " << result.lowestCapital << " (" << util::formatTime(result.lowestTimestamp)
+              << ")\n";
 
     if (!result.trades.empty()) {
         std::cout << "\nRecent Trades (up to 3):\n";
         const std::size_t start = result.trades.size() > 3 ? result.trades.size() - 3 : 0;
         for (std::size_t i = start; i < result.trades.size(); ++i) {
             const auto& t = result.trades[i];
-            std::cout << "  [" << (i + 1) << "] Buy: " << t.buyPrice
-                      << " -> Sell: " << t.sellPrice
-                      << " (" << (t.returnPct >= 0 ? "+" : "") << t.returnPct << "%)\n";
+            std::cout << "  [" << (i + 1) << "] Buy: " << t.buyPrice << " -> Sell: " << t.sellPrice << " ("
+                      << (t.returnPct >= 0 ? "+" : "") << t.returnPct << "%)" << (t.stoppedOut ? " [STOP-LOSS]" : "")
+                      << "\n";
         }
     }
 }
 
 int main(int argc, char* argv[]) {
     std::string configPath = "config/portfolio.json";
-    int targetId = -1;
-    bool runAll = false;
+    int         targetId   = -1;
+    bool        runAll     = false;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
