@@ -39,6 +39,21 @@ class PortfolioConfig {
         return nullptr;
     }
 
+    /**
+     * @brief First profile whose ticker matches (best-effort strategy attribution
+     *        for a live holding — a position bought outside any profile won't match).
+     */
+    [[nodiscard]] const StrategyProfile* findByTicker(const std::string& ticker) const {
+        for (const auto& p : profiles_) {
+            if (p.ticker == ticker)
+                return &p;
+        }
+        return nullptr;
+    }
+
+    [[nodiscard]] double getInitialCapitalKrw() const { return initialCapitalKrw_; }
+
    private:
     std::vector<StrategyProfile> profiles_;
+    double                       initialCapitalKrw_ = 10000000.0;
 };

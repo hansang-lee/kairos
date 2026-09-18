@@ -124,6 +124,8 @@ PortfolioConfig PortfolioConfig::loadFromFile(const std::string& configPath) {
         return cfg;
     }
 
+    cfg.initialCapitalKrw_ = j->value("initial_capital_krw", 10000000.0);
+
     for (const auto& item : (*j)["strategies"]) {
         StrategyProfile p;
         p.id          = item.value("id", 0);

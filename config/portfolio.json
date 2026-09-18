@@ -1,5 +1,6 @@
 {
   "version": "1.0",
+  "initial_capital_krw": 10000000,
   "strategies": [
     {
       "id": 1,
