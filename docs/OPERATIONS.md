@@ -181,10 +181,21 @@ the day's orders at 18:00 would be worse than placing none.
 | Every decision, with strategy attribution | `data/trades.jsonl` |
 | What KIS itself recorded | `./build/Release/app/kis_order fills` |
 | Live logs | `journalctl --user -u kairos-scalp -f` |
+| Durable run logs | `logs/daily_trade-YYYY-MM-DD.log`, `logs/scalp_trade-…` |
+| Prices a decision used | `data/bars/<ticker>/daily.csv` |
 | Next timer fire | `systemctl --user list-timers 'kairos*'` |
 
 `cache/` holds the KIS token and dashboard snapshots. It regenerates itself;
 ignore it.
+
+Both trading apps tee stdout and stderr into `logs/<app>-<KST date>.log`, appending
+a `=====` header per run. This is separate from journald and survives its
+rotation. The file is flushed per line, so a loop stopped by a signal does not
+lose its tail.
+
+`daily_trade` also archives the bars each decision was made on to
+`data/bars/<ticker>/daily.csv`. KIS revises and re-serves history, so without
+this the inputs to a past decision cannot be recovered.
 
 ### Reading the journal
 

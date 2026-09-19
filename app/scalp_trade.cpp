@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "broker/kis_trader.hpp"
+#include "common/run_log.hpp"
 #include "data/bar_recorder.hpp"
 #include "data/kis_provider.hpp"
 #include "data/krx_calendar.hpp"
@@ -23,7 +24,7 @@ namespace {
 
 volatile std::sig_atomic_t g_stop = 0;
 
-void onSigint(int) {
+void onStop(int) {
     g_stop = 1;
 }
 
@@ -192,6 +193,8 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    const util::RunLog runLog("scalp_trade");
+
     auto config  = PortfolioConfig::loadFromFile(configPath);
     auto ctx     = trade::ExecutionContext::create(config.getRiskLimits());
     auto runners = buildRunners(config, ids, allScalp, live, maxTrades, ctx);
@@ -224,7 +227,10 @@ int main(int argc, char* argv[]) {
     }
     std::cout << "[*] Trade journal: " << ctx.journal->path() << "\n";
 
-    std::signal(SIGINT, onSigint);
+    std::signal(SIGINT, onStop);
+    // systemd stops a service with SIGTERM. Without this the process is killed
+    // outright, skipping the shutdown summary and any unflushed log output.
+    std::signal(SIGTERM, onStop);
 
     const data::KrxCalendar calendar;
     if (!calendar.loaded()) {

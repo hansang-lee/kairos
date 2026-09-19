@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "common/run_log.hpp"
 #include "data/bar_recorder.hpp"
 #include "data/kis_provider.hpp"
 #include "data/krx_calendar.hpp"
@@ -211,6 +212,9 @@ int main(int argc, char* argv[]) {
         printUsage();
         return 1;
     }
+
+    // Constructed before anything is printed, so the whole run lands in the file.
+    const util::RunLog runLog("daily_trade");
 
     const auto config = PortfolioConfig::loadFromFile(configPath);
 
