@@ -26,6 +26,7 @@ add_library(${PROJECT_NAME} SHARED
   src/data/kis_provider.cpp
   src/trade/trade_journal.cpp
   src/trade/signal_executor.cpp
+  src/trade/risk_guard.cpp
   lib/sma_crossover/sma_crossover.cpp
   lib/rsi/rsi_strategy.cpp
   lib/macd/macd_strategy.cpp

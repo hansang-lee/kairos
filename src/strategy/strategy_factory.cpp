@@ -126,6 +126,12 @@ PortfolioConfig PortfolioConfig::loadFromFile(const std::string& configPath) {
 
     cfg.initialCapitalKrw_ = j->value("initial_capital_krw", 10000000.0);
 
+    if (j->contains("risk") && (*j)["risk"].is_object()) {
+        const auto& r                     = (*j)["risk"];
+        cfg.riskLimits_.dailyLossLimitPct = r.value("daily_loss_limit_pct", 0.0);
+        cfg.riskLimits_.maxOrdersPerDay   = r.value("max_orders_per_day", 0);
+    }
+
     for (const auto& item : (*j)["strategies"]) {
         StrategyProfile p;
         p.id          = item.value("id", 0);

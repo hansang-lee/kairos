@@ -6,6 +6,7 @@
 #include "broker/kis_trader.hpp"
 #include "strategy/istrategy.hpp"
 #include "strategy/strategy_factory.hpp"
+#include "trade/risk_guard.hpp"
 #include "trade/trade_journal.hpp"
 
 namespace trade {
@@ -23,7 +24,8 @@ struct Decision {
     int64_t     quantity = 0;
 
     bool        sent    = false;  ///< the order was actually transmitted to KIS
-    bool        skipped = false;  ///< suppressed by the per-session order cap
+    bool        skipped = false;  ///< suppressed by the per-session cap or a risk limit
+    std::string blockedBy;        ///< risk limit that suppressed it, empty otherwise
     OrderResult order;
 };
 
@@ -46,7 +48,8 @@ class SignalExecutor {
      * @param live      false (default) logs and journals the decision without sending it.
      * @param maxOrders Cap on orders sent by this executor; -1 (default) means no cap.
      */
-    explicit SignalExecutor(const StrategyProfile& profile, bool live = false, int maxOrders = -1);
+    explicit SignalExecutor(const StrategyProfile& profile, bool live = false, int maxOrders = -1,
+                            const RiskLimits& limits = {});
 
     /**
      * @param signal  Strategy output for the bar about to be executed.
@@ -57,6 +60,7 @@ class SignalExecutor {
 
     [[nodiscard]] int                 ordersSent() const { return ordersSent_; }
     [[nodiscard]] const TradeJournal& journal() const { return journal_; }
+    [[nodiscard]] const RiskGuard&    risk() const { return risk_; }
 
    private:
     const StrategyProfile& profile_;
@@ -64,6 +68,7 @@ class SignalExecutor {
     int                    maxOrders_;
     int                    ordersSent_ = 0;
     TradeJournal           journal_;
+    RiskGuard              risk_;
     std::string            mode_;
 };
 

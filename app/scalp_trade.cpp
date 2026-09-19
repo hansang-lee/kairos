@@ -122,7 +122,7 @@ int main(int argc, char* argv[]) {
 
     std::signal(SIGINT, onSigint);
 
-    trade::SignalExecutor executor(*profile, live, maxTrades);
+    trade::SignalExecutor executor(*profile, live, maxTrades, config.getRiskLimits());
     std::cout << "[*] Trade journal: " << executor.journal().path() << "\n";
 
     KisProvider provider;
@@ -168,8 +168,10 @@ int main(int argc, char* argv[]) {
 
         if (decision.acted) {
             if (decision.skipped) {
-                std::cout << "  [SKIPPED] max-trades (" << maxTrades << ") reached this session (" << decision.reason
-                          << ")\n";
+                std::cout << "  [BLOCKED] "
+                          << (decision.blockedBy.empty() ? ("max-trades (" + std::to_string(maxTrades) + ") reached")
+                                                         : decision.blockedBy)
+                          << " (" << decision.reason << ")\n";
             } else if (!decision.sent) {
                 std::cout << "  [DRY-RUN] would " << decision.side << " x" << decision.quantity << " ("
                           << decision.reason << ")\n";

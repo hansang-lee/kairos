@@ -19,10 +19,11 @@ const StockHolding* findHolding(const AccountBalance& balance, const std::string
 
 }  // namespace
 
-SignalExecutor::SignalExecutor(const StrategyProfile& profile, bool live, int maxOrders)
+SignalExecutor::SignalExecutor(const StrategyProfile& profile, bool live, int maxOrders, const RiskLimits& limits)
     : profile_(profile)
     , live_(live)
-    , maxOrders_(maxOrders) {
+    , maxOrders_(maxOrders)
+    , risk_(limits) {
     KisAuth::instance().loadFromEnv();
     mode_ = KisAuth::instance().isPaper() ? "paper" : "live";
 }
@@ -85,15 +86,23 @@ Decision SignalExecutor::execute(Signal signal, double price, const AccountBalan
     entry.price      = price;
     entry.reason     = d.reason;
 
+    const OrderSide side    = (d.side == "BUY") ? OrderSide::Buy : OrderSide::Sell;
+    const auto      verdict = risk_.check(side, balance);
+
     if (maxOrders_ >= 0 && ordersSent_ >= maxOrders_) {
         d.skipped     = true;
         entry.event   = "skip";
         entry.message = "order cap reached this session";
+    } else if (!verdict.allowed) {
+        d.skipped     = true;
+        d.blockedBy   = verdict.reason;
+        entry.event   = "skip";
+        entry.message = verdict.reason;
     } else if (live_) {
-        d.order =
-            KisTrader::placeOrder(d.side == "BUY" ? OrderSide::Buy : OrderSide::Sell, profile_.ticker, d.quantity);
-        d.sent = true;
+        d.order = KisTrader::placeOrder(side, profile_.ticker, d.quantity);
+        d.sent  = true;
         ++ordersSent_;
+        risk_.recordOrder();
         entry.orderNo = d.order.orderNo;
         entry.success = d.order.success;
         entry.message = d.order.message;

@@ -1,0 +1,67 @@
+#pragma once
+
+#include <string>
+
+#include "broker/kis_trader.hpp"
+
+namespace trade {
+
+/** Limits that stop a bad day from compounding. 0 / negative disables a limit. */
+struct RiskLimits {
+    double dailyLossLimitPct = 0.0;  ///< halt buying once equity is this far below the day's opening equity
+    int    maxOrdersPerDay   = 0;    ///< cap on orders sent per calendar day, across restarts
+};
+
+struct RiskVerdict {
+    bool        allowed = true;
+    std::string reason;  ///< why it was blocked, empty when allowed
+};
+
+/**
+ * @brief Per-day trading limits, persisted so a process restart cannot reset them.
+ *
+ * The day's opening equity is recorded the first time the guard sees a balance,
+ * and the loss limit is measured against it. State lives in data/risk_state.json
+ * and rolls over automatically on the first call of a new KST day.
+ *
+ * Sells are never blocked. A daily loss limit that prevents closing a losing
+ * position would do the opposite of what it exists for — only new exposure is
+ * stopped.
+ */
+class RiskGuard {
+   public:
+    /**
+     * @param limits Limits to enforce.
+     * @param path   State file. Empty (default) resolves to <project-root>/data/risk_state.json.
+     */
+    explicit RiskGuard(const RiskLimits& limits, const std::string& path = "");
+
+    /**
+     * @brief Decide whether an order may be sent, recording the day's opening equity
+     *        on first use.
+     * @param side    Buy is subject to every limit; Sell only to none.
+     * @param balance Freshly fetched balance — its total evaluation is the equity measure.
+     */
+    [[nodiscard]] RiskVerdict check(OrderSide side, const AccountBalance& balance);
+
+    /** @brief Record that an order was actually sent, for the per-day cap. */
+    void recordOrder();
+
+    /** @brief Day's opening equity, 0 before the first check(). */
+    [[nodiscard]] double openingEquity() const { return openingEquity_; }
+
+    /** @brief Orders sent today, including ones sent by earlier processes. */
+    [[nodiscard]] int ordersToday() const { return ordersToday_; }
+
+   private:
+    void load();
+    void save() const;
+
+    RiskLimits  limits_;
+    std::string path_;
+    std::string date_;  ///< KST date the loaded state belongs to
+    double      openingEquity_ = 0.0;
+    int         ordersToday_   = 0;
+};
+
+}  // namespace trade

@@ -63,7 +63,8 @@ void printUsage() {
  * @brief Run one profile end to end: fetch bars, evaluate, execute.
  * @return true if the profile was evaluated (not that an order was placed).
  */
-bool runProfile(const StrategyProfile& profile, KisProvider& kis, bool live, int lookbackDays) {
+bool runProfile(const StrategyProfile& profile, KisProvider& kis, bool live, int lookbackDays,
+                const trade::RiskLimits& limits) {
     std::cout << "\n----------------------------------------------------------------------------------------\n";
     std::cout << " #" << profile.id << " " << profile.name << " (" << profile.ticker
               << ")  position=" << (profile.positionPct * 100.0) << "%  stop-loss=" << profile.stopLossPct << "%\n";
@@ -102,7 +103,7 @@ bool runProfile(const StrategyProfile& profile, KisProvider& kis, bool live, int
               << (hasToday ? " (today, still forming)" : " (today not published yet)")
               << "  signal=" << signalName(signal) << "\n";
 
-    trade::SignalExecutor executor(profile, live, 1);  // one order per run, per profile
+    trade::SignalExecutor executor(profile, live, 1, limits);  // one order per run, per profile
     const auto            decision = executor.execute(signal, lastClose, KisTrader::getBalance());
 
     std::cout << " holding=" << decision.heldQty;
@@ -113,6 +114,8 @@ bool runProfile(const StrategyProfile& profile, KisProvider& kis, bool live, int
 
     if (!decision.acted) {
         std::cout << " -> no action\n";
+    } else if (decision.skipped) {
+        std::cout << " -> [BLOCKED] " << decision.blockedBy << " (" << decision.reason << ")\n";
     } else if (!decision.sent) {
         std::cout << " -> [DRY-RUN] would " << decision.side << " x" << decision.quantity << " (" << decision.reason
                   << ")\n";
@@ -192,8 +195,11 @@ int main(int argc, char* argv[]) {
     }
 
     std::cout << "========================================================================================\n";
+    const auto& limits = config.getRiskLimits();
     std::cout << " Daily Trade  mode=" << (live ? "LIVE" : "DRY-RUN") << "  profiles=" << targets.size()
               << "  lookback=" << lookbackDays << "d\n";
+    std::cout << " Risk  daily-loss-limit=" << limits.dailyLossLimitPct
+              << "%  max-orders/day=" << limits.maxOrdersPerDay << "\n";
     std::cout << "========================================================================================\n";
 
     if (!isKrxMarketOpen()) {
@@ -211,7 +217,7 @@ int main(int argc, char* argv[]) {
     KisProvider kis;
     int         evaluated = 0;
     for (const auto* p : targets) {
-        if (runProfile(*p, kis, live, lookbackDays)) {
+        if (runProfile(*p, kis, live, lookbackDays, config.getRiskLimits())) {
             ++evaluated;
         }
     }

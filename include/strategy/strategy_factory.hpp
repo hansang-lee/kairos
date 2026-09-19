@@ -7,6 +7,7 @@
 #include <nlohmann/json.hpp>
 
 #include "strategy/istrategy.hpp"
+#include "trade/risk_guard.hpp"
 
 struct StrategyProfile {
     int         id = 0;
@@ -53,7 +54,11 @@ class PortfolioConfig {
 
     [[nodiscard]] double getInitialCapitalKrw() const { return initialCapitalKrw_; }
 
+    /** @brief Account-wide per-day trading limits from the config's "risk" object. */
+    [[nodiscard]] const trade::RiskLimits& getRiskLimits() const { return riskLimits_; }
+
    private:
     std::vector<StrategyProfile> profiles_;
     double                       initialCapitalKrw_ = 10000000.0;
+    trade::RiskLimits            riskLimits_;
 };
