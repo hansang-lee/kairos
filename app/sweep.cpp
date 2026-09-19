@@ -49,6 +49,57 @@ struct Candidate {
     nlohmann::json params;
 };
 
+/**
+ * @brief Parameter grid for one strategy, for --strategy mode.
+ *
+ * Kept deliberately coarse. A fine grid over 30 tickers produces thousands of
+ * combinations, and the best of thousands is noise no matter how it is selected.
+ */
+std::vector<Candidate> grid(const std::string& type) {
+    std::vector<Candidate> out;
+    auto                   add = [&](const std::string& label, const nlohmann::json& p) {
+        out.push_back({label, type, p});
+    };
+
+    if (type == "bollinger") {
+        for (int period : {14, 20, 30, 40}) {
+            for (double sd : {1.5, 2.0, 2.5}) {
+                add("bb(" + std::to_string(period) + "," + std::to_string(sd).substr(0, 3) + ")",
+                    {{"period", period}, {"std_devs", sd}});
+            }
+        }
+    } else if (type == "ma_slope_trend") {
+        for (int ma : {10, 20, 40}) {
+            for (int win : {5, 10, 20}) {
+                add("slope(" + std::to_string(ma) + "," + std::to_string(win) + ")",
+                    {{"ma_period", ma}, {"slope_window", win}});
+            }
+        }
+    } else if (type == "rsi") {
+        for (int period : {7, 14, 21}) {
+            for (double os : {25.0, 30.0, 35.0}) {
+                add("rsi(" + std::to_string(period) + "," + std::to_string(static_cast<int>(os)) + ")",
+                    {{"period", period}, {"oversold", os}, {"overbought", 100.0 - os}});
+            }
+        }
+    } else if (type == "macd") {
+        for (int fast : {8, 12, 16}) {
+            for (int slow : {21, 26, 34}) {
+                add("macd(" + std::to_string(fast) + "," + std::to_string(slow) + ")",
+                    {{"fast", fast}, {"slow", slow}, {"signal", 9}});
+            }
+        }
+    } else if (type == "sma_crossover") {
+        for (int shortW : {5, 10, 20}) {
+            for (int longW : {40, 60, 120}) {
+                add("sma(" + std::to_string(shortW) + "," + std::to_string(longW) + ")",
+                    {{"short_window", shortW}, {"long_window", longW}});
+            }
+        }
+    }
+    return out;
+}
+
 /** The registered strategies at their documented defaults. */
 std::vector<Candidate> candidates() {
     return {
@@ -136,8 +187,15 @@ int64_t parseDate(const std::string& yyyymmdd) {
 
 /* ---- Disk cache: a full sweep refetches ~30 tickers, which is slow and rude ---- */
 
-std::string cachePath(const std::string& ticker, const std::string& start, const std::string& end) {
-    return util::resolveFromExe("cache/daily/" + ticker + "_" + start + "_" + end + ".csv");
+/**
+ * One cache file per ticker, holding the widest range ever fetched.
+ *
+ * Keying the cache by test window would mean refetching 30 tickers whenever the
+ * window changes — which is most of what this tool is for. Fetch wide once,
+ * slice in memory.
+ */
+std::string cachePath(const std::string& ticker) {
+    return util::resolveFromExe("cache/daily/" + ticker + ".csv");
 }
 
 std::shared_ptr<StockInfo> loadCache(const std::string& path) {
@@ -193,6 +251,10 @@ void printUsage() {
               << "  and reports the period after it untouched.\n\n"
               << "  --min-trades  ignore combinations with fewer trades than this (default 8) —\n"
               << "                a strategy that barely traded cannot be evaluated either way\n"
+              << "  --fetch-start how far back to fetch and cache (default 2019-01-01). The test\n"
+              << "                window is sliced from this, so widening it only costs one fetch\n"
+              << "  --strategy    sweep one strategy's parameter grid instead of all strategies\n"
+              << "                at defaults (bollinger, ma_slope_trend, rsi, macd, sma_crossover)\n"
               << "  --refetch     ignore the cached price data under cache/daily/\n";
 }
 
@@ -206,6 +268,8 @@ int main(int argc, char* argv[]) {
     std::size_t minTrades    = 8;
     double      positionPct  = 1.0;
     bool        refetch      = false;
+    std::string fetchStart   = "2019-01-01";  // cached once; the test window is sliced from it
+    std::string gridFor;                      // when set, sweep this strategy's parameters instead
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -221,6 +285,10 @@ int main(int argc, char* argv[]) {
             minTrades = std::stoul(argv[++i]);
         else if (arg == "--position" && i + 1 < argc)
             positionPct = std::stod(argv[++i]);
+        else if (arg == "--fetch-start" && i + 1 < argc)
+            fetchStart = argv[++i];
+        else if (arg == "--strategy" && i + 1 < argc)
+            gridFor = argv[++i];
         else if (arg == "--refetch")
             refetch = true;
         else {
@@ -236,13 +304,20 @@ int main(int argc, char* argv[]) {
     }
 
     const int64_t splitTs = parseDate(splitDate);
-    const auto    cands   = candidates();
+    const auto    cands   = gridFor.empty() ? candidates() : grid(gridFor);
+    if (cands.empty()) {
+        std::cerr << "[-] No parameter grid defined for '" << gridFor << "'." << std::endl;
+        return 1;
+    }
 
     std::cout << "========================================================================================\n";
     std::cout << " Strategy x ticker sweep\n";
     std::cout << " in-sample  " << startDate << " ~ " << splitDate << "   (selection)\n";
     std::cout << " out-sample " << splitDate << " ~ " << endDate << "   (verification, untouched)\n";
     std::cout << " min trades " << minTrades << "   position " << (positionPct * 100) << "%\n";
+    if (!gridFor.empty()) {
+        std::cout << " parameter grid for " << gridFor << " (" << cands.size() << " combinations)\n";
+    }
     std::cout << "========================================================================================\n";
 
     KisProvider                              kis;
@@ -255,10 +330,16 @@ int main(int argc, char* argv[]) {
         if (code.empty())
             continue;
 
-        const std::string cp   = cachePath(code, startDate, endDate);
-        auto              data = refetch ? nullptr : loadCache(cp);
+        const std::string cp     = cachePath(code);
+        auto              cached = refetch ? nullptr : loadCache(cp);
+
+        // Only refetch when the cache does not already cover what was asked for.
+        const bool covers = cached && !cached->timestamps.empty()
+                         && cached->timestamps.front() <= parseDate(fetchStart) + 7 * 86400
+                         && cached->timestamps.back() >= parseDate(endDate) - 7 * 86400;
+        auto data = covers ? cached : nullptr;
         if (!data) {
-            data = kis.getStockInfo(code, startDate, endDate);
+            data = kis.getStockInfo(code, fetchStart, endDate);
             if (data && !data->close.empty())
                 saveCache(cp, *data);
         }
@@ -266,11 +347,18 @@ int main(int argc, char* argv[]) {
             std::cout << "  skip " << code << " " << name << " (insufficient data)\n";
             continue;
         }
-        ++usable;
-        std::cout << "  " << code << " " << name << "  " << data->close.size() << " bars\n" << std::flush;
 
-        const StockInfo is  = sliceUntil(*data, splitTs);
-        const StockInfo oos = sliceFrom(*data, splitTs);
+        // The cache may hold far more than the test window; slice to it.
+        const StockInfo window = sliceUntil(sliceFrom(*data, parseDate(startDate)), parseDate(endDate) + 86400);
+        if (window.close.size() < 250) {
+            std::cout << "  skip " << code << " " << name << " (only " << window.close.size() << " bars in window)\n";
+            continue;
+        }
+        ++usable;
+        std::cout << "  " << code << " " << name << "  " << window.close.size() << " bars\n" << std::flush;
+
+        const StockInfo is  = sliceUntil(window, splitTs);
+        const StockInfo oos = sliceFrom(window, splitTs);
         if (is.close.size() < 200 || oos.close.size() < 60)
             continue;
 

@@ -26,6 +26,31 @@
 #include "volume_breakout.hpp"
 #include "williams_r_strategy.hpp"
 
+namespace {
+
+/**
+ * @brief Warn about parameter keys the strategy does not read.
+ *
+ * nlohmann's params.value(key, fallback) returns the fallback for a missing key,
+ * so a mistyped parameter is silently ignored and the strategy runs on defaults
+ * — which looks like the parameter having no effect rather than like an error.
+ * That cost a whole parameter sweep before it was noticed, so unknown keys are
+ * now reported.
+ */
+void warnUnknownParams(const nlohmann::json& params, const std::string& type, const std::vector<std::string>& known) {
+    if (!params.is_object()) {
+        return;
+    }
+    for (const auto& [key, value] : params.items()) {
+        if (std::find(known.begin(), known.end(), key) == known.end()) {
+            std::cerr << "StrategyProfile: '" << type << "' does not use parameter '" << key
+                      << "' — it will be ignored." << std::endl;
+        }
+    }
+}
+
+}  // namespace
+
 std::unique_ptr<IStrategy> StrategyProfile::createStrategy() const {
     if (type == "rsi") {
         const std::size_t period     = params.value("period", 14);
@@ -40,8 +65,12 @@ std::unique_ptr<IStrategy> StrategyProfile::createStrategy() const {
         return std::make_unique<MacdStrategy>(fast, slow, signal);
     }
     if (type == "bollinger") {
-        const std::size_t period    = params.value("period", 20);
-        const double      numStdDev = params.value("std_dev", 2.0);
+        warnUnknownParams(params, type, {"period", "std_dev", "std_devs"});
+        const std::size_t period = params.value("period", 20);
+        // Both spellings are accepted: "std_dev" is what the original config used,
+        // "std_devs" is what every other band strategy and the docs use.
+        const double numStdDev =
+            params.contains("std_devs") ? params.value("std_devs", 2.0) : params.value("std_dev", 2.0);
         return std::make_unique<BollingerStrategy>(period, numStdDev);
     }
     if (type == "sma_crossover" || type == "sma") {
