@@ -20,9 +20,18 @@
 >   back from KIS on every cycle instead of being tracked locally. Every decision is
 >   appended to `data/trades.jsonl` by `trade::TradeJournal`, and
 >   `kis_order fills` syncs KIS's own fill history back into it.
+> - **Phase 2 risk/ops layer — done, outside the original design.** `trade::RiskGuard`
+>   enforces a per-day loss limit and order cap from the config's `risk` block
+>   (state in `data/risk_state.json`, sells never blocked); `data::KrxCalendar`
+>   skips KRX holidays from `config/krx_holidays.json`, since KIS's holiday API
+>   (`CTCA0903R`) is rejected on paper accounts; `deploy/systemd/` +
+>   `scripts/install_systemd.sh` run the whole thing unattended, in dry-run until
+>   `--live` is added by hand.
 > - **Phase 3 — partially done, but not as designed.** No Go server. The dashboard is
 >   `scripts/dashboard_server.py` (local Python) plus `docs/index.html`, fed by
->   `portfolio_report`. Telegram alerts and external access (3-D) are still open.
+>   `portfolio_report`. Telegram alerts are implemented (`notify::Telegram`, live
+>   orders and risk blocks only) but **unconfigured** — `.env` has empty
+>   `TELEGRAM_*` keys. External access (3-D) is still open.
 > - **Phase 1-A (tests), Phase 4, Phase 5 — not started.**
 >
 > Treat the phase bodies as intent, not as a description of the current code. `README.md`
