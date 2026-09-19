@@ -10,16 +10,20 @@
 #include "cci_reversal.hpp"
 #include "common/util.hpp"
 #include "donchian_breakout.hpp"
+#include "ichimoku_trend.hpp"
 #include "keltner_breakout.hpp"
 #include "ma_slope_trend.hpp"
 #include "macd_strategy.hpp"
 #include "mfi_reversal.hpp"
 #include "obv_trend.hpp"
 #include "psar_trend.hpp"
+#include "regime_rsi.hpp"
 #include "rsi_strategy.hpp"
 #include "sma_crossover.hpp"
+#include "squeeze_breakout.hpp"
 #include "stochastic_reversal.hpp"
 #include "supertrend_follow.hpp"
+#include "volume_breakout.hpp"
 #include "williams_r_strategy.hpp"
 
 std::unique_ptr<IStrategy> StrategyProfile::createStrategy() const {
@@ -113,6 +117,36 @@ std::unique_ptr<IStrategy> StrategyProfile::createStrategy() const {
         const double      adxThreshold   = params.value("adx_threshold", 20.0);
         return std::make_unique<MaSlopeTrend>(maPeriod, slopeWindow, entryThreshold, exitThreshold, adxPeriod,
                                               adxThreshold);
+    }
+
+    if (type == "regime_rsi" || type == "regime_filter_rsi") {
+        const std::size_t regimePeriod = params.value("regime_period", 200);
+        const std::size_t rsiPeriod    = params.value("rsi_period", 14);
+        const double      oversold     = params.value("oversold", 35.0);
+        const double      exitLevel    = params.value("exit_level", 65.0);
+        return std::make_unique<RegimeRsi>(regimePeriod, rsiPeriod, oversold, exitLevel);
+    }
+
+    if (type == "volume_breakout") {
+        const std::size_t period       = params.value("period", 20);
+        const std::size_t volumePeriod = params.value("volume_period", 20);
+        const double      volumeRatio  = params.value("volume_ratio", 1.5);
+        return std::make_unique<VolumeBreakout>(period, volumePeriod, volumeRatio);
+    }
+
+    if (type == "squeeze_breakout" || type == "squeeze") {
+        const std::size_t period          = params.value("period", 20);
+        const double      stdDevs         = params.value("std_devs", 2.0);
+        const std::size_t squeezeLookback = params.value("squeeze_lookback", 60);
+        const double      squeezePercent  = params.value("squeeze_percent", 0.25);
+        return std::make_unique<SqueezeBreakout>(period, stdDevs, squeezeLookback, squeezePercent);
+    }
+
+    if (type == "ichimoku_trend" || type == "ichimoku") {
+        const std::size_t conversion = params.value("conversion", 9);
+        const std::size_t base       = params.value("base", 26);
+        const std::size_t spanB      = params.value("span_b", 52);
+        return std::make_unique<IchimokuTrend>(conversion, base, spanB);
     }
 
     std::cerr << "StrategyProfile: Unknown strategy type '" << type << "'" << std::endl;

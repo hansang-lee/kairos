@@ -28,6 +28,10 @@ macro(BUILD_APP "NAME")
       ${CMAKE_SOURCE_DIR}/lib/obv_trend
       ${CMAKE_SOURCE_DIR}/lib/keltner_breakout
       ${CMAKE_SOURCE_DIR}/lib/ma_slope_trend
+      ${CMAKE_SOURCE_DIR}/lib/regime_rsi
+      ${CMAKE_SOURCE_DIR}/lib/volume_breakout
+      ${CMAKE_SOURCE_DIR}/lib/squeeze_breakout
+      ${CMAKE_SOURCE_DIR}/lib/ichimoku_trend
   )
   set_target_properties(
     ${APP} PROPERTIES

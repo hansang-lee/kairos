@@ -46,6 +46,10 @@ add_library(${PROJECT_NAME} SHARED
   lib/obv_trend/obv_trend.cpp
   lib/keltner_breakout/keltner_breakout.cpp
   lib/ma_slope_trend/ma_slope_trend.cpp
+  lib/regime_rsi/regime_rsi.cpp
+  lib/volume_breakout/volume_breakout.cpp
+  lib/squeeze_breakout/squeeze_breakout.cpp
+  lib/ichimoku_trend/ichimoku_trend.cpp
   src/strategy/strategy_factory.cpp
 )
 
@@ -70,6 +74,10 @@ target_include_directories(${PROJECT_NAME}
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/obv_trend
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/keltner_breakout
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/ma_slope_trend
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/regime_rsi
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/volume_breakout
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/squeeze_breakout
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/ichimoku_trend
 )
 
 target_link_libraries(${PROJECT_NAME}
