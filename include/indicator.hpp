@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <numeric>
 #include <vector>
 
@@ -1061,6 +1062,297 @@ struct KeltnerResult {
         const double slope = (denom != 0.0) ? (n * sumXY - sumX * sumY) / denom : 0.0;
         const double meanY = sumY / n;
         result.push_back(meanY != 0.0 ? slope / meanY * 100.0 : 0.0);
+    }
+
+    return result;
+}
+
+/**
+ * @brief Relative volume — current volume against its own recent average.
+ *
+ * A breakout on thin volume is usually noise, so this is mostly used as a
+ * confirmation filter rather than a signal of its own. 1.0 means "average";
+ * 2.0 means twice the usual participation.
+ *
+ * @param volume Volume series.
+ * @param period Lookback for the average (e.g. 20).
+ * @return       Ratios. result[0] corresponds to data index (period - 1).
+ */
+[[nodiscard]] inline std::vector<double> relativeVolume(const std::vector<int64_t>& volume, std::size_t period = 20) {
+    if (period == 0 || volume.size() < period) {
+        return {};
+    }
+
+    std::vector<double> result;
+    result.reserve(volume.size() - period + 1);
+
+    double sum = 0.0;
+    for (std::size_t i = 0; i < period; ++i) {
+        sum += static_cast<double>(volume[i]);
+    }
+    for (std::size_t i = period - 1; i < volume.size(); ++i) {
+        if (i >= period) {
+            sum += static_cast<double>(volume[i]) - static_cast<double>(volume[i - period]);
+        }
+        const double avg = sum / static_cast<double>(period);
+        result.push_back(avg > 0.0 ? static_cast<double>(volume[i]) / avg : 0.0);
+    }
+
+    return result;
+}
+
+/**
+ * @brief Bollinger %B and bandwidth.
+ *
+ * %B locates price within the bands (0 = lower, 1 = upper), which survives
+ * changes in volatility that make the raw band levels incomparable over time.
+ * Bandwidth is the band width relative to the middle band — a low value is the
+ * "squeeze" that often precedes an expansion.
+ */
+struct BollingerPositionResult {
+    std::vector<double> percentB;   ///< (price - lower) / (upper - lower)
+    std::vector<double> bandwidth;  ///< (upper - lower) / middle, as a fraction
+};
+
+/**
+ * @param prices   Close prices.
+ * @param period   Moving-average period (e.g. 20).
+ * @param stdDevs  Band width in standard deviations (e.g. 2.0).
+ * @return         Both series. result[0] corresponds to data index (period - 1).
+ */
+[[nodiscard]] inline BollingerPositionResult bollingerPosition(const std::vector<double>& prices,
+                                                               std::size_t period = 20, double stdDevs = 2.0) {
+    BollingerPositionResult result;
+
+    const auto bands = bollinger(prices, period, stdDevs);
+    if (bands.middle.empty()) {
+        return result;
+    }
+
+    result.percentB.reserve(bands.middle.size());
+    result.bandwidth.reserve(bands.middle.size());
+
+    for (std::size_t i = 0; i < bands.middle.size(); ++i) {
+        const double price = prices[i + period - 1];
+        const double width = bands.upper[i] - bands.lower[i];
+        result.percentB.push_back(width != 0.0 ? (price - bands.lower[i]) / width : 0.5);
+        result.bandwidth.push_back(bands.middle[i] != 0.0 ? width / bands.middle[i] : 0.0);
+    }
+
+    return result;
+}
+
+/**
+ * @brief Choppiness Index — is the market trending or ranging?
+ *
+ * Near 100 the market is covering the same ground repeatedly (range); near 0 it
+ * is moving directionally. It says nothing about direction, which is the point:
+ * it is a gate for trend strategies, which lose money in chop, and for
+ * mean-reversion strategies, which lose money in trends.
+ *
+ * @param high   High prices.
+ * @param low    Low prices.
+ * @param close  Close prices.
+ * @param period Lookback (e.g. 14).
+ * @return       Values 0~100. result[0] corresponds to data index period.
+ */
+[[nodiscard]] inline std::vector<double> choppinessIndex(const std::vector<double>& high,
+                                                         const std::vector<double>& low,
+                                                         const std::vector<double>& close, std::size_t period = 14) {
+    if (period < 2 || high.size() != low.size() || high.size() != close.size() || close.size() <= period) {
+        return {};
+    }
+
+    // True range per bar, starting at data index 1 (needs the previous close).
+    std::vector<double> tr;
+    tr.reserve(close.size() - 1);
+    for (std::size_t i = 1; i < close.size(); ++i) {
+        const double a = high[i] - low[i];
+        const double b = std::fabs(high[i] - close[i - 1]);
+        const double c = std::fabs(low[i] - close[i - 1]);
+        tr.push_back(std::max({a, b, c}));
+    }
+
+    std::vector<double> result;
+    result.reserve(tr.size() - period + 1);
+
+    const double logPeriod = std::log10(static_cast<double>(period));
+    for (std::size_t end = period; end <= tr.size(); ++end) {
+        double sumTr = 0.0;
+        for (std::size_t j = end - period; j < end; ++j) {
+            sumTr += tr[j];
+        }
+        // The price range over the same window, in data-index terms.
+        const std::size_t dataEnd   = end;  // tr[j] belongs to data index j + 1
+        const std::size_t dataStart = dataEnd - period + 1;
+        double            hh        = high[dataStart];
+        double            ll        = low[dataStart];
+        for (std::size_t j = dataStart; j <= dataEnd; ++j) {
+            hh = std::max(hh, high[j]);
+            ll = std::min(ll, low[j]);
+        }
+        const double range = hh - ll;
+        result.push_back((range > 0.0 && sumTr > 0.0 && logPeriod > 0.0) ? 100.0 * std::log10(sumTr / range) / logPeriod
+                                                                         : 50.0);
+    }
+
+    return result;
+}
+
+/**
+ * @brief Chandelier Exit — an ATR-distance trailing stop level.
+ *
+ * The long exit hangs a multiple of ATR below the highest high since entry, so
+ * the stop widens in volatile conditions instead of being hit by ordinary noise.
+ * This returns the *level*; acting on it is the strategy's business.
+ *
+ * @param high       High prices.
+ * @param low        Low prices.
+ * @param close      Close prices.
+ * @param period     Lookback for both the high and the ATR (e.g. 22).
+ * @param multiplier ATR multiple (e.g. 3.0).
+ * @return           Exit levels for a long position. result[0] corresponds to
+ *                    data index (period - 1).
+ */
+[[nodiscard]] inline std::vector<double> chandelierExit(const std::vector<double>& high, const std::vector<double>& low,
+                                                        const std::vector<double>& close, std::size_t period = 22,
+                                                        double multiplier = 3.0) {
+    if (period == 0 || high.size() != low.size() || high.size() != close.size() || close.size() < period) {
+        return {};
+    }
+
+    const auto atrValues = atr(high, low, close, period);  // atrValues[0] is at data index (period - 1)
+    if (atrValues.empty()) {
+        return {};
+    }
+
+    std::vector<double> result;
+    result.reserve(atrValues.size());
+
+    for (std::size_t k = 0; k < atrValues.size(); ++k) {
+        const std::size_t i  = k + period - 1;  // data index
+        double            hh = high[i - period + 1];
+        for (std::size_t j = i - period + 1; j <= i; ++j) {
+            hh = std::max(hh, high[j]);
+        }
+        result.push_back(hh - multiplier * atrValues[k]);
+    }
+
+    return result;
+}
+
+/**
+ * @brief Annualized historical volatility from log returns.
+ *
+ * Useful for sizing and for refusing to trade an instrument whose volatility has
+ * moved outside the range a strategy was tuned for.
+ *
+ * @param prices          Close prices.
+ * @param period          Lookback (e.g. 20).
+ * @param periodsPerYear  252 for daily bars; for minute bars, bars per trading year.
+ * @return                Annualized volatility in %. result[0] corresponds to data index period.
+ */
+[[nodiscard]] inline std::vector<double> historicalVolatility(const std::vector<double>& prices,
+                                                              std::size_t period = 20, double periodsPerYear = 252.0) {
+    if (period < 2 || prices.size() <= period) {
+        return {};
+    }
+
+    std::vector<double> logReturns;
+    logReturns.reserve(prices.size() - 1);
+    for (std::size_t i = 1; i < prices.size(); ++i) {
+        logReturns.push_back((prices[i - 1] > 0.0 && prices[i] > 0.0) ? std::log(prices[i] / prices[i - 1]) : 0.0);
+    }
+
+    std::vector<double> result;
+    result.reserve(logReturns.size() - period + 1);
+
+    for (std::size_t end = period; end <= logReturns.size(); ++end) {
+        double sum = 0.0;
+        for (std::size_t j = end - period; j < end; ++j) {
+            sum += logReturns[j];
+        }
+        const double mean = sum / static_cast<double>(period);
+        double       var  = 0.0;
+        for (std::size_t j = end - period; j < end; ++j) {
+            const double d = logReturns[j] - mean;
+            var += d * d;
+        }
+        var /= static_cast<double>(period - 1);
+        result.push_back(std::sqrt(var) * std::sqrt(periodsPerYear) * 100.0);
+    }
+
+    return result;
+}
+
+/**
+ * @brief Ichimoku Cloud (일목균형표).
+ *
+ * Widely followed in Korean and Japanese markets, which matters in itself: the
+ * levels attract orders because participants watch them. All series are returned
+ * aligned to the input, with leading values left at 0 until they are defined,
+ * because the components have different start points and the forward-shifted
+ * spans have no natural trailing alignment.
+ *
+ * @param high        High prices.
+ * @param low         Low prices.
+ * @param close       Close prices.
+ * @param conversion  Tenkan-sen period (9).
+ * @param base        Kijun-sen period (26).
+ * @param spanB       Senkou Span B period (52).
+ * @return            Series the same length as the input; index i is data index i.
+ *                     senkouA/senkouB are the cloud values *plotted at* i, i.e.
+ *                     computed from data at (i - base), so they can be compared
+ *                     with price at i without look-ahead.
+ */
+struct IchimokuResult {
+    std::vector<double> tenkan;   ///< conversion line
+    std::vector<double> kijun;    ///< base line
+    std::vector<double> senkouA;  ///< leading span A, already shifted forward
+    std::vector<double> senkouB;  ///< leading span B, already shifted forward
+};
+
+[[nodiscard]] inline IchimokuResult ichimoku(const std::vector<double>& high, const std::vector<double>& low,
+                                             const std::vector<double>& close, std::size_t conversion = 9,
+                                             std::size_t base = 26, std::size_t spanB = 52) {
+    IchimokuResult    result;
+    const std::size_t n = close.size();
+    if (high.size() != n || low.size() != n || n == 0 || conversion == 0 || base == 0 || spanB == 0) {
+        return result;
+    }
+
+    result.tenkan.assign(n, 0.0);
+    result.kijun.assign(n, 0.0);
+    result.senkouA.assign(n, 0.0);
+    result.senkouB.assign(n, 0.0);
+
+    // Midpoint of the high/low range over the last `window` bars ending at i.
+    auto midpoint = [&](std::size_t i, std::size_t window) -> double {
+        if (i + 1 < window) {
+            return 0.0;
+        }
+        double hh = high[i - window + 1];
+        double ll = low[i - window + 1];
+        for (std::size_t j = i - window + 1; j <= i; ++j) {
+            hh = std::max(hh, high[j]);
+            ll = std::min(ll, low[j]);
+        }
+        return (hh + ll) / 2.0;
+    };
+
+    for (std::size_t i = 0; i < n; ++i) {
+        result.tenkan[i] = midpoint(i, conversion);
+        result.kijun[i]  = midpoint(i, base);
+    }
+
+    // The cloud is drawn `base` bars ahead, so the value sitting at i was computed
+    // from bar (i - base) — which is exactly why it is usable without look-ahead.
+    for (std::size_t i = base; i < n; ++i) {
+        const std::size_t src = i - base;
+        if (result.tenkan[src] > 0.0 && result.kijun[src] > 0.0) {
+            result.senkouA[i] = (result.tenkan[src] + result.kijun[src]) / 2.0;
+        }
+        result.senkouB[i] = midpoint(src, spanB);
     }
 
     return result;
