@@ -330,6 +330,45 @@ US is the more expensive of the two, because of the commission. Cost impact
 scales with turnover: across six KRX tickers since 2021, MACD at 310 trades
 loses 19.6pp to costs while RSI at 27 trades loses 1pp.
 
+## Tests
+
+```bash
+cmake --build build/Release          # tests build with everything else
+./build/Release/kairos_tests         # all of them
+./build/Release/kairos_tests lookahead   # filter by "suite.name" substring
+cd build/Release && ctest --output-on-failure
+```
+
+78 cases over indicators, the backtest engine, the trade layer, the data layer,
+config parsing, and end-to-end scenarios. They build by default, so a broken test
+is a broken build rather than something to remember to run.
+
+The one worth understanding is `lookahead.every_strategy_reads_only_closed_bars`.
+It runs each strategy on the full series and again on the series truncated at the
+bar being evaluated, and requires the same signal — a strategy reading the bar it
+is about to trade cannot pass. It found three such bugs on its first run,
+including one in Bollinger, which is what the live profiles use.
+
+Order placement is outside the test boundary: it needs the live KIS API, and a
+test that hits a broker is not a test. Everything up to the send is covered.
+
+## Finding a strategy
+
+```bash
+./build/Release/app/sweep                                   # all strategies x universe
+./build/Release/app/sweep --strategy bollinger               # one strategy's parameter grid
+./build/Release/app/sweep --split 2022-01-01 --end 2022-12-31 --start 2019-01-01
+```
+
+Selection happens on the period before `--split`; everything after it is reported
+untouched. Ranking is by the median across tickers and the share that beat
+buy-and-hold, never by the best single combination — testing 20 strategies
+against 30 tickers gives 600 results, and the best of 600 is mostly luck.
+
+**Results depend heavily on the regime, so run both.** Over 2025-2026 no strategy
+beat buy-and-hold on a majority of the universe; over the 2022 decline most of
+them did. A strategy picked from one window alone is picked for that window.
+
 ## Manual commands
 
 ```bash

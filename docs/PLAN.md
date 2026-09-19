@@ -32,7 +32,12 @@
 >   `portfolio_report`. Telegram alerts are implemented (`notify::Telegram`, live
 >   orders and risk blocks only) but **unconfigured** — `.env` has empty
 >   `TELEGRAM_*` keys. External access (3-D) is still open.
-> - **Phase 1-A (tests), Phase 4, Phase 5 — not started.**
+> - **Phase 1-A (tests) — done, not with GTest.** `tests/` holds 78 cases run by
+>   `kairos_tests` and `ctest`, built by default, using a small in-tree framework
+>   rather than GTest (not installed here, and not worth a third dependency). The
+>   suite found five real bugs on its first run, including look-ahead in the
+>   Bollinger and MACD strategies.
+> - **Phase 4, Phase 5 — not started.**
 >
 > Treat the phase bodies as intent, not as a description of the current code. `README.md`
 > describes what exists today.

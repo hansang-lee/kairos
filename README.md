@@ -479,6 +479,7 @@ macro report.
 | `doctor` | Health check: credentials, account, market data, config, local state |
 | `bar_collect` | Seeds the intraday bar archive from Yahoo (KIS serves no history) |
 | `scalp_backtest` | Backtests a profile on archived minute bars; `--gross` isolates costs |
+| `sweep` | Strategy x ticker cross-test with out-of-sample selection |
 | `test_indicators` | Technical indicator smoke tests |
 
 ---
