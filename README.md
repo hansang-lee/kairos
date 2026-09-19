@@ -476,6 +476,7 @@ macro report.
 | `scalp_trade` | Intraday scalping via minute-bar polling (KRX, dry-run by default) |
 | `portfolio_report` | Paper-account snapshot as JSON (return vs principal + holdings) |
 | `notify_test` | Sends one Telegram message to verify alert setup |
+| `doctor` | Health check: credentials, account, market data, config, local state |
 | `test_indicators` | Technical indicator smoke tests |
 
 ---

@@ -11,16 +11,19 @@ what shipped versus what was planned, see [PLAN.md](PLAN.md).
 
 ## The short version
 
-Almost everything you will want to change lives in **`config/portfolio.json`**.
+Almost everything you will want to change lives in **`config/portfolio.json`**,
+and both trading apps pick up an edit without a restart — the scalper re-reads
+the file when it changes on disk, and `daily_trade` starts fresh every run.
 
-The one thing that trips people up: **`scalp_trade` reads the config once, at
-startup.** Editing the JSON while it is running changes nothing until you
-restart it. `daily_trade` is immune to this because it is a one-shot process —
-every 15:15 run reads the file fresh.
+When something is not behaving, start here:
 
 ```bash
-systemctl --user restart kairos-scalp      # after editing config for the scalper
+./build/Release/app/doctor            # checks credentials, account, data, config, state
+./build/Release/app/doctor --offline  # the same without talking to KIS
 ```
+
+It exits non-zero on a real failure, so it also works as a pre-flight check
+before enabling `--live`.
 
 ---
 
@@ -69,6 +72,21 @@ effect on automated trading.
 | `params` | Strategy parameters. Keys depend on `type`. |
 | `position_pct` | Fraction of **cash balance** committed per buy. `0.2` = 20%. |
 | `stop_loss_pct` | Forced exit when price falls this far below the holding's average price. `0` disables. |
+| `take_profit_pct` | Forced exit when price rises this far above average price. |
+| `trailing_stop_pct` | Forced exit this far below the **peak since entry**. Protects a gain already made. |
+| `cooldown_minutes` | Refuse to re-enter this ticker for this long after an exit. Stops chop-driven churn. |
+| `entry_tranches` / `exit_tranches` | Split the position over N orders. `1` = all at once. |
+| `trade_window` | `{"start":"0930","end":"1520"}` — entries only inside this KST window. |
+
+**Exit priority**: stop-loss → trailing stop → take-profit → strategy SELL. The
+first three are *forced exits* and always sell the whole position, since scaling
+out of a stop defeats it. Only a strategy SELL respects `exit_tranches`.
+
+**`trade_window` and `cooldown_minutes` gate entries only.** Exits are never
+blocked — refusing to close a position is the one thing these rules must not do.
+
+Entry tranches are sized from the cash available at the time of each one, so a
+staged entry lands slightly *under* `position_pct` rather than over it.
 | `category` | `swing` / `trend` / `position` / `scalp`. **`scalp` excludes a profile from `daily_trade --all`**, so the two loops never fight over one position. |
 
 Registered `type` values:
@@ -77,7 +95,13 @@ Registered `type` values:
 sma_crossover  rsi  macd  bollinger  stochastic_reversal  williams_r
 cci_reversal   mfi_reversal  adx_trend  supertrend  aroon_trend
 psar_trend     donchian_breakout  obv_trend  keltner_breakout  ma_slope_trend
+regime_rsi     volume_breakout  squeeze_breakout  ichimoku_trend
 ```
+
+The last four pair an entry with a filter (trend regime, volume confirmation,
+volatility squeeze, cloud position). On the data tested so far they cut drawdown
+roughly in half but **underperform the plain versions on return** — see the
+commit that added them. Treat them as available, not recommended.
 
 Short aliases also work: `sma`, `adx`, `aroon`, `cci`, `mfi`, `obv`, `psar`,
 `donchian`, `keltner`, `stochastic`, `slope_trend`.
@@ -113,6 +137,7 @@ Edit them with `systemctl --user edit --full <unit>`, not by hand in
 | Unit | Runs | Nature |
 |---|---|---|
 | `kairos-scalp.service` | `scalp_trade --id 18 --interval 60` | Long-running loop; should read `active (running)` |
+| | `--id` takes a list (`--id 18,19`) or `--all-scalp` for every `scalp` profile | One process, never two — see below |
 | `kairos-daily.service` | `daily_trade --all` | One-shot; reads `inactive (dead)` between runs — that is normal |
 | `kairos-daily.timer` | Fires the above at `Mon..Fri 15:15` | The thing you enable, not the service |
 | `kairos-dashboard.service` | `scripts/dashboard_server.py --port 8800` | Reads the account; places no orders |
@@ -235,7 +260,16 @@ must be on `Asia/Seoul`, or `15:15` is not 15:15 KST:
 timedatectl show -p Timezone --value
 ```
 
-**Config edits seem ignored.** The scalper read the file at startup. Restart it.
+**Config edits seem ignored.** The scalper re-reads the file when its mtime
+changes, usually within one `--interval`. If it did not, the log says why
+("reloaded empty", "no runnable profiles") and it kept the previous config.
+`daily_trade` always reads fresh.
+
+**Never run two trading processes against one account.** Each keeps its own risk
+guard and position store while writing the same files, so the day's order count
+and other tickers' peaks are lost on every save, and each sizes orders from the
+full cash balance — committing twice what you intended. To trade several
+tickers, give one `scalp_trade` several ids.
 
 **"Market closed" on a day the market is open.** Check
 `config/krx_holidays.json` — a wrong entry there would skip a real trading day.
@@ -261,6 +295,9 @@ which also discards the loss limit's reference point; do it knowingly.
 ## Manual commands
 
 ```bash
+# health check — run this first when anything looks wrong
+./build/Release/app/doctor
+
 # account
 ./build/Release/app/kis_order balance
 ./build/Release/app/kis_order fills [YYYYMMDD] [YYYYMMDD]
