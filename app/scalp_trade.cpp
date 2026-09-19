@@ -9,10 +9,12 @@
 #include <string>
 #include <thread>
 
+#include "broker/kis_auth.hpp"
 #include "broker/kis_trader.hpp"
 #include "common/util.hpp"
 #include "data/kis_provider.hpp"
 #include "strategy/strategy_factory.hpp"
+#include "trade/trade_journal.hpp"
 
 namespace {
 
@@ -129,6 +131,11 @@ int main(int argc, char* argv[]) {
 
     std::signal(SIGINT, onSigint);
 
+    KisAuth::instance().loadFromEnv();
+    const std::string   accountMode = KisAuth::instance().isPaper() ? "paper" : "live";
+    trade::TradeJournal journal;
+    std::cout << "[*] Trade journal: " << journal.path() << "\n";
+
     KisProvider provider;
     int         tradesThisSession = 0;
 
@@ -186,29 +193,50 @@ int main(int argc, char* argv[]) {
         std::cout << std::endl;
 
         if (doBuy || doSell) {
+            // Size the order up front so the journal records it even when nothing is sent.
+            int64_t qty = 1;
+            if (doBuy) {
+                const double allocCash = balance.cashBalance * profile->positionPct;
+                qty                    = std::max<int64_t>(1, static_cast<int64_t>(allocCash / currentPrice));
+            } else if (holding) {
+                qty = holding->quantity;
+            }
+
+            trade::JournalEntry entry;
+            entry.mode       = accountMode;
+            entry.dryRun     = !live;
+            entry.strategyId = profile->id;
+            entry.strategy   = profile->name;
+            entry.category   = profile->category;
+            entry.ticker     = profile->ticker;
+            entry.side       = doBuy ? "BUY" : "SELL";
+            entry.quantity   = qty;
+            entry.price      = currentPrice;
+            entry.reason     = reason;
+
             if (tradesThisSession >= maxTrades) {
                 std::cout << "  [SKIPPED] max-trades (" << maxTrades << ") reached this session (" << reason << ")\n";
+                entry.event   = "skip";
+                entry.message = "max-trades reached this session";
             } else if (!live) {
-                std::cout << "  [DRY-RUN] would " << (doBuy ? "BUY" : "SELL") << " (" << reason << ")\n";
+                std::cout << "  [DRY-RUN] would " << entry.side << " x" << qty << " (" << reason << ")\n";
             } else {
-                int64_t qty = 1;
-                if (doBuy) {
-                    const double allocCash = balance.cashBalance * profile->positionPct;
-                    qty                    = std::max<int64_t>(1, static_cast<int64_t>(allocCash / currentPrice));
-                } else if (holding) {
-                    qty = holding->quantity;
-                }
-
                 const auto result =
                     KisTrader::placeOrder(doBuy ? OrderSide::Buy : OrderSide::Sell, profile->ticker, qty);
                 tradesThisSession++;
+                entry.orderNo = result.orderNo;
+                entry.success = result.success;
+                entry.message = result.message;
                 if (result.success) {
-                    std::cout << "  [ORDER] " << (doBuy ? "BUY" : "SELL") << " x" << qty << " (" << reason
+                    std::cout << "  [ORDER] " << entry.side << " x" << qty << " (" << reason
                               << ") -> No: " << result.orderNo << "\n";
                 } else {
-                    std::cout << "  [ORDER FAILED] " << (doBuy ? "BUY" : "SELL") << " x" << qty << ": "
-                              << result.message << "\n";
+                    std::cout << "  [ORDER FAILED] " << entry.side << " x" << qty << ": " << result.message << "\n";
                 }
+            }
+
+            if (!journal.append(entry)) {
+                std::cerr << "  [!] Failed to write trade journal at " << journal.path() << "\n";
             }
         }
 

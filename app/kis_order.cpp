@@ -3,7 +3,9 @@
 #include <iostream>
 #include <string>
 
+#include "broker/kis_auth.hpp"
 #include "broker/kis_trader.hpp"
+#include "trade/trade_journal.hpp"
 
 namespace {
 
@@ -56,6 +58,21 @@ int runOrder(OrderSide side, int argc, char* argv[]) {
               << std::endl;
 
     const auto result = KisTrader::placeOrder(side, ticker, qty, price);
+
+    // Manual orders go into the same journal as automated ones — otherwise they
+    // silently distort the per-strategy performance read from the account balance.
+    trade::JournalEntry entry;
+    entry.mode     = KisAuth::instance().isPaper() ? "paper" : "live";
+    entry.ticker   = ticker;
+    entry.side     = (side == OrderSide::Buy) ? "BUY" : "SELL";
+    entry.quantity = qty;
+    entry.price    = price;
+    entry.reason   = "manual";
+    entry.orderNo  = result.orderNo;
+    entry.success  = result.success;
+    entry.message  = result.message;
+    trade::TradeJournal().append(entry);
+
     if (!result.success) {
         std::cerr << "[-] Order failed: " << result.message << std::endl;
         return 1;
