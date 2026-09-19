@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "data/kis_provider.hpp"
+#include "data/krx_calendar.hpp"
 #include "strategy/strategy_factory.hpp"
 #include "trade/signal_executor.hpp"
 
@@ -33,14 +34,15 @@ std::string barDate(int64_t ts) {
     return oss.str();
 }
 
-bool isKrxMarketOpen() {
+/** @return empty if KRX is open right now, otherwise why it is not. */
+std::string krxClosedReason(const data::KrxCalendar& calendar) {
+    if (const std::string why = calendar.closedReason(kstDate(0)); !why.empty()) {
+        return why;
+    }
     const std::time_t kst   = std::time(nullptr) + 9 * 3600;
     const std::tm*    tmPtr = std::gmtime(&kst);
-    if (tmPtr->tm_wday == 0 || tmPtr->tm_wday == 6) {
-        return false;
-    }
-    const int hm = tmPtr->tm_hour * 100 + tmPtr->tm_min;
-    return hm >= 900 && hm <= 1530;
+    const int         hm    = tmPtr->tm_hour * 100 + tmPtr->tm_min;
+    return (hm >= 900 && hm <= 1530) ? "" : "outside 09:00-15:30 KST";
 }
 
 std::string signalName(Signal s) {
@@ -202,13 +204,17 @@ int main(int argc, char* argv[]) {
               << "%  max-orders/day=" << limits.maxOrdersPerDay << "\n";
     std::cout << "========================================================================================\n";
 
-    if (!isKrxMarketOpen()) {
+    const data::KrxCalendar calendar;
+    if (!calendar.loaded()) {
+        std::cout << "[!] No holiday list loaded; only weekends are treated as closed.\n";
+    }
+    if (const std::string closed = krxClosedReason(calendar); !closed.empty()) {
         if (!force) {
-            std::cout << "[*] KRX is closed (09:00-15:30 KST, weekdays). Nothing to do — pass --force to\n"
+            std::cout << "[*] KRX is closed (" << closed << "). Nothing to do — pass --force to\n"
                       << "    evaluate anyway (orders placed outside hours would be rejected by KIS).\n";
             return 0;
         }
-        std::cout << "[!] KRX is closed; --force given, evaluating anyway.\n";
+        std::cout << "[!] KRX is closed (" << closed << "); --force given, evaluating anyway.\n";
     }
     if (!live) {
         std::cout << "[*] Dry-run: no real orders will be placed. Pass --live to trade for real.\n";

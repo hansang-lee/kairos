@@ -13,6 +13,7 @@
 #include "broker/kis_trader.hpp"
 #include "common/util.hpp"
 #include "data/kis_provider.hpp"
+#include "data/krx_calendar.hpp"
 #include "strategy/strategy_factory.hpp"
 #include "trade/signal_executor.hpp"
 
@@ -34,12 +35,22 @@ std::pair<int, int> kstNow() {
     return {tmPtr->tm_wday, tmPtr->tm_hour * 100 + tmPtr->tm_min};
 }
 
-bool isKrxMarketOpen() {
-    const auto [wday, hm] = kstNow();
-    if (wday == 0 || wday == 6) {
-        return false;
+/** KST calendar date, "YYYY-MM-DD". */
+std::string kstToday() {
+    const std::time_t  kst = std::time(nullptr) + 9 * 3600;
+    std::ostringstream oss;
+    oss << std::put_time(std::gmtime(&kst), "%Y-%m-%d");
+    return oss.str();
+}
+
+/** @return empty if KRX is open right now, otherwise why it is not. */
+std::string krxClosedReason(const data::KrxCalendar& calendar) {
+    if (const std::string why = calendar.closedReason(kstToday()); !why.empty()) {
+        return why;
     }
-    return hm >= 900 && hm <= 1530;
+    const auto [wday, hm] = kstNow();
+    (void)wday;
+    return (hm >= 900 && hm <= 1530) ? "" : "outside 09:00-15:30 KST";
 }
 
 std::string nowLabel() {
@@ -125,11 +136,16 @@ int main(int argc, char* argv[]) {
     trade::SignalExecutor executor(*profile, live, maxTrades, config.getRiskLimits());
     std::cout << "[*] Trade journal: " << executor.journal().path() << "\n";
 
+    const data::KrxCalendar calendar;
+    if (!calendar.loaded()) {
+        std::cout << "[!] No holiday list loaded; only weekends are treated as closed.\n";
+    }
+
     KisProvider provider;
 
     while (!g_stop) {
-        if (!isKrxMarketOpen()) {
-            std::cout << "[" << nowLabel() << "] Market closed (KRX hours: 09:00-15:30 KST, weekdays). Waiting...\n";
+        if (const std::string closed = krxClosedReason(calendar); !closed.empty()) {
+            std::cout << "[" << nowLabel() << "] Market closed (" << closed << "). Waiting...\n";
             std::this_thread::sleep_for(std::chrono::seconds(intervalSec));
             continue;
         }

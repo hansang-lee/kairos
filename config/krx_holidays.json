@@ -1,0 +1,26 @@
+{
+  "note": "KRX non-trading weekdays. Weekends are handled in code and are not listed here. KIS's own holiday API (CTCA0903R) is rejected on paper accounts ('모의투자 TR 이 아닙니다'), so this file is the substitute while paper trading; switch to that API once running on a live account.",
+  "verified_through": "2026-09-19",
+  "verification": "Dates up to verified_through were derived from actual KIS daily bars (005930): every weekday with no bar is a closure. Later dates are projected from the public holiday calendar and MUST be confirmed against KRX's official schedule before they arrive.",
+  "fail_open": "A date missing from this list is treated as a trading day. Being wrong that way only wastes a poll — KIS simply returns no bars — whereas wrongly skipping a real trading day would silently stop trading.",
+  "holidays": {
+    "2026-01-01": "New Year's Day",
+    "2026-02-16": "Seollal holiday",
+    "2026-02-17": "Seollal",
+    "2026-02-18": "Seollal holiday",
+    "2026-03-02": "Independence Movement Day (observed)",
+    "2026-05-01": "Labour Day (KRX closed)",
+    "2026-05-05": "Children's Day",
+    "2026-05-25": "Buddha's Birthday (observed)",
+    "2026-06-03": "Local elections",
+    "2026-07-17": "Constitution Day",
+    "2026-08-17": "Liberation Day (observed)",
+    "2026-09-24": "Chuseok holiday (projected)",
+    "2026-09-25": "Chuseok (projected)",
+    "2026-09-28": "Chuseok holiday, observed (projected)",
+    "2026-10-05": "National Foundation Day, observed (projected)",
+    "2026-10-09": "Hangul Day (projected)",
+    "2026-12-25": "Christmas Day (projected)",
+    "2026-12-31": "Year-end market close (projected)"
+  }
+}
