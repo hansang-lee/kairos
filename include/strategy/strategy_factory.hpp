@@ -65,15 +65,27 @@ class PortfolioConfig {
     }
 
     /**
-     * @brief First profile whose ticker matches (best-effort strategy attribution
-     *        for a live holding — a position bought outside any profile won't match).
+     * @brief Profile responsible for a holding of this ticker, best effort.
+     *
+     * Enabled profiles win. Several profiles can share a ticker — a retired one
+     * kept for backtesting, a scalping variant, the live one — and returning
+     * whichever appears first in the file credited a holding to a strategy that
+     * is not trading. A position bought outside any profile matches nothing.
      */
     [[nodiscard]] const StrategyProfile* findByTicker(const std::string& ticker) const {
+        const StrategyProfile* fallback = nullptr;
         for (const auto& p : profiles_) {
-            if (p.ticker == ticker)
+            if (p.ticker != ticker) {
+                continue;
+            }
+            if (p.enabled) {
                 return &p;
+            }
+            if (fallback == nullptr) {
+                fallback = &p;  // nothing live holds this ticker; name something rather than nothing
+            }
         }
-        return nullptr;
+        return fallback;
     }
 
     [[nodiscard]] double getInitialCapitalKrw() const { return initialCapitalKrw_; }

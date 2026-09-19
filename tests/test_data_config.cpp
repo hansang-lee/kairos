@@ -175,7 +175,7 @@ TEST(config, defaults_apply_when_fields_are_absent) {
     const auto  cfg = PortfolioConfig::loadFromFile(path);
     const auto* p   = cfg.findById(1);
     CHECK(p != nullptr);
-    CHECK_EQ(p->enabled, true);        // profiles trade unless disabled
+    CHECK_EQ(p->enabled, true);  // profiles trade unless disabled
     CHECK_EQ(p->entryTranches, 1);
     CHECK_EQ(p->exitTranches, 1);
     CHECK_NEAR(p->stopLossPct, 0.0, 1e-9);
@@ -191,6 +191,38 @@ TEST(config, tranche_counts_below_one_are_clamped) {
     // Zero tranches would mean a position that can never be entered or exited.
     CHECK_EQ(p->entryTranches, 1);
     CHECK_EQ(p->exitTranches, 1);
+}
+
+TEST(config, find_by_ticker_prefers_the_enabled_profile) {
+    // Several profiles share a ticker once retired ones are kept for backtesting.
+    // Returning the first in file order credited a live holding to a strategy that
+    // was not trading, which the dashboard then displayed as fact.
+    const std::string path = tmp("portfolio_dupe.json");
+    writeFile(path, R"({"strategies":[
+      {"id":1,"ticker":"005930","type":"rsi","enabled":false},
+      {"id":18,"ticker":"005930","type":"sma_crossover","enabled":false},
+      {"id":30,"ticker":"005930","type":"bollinger","enabled":true}
+    ]})");
+
+    const auto  cfg = PortfolioConfig::loadFromFile(path);
+    const auto* p   = cfg.findByTicker("005930");
+    CHECK(p != nullptr);
+    CHECK_EQ(p->id, 30);
+}
+
+TEST(config, find_by_ticker_falls_back_when_nothing_is_enabled) {
+    const std::string path = tmp("portfolio_alldisabled.json");
+    writeFile(path, R"({"strategies":[
+      {"id":1,"ticker":"005930","type":"rsi","enabled":false},
+      {"id":2,"ticker":"005930","type":"macd","enabled":false}
+    ]})");
+
+    const auto  cfg = PortfolioConfig::loadFromFile(path);
+    const auto* p   = cfg.findByTicker("005930");
+    // Naming a retired strategy beats naming none: the holding came from somewhere.
+    CHECK(p != nullptr);
+    CHECK_EQ(p->id, 1);
+    CHECK(cfg.findByTicker("999999") == nullptr);
 }
 
 TEST(config, a_missing_file_yields_an_empty_config) {

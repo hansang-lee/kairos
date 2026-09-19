@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <map>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -202,6 +203,48 @@ void checkStrategies(const PortfolioConfig& config) {
     }
     if (broken == 0) {
         ok("Every profile builds a strategy");
+    }
+
+    // Most profiles are disabled — kept for backtesting or retired. Printing only a
+    // total would let the wrong set run unnoticed, so name exactly what trades.
+    std::vector<const StrategyProfile*> live;
+    std::vector<const StrategyProfile*> liveScalp;
+    for (const auto& p : config.getProfiles()) {
+        if (!p.enabled || p.market != "KRX") {
+            continue;
+        }
+        (p.category == "scalp" ? liveScalp : live).push_back(&p);
+    }
+
+    if (live.empty() && liveScalp.empty()) {
+        warn("No profile will trade", "every KRX profile is disabled; --all would do nothing");
+    } else {
+        ok("Live profiles", std::to_string(live.size()) + " daily (daily_trade --all), "
+                                + std::to_string(liveScalp.size()) + " scalp (scalp_trade --all-scalp)");
+    }
+    for (const auto* p : live) {
+        std::cout << "    daily  #" << p->id << " " << p->ticker << " " << p->name << "  pos "
+                  << (p->positionPct * 100.0) << "%  stop " << p->stopLossPct << "%\n";
+    }
+    for (const auto* p : liveScalp) {
+        std::cout << "    scalp  #" << p->id << " " << p->ticker << " " << p->name << "  pos "
+                  << (p->positionPct * 100.0) << "%  stop " << p->stopLossPct << "%\n";
+    }
+
+    // Two strategies on one holding each act on the other's position, because the
+    // broker balance cannot tell them apart.
+    std::map<std::string, int> tickerCount;
+    for (const auto* p : live) {
+        ++tickerCount[p->ticker];
+    }
+    for (const auto* p : liveScalp) {
+        ++tickerCount[p->ticker];
+    }
+    for (const auto& [ticker, count] : tickerCount) {
+        if (count > 1) {
+            fail("Ticker " + ticker + " is traded by " + std::to_string(count) + " live profiles",
+                 "they share one holding and will act on each other's position");
+        }
     }
 
     // Sizing mistakes are silent until they spend the whole account at once.
