@@ -13,9 +13,13 @@
 >   indicators; KIS daily data with pagination past the ~100-bar-per-call cap.
 > - **Phase 2 — partially done, but not as designed.** There is no `IBroker` abstraction
 >   yet. Instead `KisTrader` (`include/broker/kis_trader.hpp`) talks to KIS directly for
->   cash orders and balance inquiry, and `scalp_trade` runs an intraday loop against it.
+>   cash orders and balance inquiry. Two executables drive it: `daily_trade` (daily bars,
+>   one run per day) and `scalp_trade` (minute-bar loop), both going through
+>   `trade::SignalExecutor` for sizing, stop-loss and journaling.
 >   `OrderManager` / `PositionSizer` / `RiskManager` do not exist; position state is read
->   back from KIS on every cycle instead of being tracked locally.
+>   back from KIS on every cycle instead of being tracked locally. Every decision is
+>   appended to `data/trades.jsonl` by `trade::TradeJournal`, and
+>   `kis_order fills` syncs KIS's own fill history back into it.
 > - **Phase 3 — partially done, but not as designed.** No Go server. The dashboard is
 >   `scripts/dashboard_server.py` (local Python) plus `docs/index.html`, fed by
 >   `portfolio_report`. Telegram alerts and external access (3-D) are still open.
@@ -606,10 +610,17 @@ struct PositionSizer {
 ```
 
 > [!NOTE]
-> What actually shipped for this sub-phase is `app/scalp_trade.cpp`: the same loop shape
-> (market-hours gate → data → signal → order), but intraday minute bars, KRX only, no
-> `OrderManager`/`RiskManager`/`PositionSizer` layer, and holdings re-read from KIS each
-> cycle instead of being tracked locally. Dry-run is the default; `--live` is opt-in.
+> What actually shipped for this sub-phase is the same loop shape (market-hours gate →
+> data → signal → order), split across two executables: `app/scalp_trade.cpp` (intraday
+> minute bars, continuous loop) and `app/daily_trade.cpp` (daily bars, one shot per run,
+> meant for cron near the close). Both are KRX only, dry-run by default with `--live`
+> opt-in, and share `trade::SignalExecutor` so position sizing and the stop-loss rule
+> exist in exactly one place. There is no `OrderManager`/`RiskManager`/`PositionSizer`
+> layer, and holdings are re-read from KIS each cycle instead of being tracked locally.
+>
+> Step (e) "confirm fills and record to the DB" is partly covered: fills are recorded to
+> the JSONL journal, not a DB, and the sync is manual (`kis_order fills`) rather than
+> automatic after each order. Step (f), Telegram alerts, is still open.
 
 ---
 
