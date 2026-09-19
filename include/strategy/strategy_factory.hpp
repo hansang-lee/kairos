@@ -37,6 +37,16 @@ struct StrategyProfile {
     std::string tradeEnd;    ///< e.g. "1520" to stop before the closing auction
     std::string description;
 
+    /**
+     * @brief Whether this profile joins the bulk runs (--all, --all-scalp).
+     *
+     * A disabled profile is still backtestable and still runnable by explicit
+     * --id; it simply does not trade by default. This is how a profile kept for
+     * research avoids competing with a live one over the same ticker — two
+     * strategies on one holding would each act on the other's position.
+     */
+    bool enabled = true;
+
     [[nodiscard]] std::unique_ptr<IStrategy> createStrategy() const;
 };
 

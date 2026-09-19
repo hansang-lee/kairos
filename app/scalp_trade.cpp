@@ -103,7 +103,7 @@ std::vector<Runner> buildRunners(const PortfolioConfig& config, const std::vecto
     std::vector<const StrategyProfile*> selected;
     if (allScalp) {
         for (const auto& p : config.getProfiles()) {
-            if (p.market == "KRX" && p.category == "scalp") {
+            if (p.market == "KRX" && p.category == "scalp" && p.enabled) {
                 selected.push_back(&p);
             }
         }

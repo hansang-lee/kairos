@@ -174,7 +174,7 @@ int main(int argc, char* argv[]) {
         for (const auto& p : config.getProfiles()) {
             // Scalping profiles are driven by scalp_trade on minute bars; running
             // them here too would have two loops fighting over the same position.
-            if (p.market == "KRX" && p.category != "scalp") {
+            if (p.market == "KRX" && p.category != "scalp" && p.enabled) {
                 targets.push_back(&p);
             }
         }

@@ -20,7 +20,8 @@
       },
       "position_pct": 0.5,
       "stop_loss_pct": 3.0,
-      "description": "삼성전자 14일 RSI 과매도(30 이하) 반등 매수 / 과매수(70 이상) 분할 매도"
+      "description": "삼성전자 14일 RSI 과매도(30 이하) 반등 매수 / 과매수(70 이상) 분할 매도",
+      "enabled": false
     },
     {
       "id": 2,
@@ -270,7 +271,8 @@
       },
       "position_pct": 0.5,
       "stop_loss_pct": 5.0,
-      "description": "SK하이닉스 20일 이동평균 회귀 기울기 + ADX 추세강도 필터 (히스테리시스로 잦은 손절 완화). MACD 전략(#3)과 동일 종목 직접 비교용"
+      "description": "SK하이닉스 20일 이동평균 회귀 기울기 + ADX 추세강도 필터 (히스테리시스로 잦은 손절 완화). MACD 전략(#3)과 동일 종목 직접 비교용",
+      "enabled": false
     },
     {
       "id": 18,
@@ -286,6 +288,76 @@
       "position_pct": 0.2,
       "stop_loss_pct": 1.0,
       "description": "삼성전자 분봉 SMA(3/8) 초단타 크로스오버. app/scalp_trade로 실행 — 일봉이 아니라 당일 분봉 폴링 기반"
+    },
+    {
+      "id": 19,
+      "name": "Samsung Electronics Ichimoku Cloud",
+      "ticker": "005930",
+      "market": "KRX",
+      "type": "ichimoku_trend",
+      "category": "trend",
+      "params": {
+        "conversion": 9,
+        "base": 26,
+        "span_b": 52
+      },
+      "position_pct": 0.5,
+      "stop_loss_pct": 5.0,
+      "enabled": false,
+      "description": "삼성전자 일목균형표 구름대 상향 돌파 매수 / 구름대 하회 시 매도"
+    },
+    {
+      "id": 20,
+      "name": "SK Hynix Squeeze Breakout",
+      "ticker": "000660",
+      "market": "KRX",
+      "type": "squeeze_breakout",
+      "category": "position",
+      "params": {
+        "period": 20,
+        "std_devs": 2.0,
+        "squeeze_lookback": 60,
+        "squeeze_percent": 0.25
+      },
+      "position_pct": 0.5,
+      "stop_loss_pct": 5.0,
+      "enabled": false,
+      "description": "SK하이닉스 볼린저 밴드 수축 후 상단 돌파 매수 / 하단 이탈 매도"
+    },
+    {
+      "id": 21,
+      "name": "Kia Volume-Confirmed Breakout",
+      "ticker": "000270",
+      "market": "KRX",
+      "type": "volume_breakout",
+      "category": "position",
+      "params": {
+        "period": 20,
+        "volume_period": 20,
+        "volume_ratio": 1.5
+      },
+      "position_pct": 0.5,
+      "stop_loss_pct": 5.0,
+      "enabled": false,
+      "description": "기아 20일 채널 돌파 시 거래량 1.5배 이상 확인 후 매수 / 하단 이탈 매도"
+    },
+    {
+      "id": 22,
+      "name": "Hyundai Motor Regime-Filtered RSI",
+      "ticker": "005380",
+      "market": "KRX",
+      "type": "regime_rsi",
+      "category": "swing",
+      "params": {
+        "regime_period": 120,
+        "rsi_period": 14,
+        "oversold": 35.0,
+        "exit_level": 65.0
+      },
+      "position_pct": 0.5,
+      "stop_loss_pct": 5.0,
+      "enabled": false,
+      "description": "현대차 120일선 위 상승 국면에서만 RSI 과매도 반등 매수"
     }
   ]
 }

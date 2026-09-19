@@ -212,6 +212,7 @@ PortfolioConfig PortfolioConfig::loadFromFile(const std::string& configPath) {
             p.tradeEnd   = item["trade_window"].value("end", "");
         }
         p.description = item.value("description", "");
+        p.enabled     = item.value("enabled", true);
 
         if (item.contains("params") && item["params"].is_object()) {
             p.params = item["params"];
