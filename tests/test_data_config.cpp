@@ -116,6 +116,53 @@ TEST(recorder, loaded_bars_are_sorted_and_unique) {
     }
 }
 
+TEST(recorder, a_named_series_stays_in_one_file_and_merges) {
+    // Daily bars are one per day; the per-date layout would make one file per row.
+    const std::string root = tmp("bars_series");
+    std::filesystem::remove_all(root);
+
+    data::BarRecorder r(root);
+    CHECK_EQ(r.recordSeries("005930", "daily", bars(1789344000, 10)), 10);
+    CHECK_EQ(r.recordSeries("005930", "daily", bars(1789344000, 10)), 0);           // idempotent
+    CHECK_EQ(r.recordSeries("005930", "daily", bars(1789344000 + 5 * 60, 10)), 5);  // overlap merges
+
+    const auto loaded = r.loadSeries("005930", "daily");
+    CHECK(loaded != nullptr);
+    CHECK_EQ(loaded->close.size(), std::size_t{15});
+    for (std::size_t i = 1; i < loaded->timestamps.size(); ++i) {
+        CHECK(loaded->timestamps[i] > loaded->timestamps[i - 1]);
+    }
+}
+
+TEST(recorder, a_named_series_is_not_mistaken_for_a_date) {
+    // storedDates() feeds a range query; a file called "daily.csv" compared as a
+    // date would silently fall inside or outside any range asked for.
+    const std::string root = tmp("bars_series_dates");
+    std::filesystem::remove_all(root);
+
+    data::BarRecorder r(root);
+    r.record("005930", bars(1789344000, 10));  // per-day file
+    r.recordSeries("005930", "daily", bars(1789344000, 10));
+
+    const auto dates = r.storedDates("005930");
+    for (const auto& d : dates) {
+        CHECK_MSG(d != "daily", "storedDates returned a named series as a date");
+    }
+    CHECK_EQ(dates.size(), std::size_t{1});
+
+    // The per-day load must not pick up the series file either.
+    const auto ranged = r.load("005930", "2000-01-01", "2099-01-01");
+    CHECK(ranged != nullptr);
+    CHECK_EQ(ranged->close.size(), std::size_t{10});
+}
+
+TEST(recorder, loading_an_absent_series_returns_null) {
+    const std::string root = tmp("bars_series_absent");
+    std::filesystem::remove_all(root);
+    const data::BarRecorder r(root);
+    CHECK(r.loadSeries("005930", "daily") == nullptr);
+}
+
 TEST(recorder, loading_an_empty_archive_returns_null) {
     const std::string root = tmp("bars_empty");
     std::filesystem::remove_all(root);

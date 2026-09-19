@@ -133,6 +133,58 @@ int BarRecorder::record(const std::string& ticker, const StockInfo& bars) {
     return added;
 }
 
+int BarRecorder::recordSeries(const std::string& ticker, const std::string& series, const StockInfo& bars) {
+    const std::size_t n = bars.close.size();
+    if (n == 0 || bars.timestamps.size() != n) {
+        return 0;
+    }
+
+    std::error_code ec;
+    std::filesystem::create_directories(root_ + "/" + ticker, ec);
+
+    const std::string path     = pathFor(ticker, series);
+    auto              existing = readFile(path);
+    const std::size_t before   = existing.size();
+
+    for (std::size_t i = 0; i < n; ++i) {
+        Bar b;
+        b.open                       = i < bars.open.size() ? bars.open[i] : bars.close[i];
+        b.high                       = i < bars.high.size() ? bars.high[i] : bars.close[i];
+        b.low                        = i < bars.low.size() ? bars.low[i] : bars.close[i];
+        b.close                      = bars.close[i];
+        b.volume                     = i < bars.volume.size() ? bars.volume[i] : 0;
+        existing[bars.timestamps[i]] = b;
+    }
+
+    if (existing.size() == before) {
+        return 0;
+    }
+    if (!writeFile(path, existing)) {
+        return -1;
+    }
+    return static_cast<int>(existing.size() - before);
+}
+
+std::shared_ptr<StockInfo> BarRecorder::loadSeries(const std::string& ticker, const std::string& series) const {
+    const auto bars = readFile(pathFor(ticker, series));
+    if (bars.empty()) {
+        return nullptr;
+    }
+
+    auto result      = std::make_shared<StockInfo>();
+    result->ticker   = ticker;
+    result->currency = "KRW";
+    for (const auto& [ts, b] : bars) {
+        result->timestamps.push_back(ts);
+        result->open.push_back(b.open);
+        result->high.push_back(b.high);
+        result->low.push_back(b.low);
+        result->close.push_back(b.close);
+        result->volume.push_back(b.volume);
+    }
+    return result;
+}
+
 std::vector<std::string> BarRecorder::storedDates(const std::string& ticker) const {
     std::vector<std::string> dates;
     std::error_code          ec;
@@ -141,8 +193,14 @@ std::vector<std::string> BarRecorder::storedDates(const std::string& ticker) con
         return dates;
     }
     for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
-        if (entry.path().extension() == ".csv") {
-            dates.push_back(entry.path().stem().string());
+        if (entry.path().extension() != ".csv") {
+            continue;
+        }
+        // Named series (e.g. "daily.csv") live alongside the per-day files and are
+        // not dates, so a range query must not try to compare against them.
+        const std::string stem = entry.path().stem().string();
+        if (stem.size() == 10 && stem[4] == '-' && stem[7] == '-') {
+            dates.push_back(stem);
         }
     }
     std::sort(dates.begin(), dates.end());

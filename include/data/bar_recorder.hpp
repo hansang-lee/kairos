@@ -35,6 +35,20 @@ class BarRecorder {
     int record(const std::string& ticker, const StockInfo& bars);
 
     /**
+     * @brief Merge bars into a single named file instead of per-day files.
+     *
+     * Daily bars are one per day, so the per-date layout would produce one file
+     * holding one row. A named series keeps them together:
+     * data/bars/<ticker>/<series>.csv, merged on timestamp like everything else.
+     *
+     * @return Number of bars that were not already stored, or -1 on write failure.
+     */
+    int recordSeries(const std::string& ticker, const std::string& series, const StockInfo& bars);
+
+    /** @brief Load a named series written by recordSeries(); nullptr when absent. */
+    [[nodiscard]] std::shared_ptr<StockInfo> loadSeries(const std::string& ticker, const std::string& series) const;
+
+    /**
      * @brief Load stored bars for a ticker across a date range, oldest first.
      * @param startDate Inclusive, "YYYY-MM-DD".
      * @param endDate   Inclusive, "YYYY-MM-DD".
@@ -43,7 +57,10 @@ class BarRecorder {
     [[nodiscard]] std::shared_ptr<StockInfo> load(const std::string& ticker, const std::string& startDate,
                                                   const std::string& endDate) const;
 
-    /** @brief Dates that have stored bars for a ticker, oldest first. */
+    /** @brief Dates that have per-day stored bars for a ticker, oldest first.
+     *
+     * Named series are excluded — only files whose name is a date are returned.
+     */
     [[nodiscard]] std::vector<std::string> storedDates(const std::string& ticker) const;
 
     [[nodiscard]] const std::string& root() const { return root_; }

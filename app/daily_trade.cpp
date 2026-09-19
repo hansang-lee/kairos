@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "data/bar_recorder.hpp"
 #include "data/kis_provider.hpp"
 #include "data/krx_calendar.hpp"
 #include "notify/telegram.hpp"
@@ -83,7 +84,7 @@ struct Outcome {
 };
 
 Outcome runProfile(const StrategyProfile& profile, KisProvider& kis, bool live, int lookbackDays,
-                   const trade::ExecutionContext& ctx) {
+                   const trade::ExecutionContext& ctx, data::BarRecorder& recorder) {
     std::cout << "\n----------------------------------------------------------------------------------------\n";
     std::cout << " #" << profile.id << " " << profile.name << " (" << profile.ticker
               << ")  position=" << (profile.positionPct * 100.0) << "%  stop-loss=" << profile.stopLossPct << "%\n";
@@ -110,6 +111,13 @@ Outcome runProfile(const StrategyProfile& profile, KisProvider& kis, bool live, 
         return outcome;
     }
     outcome.evaluated = true;
+
+    // Archive the bars this decision was made on. Without them, "why did it do
+    // that on Monday" is unanswerable later — KIS revises and re-serves history,
+    // and the cached sweep data is not refreshed by a live run.
+    if (recorder.recordSeries(profile.ticker, "daily", *data) < 0) {
+        std::cerr << "[!] Could not archive daily bars for " << profile.ticker << ".\n";
+    }
 
     // Index convention: evaluate(i) decides the order executed at bar i using closes
     // through i-1. So the index to evaluate is the position of the bar we are about
@@ -259,13 +267,14 @@ int main(int argc, char* argv[]) {
         std::cout << "[*] Dry-run: no real orders will be placed. Pass --live to trade for real.\n";
     }
 
-    KisProvider kis;
-    auto        ctx       = trade::ExecutionContext::create(limits);
-    int         evaluated = 0;
+    KisProvider       kis;
+    data::BarRecorder recorder;
+    auto              ctx       = trade::ExecutionContext::create(limits);
+    int               evaluated = 0;
 
     std::vector<std::string> notable;
     for (const auto* p : targets) {
-        const auto outcome = runProfile(*p, kis, live, lookbackDays, ctx);
+        const auto outcome = runProfile(*p, kis, live, lookbackDays, ctx, recorder);
         if (outcome.evaluated) {
             ++evaluated;
         }
