@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(libyfinance)
+project(kairos)
 
 if(NOT CMAKE_C_STANDARD)
   set(CMAKE_C_STANDARD 99)
@@ -78,12 +78,12 @@ target_link_libraries(${PROJECT_NAME}
 
 set_target_properties(${PROJECT_NAME}
   PROPERTIES
-    OUTPUT_NAME "yfinance"
+    OUTPUT_NAME "kairos"
     DEBUG_POSTFIX d
 )
 
 add_library(
-  yfinance::yfinance
+  kairos::kairos
     ALIAS ${PROJECT_NAME}
 )
 

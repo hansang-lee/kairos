@@ -1,7 +1,7 @@
-# libyfinance Project Plan (v1.0, finalized)
+# kairos Project Plan (v1.0, finalized)
 
-> **Project**: libyfinance
-> **Location**: `/home/hslee/workspace/libyfinance`
+> **Project**: kairos
+> **Location**: `/home/hslee/workspace/kairos`
 > **Goal**: A quant-driven automated trading system for the Korean and US equity markets
 > **Finalized**: 2026-09-13
 
@@ -60,7 +60,7 @@
 
 ### 2.1 Architecture at the time
 ```
-libyfinance/                    # C++17, CMake + Ninja
+kairos/                    # C++17, CMake + Ninja
 ├── include/                    # Headers
 │   ├── yfinance.hpp            # Static API client (Yahoo, FRED, CNN F&G)
 │   ├── indicator.hpp           # Technical indicators (SMA, RSI) — header-only
@@ -120,7 +120,7 @@ public:
 ## 3. Target directory layout
 
 ```
-libyfinance/
+kairos/
 ├── include/                         # C++ headers (existing + extensions)
 │   ├── yfinance.hpp
 │   ├── indicator.hpp                # → more indicators (MACD, BB, ATR, ...)
@@ -176,7 +176,7 @@ libyfinance/
 │
 ├── python/                          # [NEW] Python support modules
 │   ├── pyproject.toml
-│   ├── libyfinance/
+│   ├── kairos/
 │   │   ├── __init__.py
 │   │   ├── analysis/                # Data analysis, visualization
 │   │   │   ├── portfolio_analyzer.py
@@ -344,18 +344,18 @@ FetchContent_MakeAvailable(googletest)
 
 enable_testing()
 
-add_executable(libyfinance_tests
+add_executable(kairos_tests
   test_indicator.cpp
   test_backtest_engine.cpp
   test_strategies.cpp
   test_macro_scorer.cpp
 )
-target_link_libraries(libyfinance_tests
+target_link_libraries(kairos_tests
   GTest::gtest_main
-  yfinance::yfinance
+  kairos::kairos
 )
 include(GoogleTest)
-gtest_discover_tests(libyfinance_tests)
+gtest_discover_tests(kairos_tests)
 ```
 
 #### 1-B. More realistic backtests
@@ -687,7 +687,7 @@ Either extend the existing `docs/index.html` (macro dashboard) or build a separa
 
 | File | Description |
 |------|------|
-| `python/libyfinance/utils/telegram_bot.py` | Telegram Bot API wrapper |
+| `python/kairos/utils/telegram_bot.py` | Telegram Bot API wrapper |
 | `config/alerts/telegram.json` | `bot_token`, `chat_id`, per-alert-type toggles |
 
 **Alert types**:
@@ -743,7 +743,7 @@ Pick one of the two (or run both):
 
 | File | Description |
 |------|------|
-| `python/libyfinance/ml/param_optimizer.py` | Bayesian optimization (via optuna) |
+| `python/kairos/ml/param_optimizer.py` | Bayesian optimization (via optuna) |
 
 **Flow**:
 ```
@@ -759,7 +759,7 @@ Pick one of the two (or run both):
 
 | File | Description |
 |------|------|
-| `python/libyfinance/ml/strategy_selector.py` | Recommend strategies based on market state |
+| `python/kairos/ml/strategy_selector.py` | Recommend strategies based on market state |
 
 **Logic**:
 ```

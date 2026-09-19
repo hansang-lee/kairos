@@ -1,5 +1,5 @@
 [Unit]
-Description=Run libyfinance daily strategies before the KRX close
+Description=Run kairos daily strategies before the KRX close
 
 [Timer]
 # 15:15 KST on weekdays — inside the session, so orders can still fill, and late
@@ -7,7 +7,7 @@ Description=Run libyfinance daily strategies before the KRX close
 # timezone, which must be Asia/Seoul for this to mean what it says.
 OnCalendar=Mon..Fri 15:15
 Persistent=false
-Unit=libyfinance-daily.service
+Unit=kairos-daily.service
 
 [Install]
 WantedBy=timers.target

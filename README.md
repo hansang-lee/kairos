@@ -1,14 +1,14 @@
-# libyfinance
+# kairos
 
 > A C++17 quant trading system for the Korean and US equity markets.
 
-[![Daily Macro Report](https://github.com/hslee/libyfinance/actions/workflows/macro-report.yml/badge.svg)](https://github.com/hslee/libyfinance/actions)
+[![Daily Macro Report](https://github.com/hansang-lee/kairos/actions/workflows/macro-report.yml/badge.svg)](https://github.com/hansang-lee/kairos/actions)
 
 ---
 
 ## 📋 Overview
 
-libyfinance is a quant investing framework written in C++17.
+kairos is a C++17 automated trading system: strategies are backtested, then executed against a live broker account. The name is Greek for the decisive moment — the opportune instant to act.
 
 **Core features:**
 - **25 technical indicators** — trend (SMA/EMA/WMA/ADX/Parabolic SAR/SuperTrend/Aroon), momentum (RSI/MACD/ROC/CCI/Williams %R/TRIX/Stochastic/MA slope), volume (VWAP/OBV/MFI/CMF/A-D Line), volatility (Bollinger/ATR/StdDev/Keltner/Donchian)
@@ -26,7 +26,7 @@ libyfinance is a quant investing framework written in C++17.
 ## 🏛️ Architecture
 
 ```
-libyfinance/
+kairos/
 ├── include/                     # C++ headers
 │   ├── yfinance.hpp             # Yahoo Finance / FRED / CNN F&G API client
 │   ├── indicator.hpp            # 25 technical indicators (trend/momentum/volume/volatility)
@@ -274,7 +274,7 @@ The 2026 dates up to the file's `verified_through` were derived from real KIS da
 Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `.env` to get a push when a **live** order is placed, fails, or is blocked by a risk limit. Dry runs stay silent. Both apps print `alerts=on/off` at startup, and `notify_test` verifies a setup before you depend on it:
 
 ```bash
-./build/Release/app/notify_test "hello from libyfinance"
+./build/Release/app/notify_test "hello from kairos"
 ```
 
 ### Trade journal
@@ -303,15 +303,15 @@ systemd **user** units (no root, nothing installed system-wide):
 
 | Unit | What it does |
 |----|------|
-| `libyfinance-dashboard.service` | Serves the dashboard on :8800, refreshing every 60s |
-| `libyfinance-daily.timer` | Fires `daily_trade --all` at 15:15 on weekdays |
-| `libyfinance-scalp.service` | Runs the scalping loop continuously (it gates itself on market hours) |
+| `kairos-dashboard.service` | Serves the dashboard on :8800, refreshing every 60s |
+| `kairos-daily.timer` | Fires `daily_trade --all` at 15:15 on weekdays |
+| `kairos-scalp.service` | Runs the scalping loop continuously (it gates itself on market hours) |
 
 They install in **dry-run**: no orders are placed until `--live` is added to the `ExecStart` line. The installer warns if the system timezone is not `Asia/Seoul`, since `OnCalendar` is wall-clock — `15:15` on a UTC host is not 15:15 KST. User services stop at logout unless lingering is enabled (`sudo loginctl enable-linger $USER`), which the installer also checks.
 
 ```bash
-systemctl --user list-timers 'libyfinance*'
-journalctl --user -u libyfinance-scalp.service -f
+systemctl --user list-timers 'kairos*'
+journalctl --user -u kairos-scalp.service -f
 ```
 
 ---

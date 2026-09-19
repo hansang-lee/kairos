@@ -1,5 +1,5 @@
 [Unit]
-Description=libyfinance paper-trading dashboard
+Description=kairos paper-trading dashboard
 After=network-online.target
 Wants=network-online.target
 

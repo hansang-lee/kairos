@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Installs the libyfinance systemd *user* units, so nothing here needs root and
+# Installs the kairos systemd *user* units, so nothing here needs root and
 # nothing runs as a system service.
 #
 #   ./scripts/install_systemd.sh            # install + enable dashboard and daily timer
@@ -14,7 +14,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
-UNITS=(libyfinance-dashboard.service libyfinance-daily.service libyfinance-daily.timer libyfinance-scalp.service)
+UNITS=(kairos-dashboard.service kairos-daily.service kairos-daily.timer kairos-scalp.service)
 
 with_scalp=0
 uninstall=0
@@ -32,11 +32,11 @@ if ! command -v systemctl >/dev/null 2>&1; then
 fi
 
 if [[ "$uninstall" == 1 ]]; then
-    systemctl --user disable --now libyfinance-dashboard.service libyfinance-daily.timer \
-        libyfinance-scalp.service 2>/dev/null || true
+    systemctl --user disable --now kairos-dashboard.service kairos-daily.timer \
+        kairos-scalp.service 2>/dev/null || true
     for unit in "${UNITS[@]}"; do rm -f "$UNIT_DIR/$unit"; done
     systemctl --user daemon-reload
-    echo "Removed libyfinance user units."
+    echo "Removed kairos user units."
     exit 0
 fi
 
@@ -46,7 +46,7 @@ tz="$(timedatectl show -p Timezone --value 2>/dev/null || echo unknown)"
 if [[ "$tz" != "Asia/Seoul" ]]; then
     echo "WARNING: system timezone is '$tz', not Asia/Seoul."
     echo "         The daily timer's 15:15 would not be 15:15 KST. Fix the timezone or"
-    echo "         edit OnCalendar in libyfinance-daily.timer before enabling it."
+    echo "         edit OnCalendar in kairos-daily.timer before enabling it."
 fi
 
 if [[ ! -x "$ROOT/build/Release/app/daily_trade" ]]; then
@@ -61,10 +61,10 @@ for unit in "${UNITS[@]}"; do
 done
 
 systemctl --user daemon-reload
-systemctl --user enable --now libyfinance-dashboard.service
-systemctl --user enable --now libyfinance-daily.timer
+systemctl --user enable --now kairos-dashboard.service
+systemctl --user enable --now kairos-daily.timer
 if [[ "$with_scalp" == 1 ]]; then
-    systemctl --user enable --now libyfinance-scalp.service
+    systemctl --user enable --now kairos-scalp.service
 fi
 
 # Without lingering, user services stop at logout — the daily timer would then
@@ -80,12 +80,12 @@ cat <<'EOF'
 Installed in DRY-RUN mode — no orders will be placed.
 
 To trade for real on the paper account, add --live to the ExecStart line:
-  systemctl --user edit --full libyfinance-daily.service
-  systemctl --user edit --full libyfinance-scalp.service
-then: systemctl --user daemon-reload && systemctl --user restart libyfinance-scalp.service
+  systemctl --user edit --full kairos-daily.service
+  systemctl --user edit --full kairos-scalp.service
+then: systemctl --user daemon-reload && systemctl --user restart kairos-scalp.service
 
 Status and logs:
-  systemctl --user status libyfinance-daily.timer
-  systemctl --user list-timers 'libyfinance*'
-  journalctl --user -u libyfinance-scalp.service -f
+  systemctl --user status kairos-daily.timer
+  systemctl --user list-timers 'kairos*'
+  journalctl --user -u kairos-scalp.service -f
 EOF

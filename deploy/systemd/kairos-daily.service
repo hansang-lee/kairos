@@ -1,5 +1,5 @@
 [Unit]
-Description=libyfinance daily strategy run (one shot)
+Description=kairos daily strategy run (one shot)
 After=network-online.target
 Wants=network-online.target
 

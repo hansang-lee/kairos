@@ -8,7 +8,7 @@
  * during a live session — a notifier that silently does nothing is worse than none.
  */
 int main(int argc, char* argv[]) {
-    const std::string text = (argc >= 2) ? argv[1] : "libyfinance: notification test";
+    const std::string text = (argc >= 2) ? argv[1] : "kairos: notification test";
 
     const notify::Telegram telegram;
     if (!telegram.enabled()) {

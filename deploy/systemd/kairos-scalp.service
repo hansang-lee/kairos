@@ -1,5 +1,5 @@
 [Unit]
-Description=libyfinance intraday scalping loop
+Description=kairos intraday scalping loop
 After=network-online.target
 Wants=network-online.target
 

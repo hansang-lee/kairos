@@ -8,7 +8,7 @@ macro(BUILD_APP "NAME")
   )
   target_link_libraries(
     ${APP} PRIVATE
-      yfinance::yfinance
+      kairos::kairos
   )
   target_include_directories(
     ${APP} PRIVATE
