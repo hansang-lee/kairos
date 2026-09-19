@@ -292,6 +292,44 @@ which also discards the loss limit's reference point; do it knowingly.
 
 ---
 
+## Intraday data and scalping
+
+Minute bars cannot be fetched retroactively — KIS serves only today's, Yahoo
+about five days at 1-minute. So the archive under `data/bars/` (gitignored) is
+built up as you go, and it is the only route to ever backtesting a scalper.
+
+```bash
+./build/Release/app/bar_collect --interval 1m --range 5d   # seed from Yahoo
+./build/Release/app/scalp_backtest --id 18                 # net of real costs
+./build/Release/app/scalp_backtest --id 18 --gross         # costs zeroed
+```
+
+`scalp_trade` saves every poll's bars automatically, so the archive grows a day
+per session. Yahoo's measured limits: 1m ~5 days, 5m/15m/30m ~1 month, 1h ~1 year.
+
+**Run `--gross` before believing any intraday result.** It separates the
+strategy's raw edge from what trading it costs, and at scalping frequency those
+are the same order of magnitude. A 0.335% KRX round trip taken 30 times a day is
+a ~2%/day drag on a 20% position, which no minute-bar strategy overcomes.
+
+Note that Sharpe is meaningless on intraday bars here: the engine annualizes by
+sqrt(252), which is only correct for daily data. Return, drawdown and win rate
+are unaffected.
+
+## Trading costs
+
+`BacktestConfig::forMarket()` carries real KIS rates (checked 2026-09), applied
+by `run_strategy` and `scalp_backtest`:
+
+| | commission (per side) | sell-side tax | round trip |
+|---|---|---|---|
+| KRX | 0.0177% | **0.20%** (증권거래세 + 농특세, raised 2026-01-01) | ~0.24% |
+| US | **0.25%** | 0.00206% (SEC fee) | ~0.50% |
+
+US is the more expensive of the two, because of the commission. Cost impact
+scales with turnover: across six KRX tickers since 2021, MACD at 310 trades
+loses 19.6pp to costs while RSI at 27 trades loses 1pp.
+
 ## Manual commands
 
 ```bash
