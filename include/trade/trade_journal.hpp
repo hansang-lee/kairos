@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <set>
 #include <string>
 
 namespace trade {
@@ -53,6 +54,15 @@ class TradeJournal {
      *         journal write must not abort a trading loop).
      */
     bool append(const JournalEntry& entry) const;
+
+    /**
+     * @brief Keys ("<orderNo>:<filledQty>") of the "fill" entries already recorded.
+     *
+     * Lets a fill sync run repeatedly over the same date without duplicating rows,
+     * while still recording a partially filled order again once more of it fills.
+     * Malformed lines are skipped rather than aborting the read.
+     */
+    [[nodiscard]] std::set<std::string> recordedFillKeys() const;
 
     [[nodiscard]] const std::string& path() const { return path_; }
 

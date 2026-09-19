@@ -1,6 +1,7 @@
 #include "broker/kis_trader.hpp"
 
 #include <sstream>
+#include <stdexcept>
 
 #include <curl/curl.h>
 #include <nlohmann/json.hpp>
@@ -12,6 +13,32 @@ namespace {
 /* KRW order prices are whole won, no decimals. */
 std::string formatPrice(double price) {
     return std::to_string(static_cast<int64_t>(price));
+}
+
+/* KIS returns numbers as strings and leaves fields blank rather than sending "0". */
+int64_t parseLong(const std::string& s) {
+    try {
+        return s.empty() ? 0 : std::stoll(s);
+    } catch (const std::exception&) {
+        return 0;
+    }
+}
+
+double parseDouble(const std::string& s) {
+    try {
+        return s.empty() ? 0.0 : std::stod(s);
+    } catch (const std::exception&) {
+        return 0.0;
+    }
+}
+
+/* Continuation keys come back space-padded to their fixed width. */
+std::string trim(const std::string& s) {
+    const auto first = s.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos) {
+        return "";
+    }
+    return s.substr(first, s.find_last_not_of(" \t\r\n") - first + 1);
 }
 
 }  // namespace
@@ -193,5 +220,129 @@ AccountBalance KisTrader::getBalance() {
         result.message = std::string("JSON parse error: ") + e.what();
     }
 
+    return result;
+}
+
+FillHistory KisTrader::getDailyFills(const std::string& startYmd, const std::string& endYmd, bool filledOnly) {
+    FillHistory result;
+
+    auto& auth = KisAuth::instance();
+    auth.loadFromEnv();
+    const std::string token = auth.getAccessToken();
+    if (token.empty()) {
+        result.message = "Failed to acquire access token.";
+        return result;
+    }
+
+    // Inner (within 3 months) lookup. The "before" variants (CTSC9215R / VTSC9215R)
+    // would be needed for older ranges, which paper trading has no use for yet.
+    const std::string trId = auth.isPaper() ? "VTTC0081R" : "TTTC0081R";
+    const std::string from = startYmd;
+    const std::string to   = endYmd.empty() ? startYmd : endYmd;
+
+    // Paper accounts cap a page at 15 records, so a busy scalping day needs many pages.
+    constexpr int kMaxPages = 60;
+    std::string   fk100;
+    std::string   nk100;
+
+    for (int page = 0; page < kMaxPages; ++page) {
+        // clang-format off
+        std::ostringstream url;
+        url << auth.getBaseUrl() << "/uapi/domestic-stock/v1/trading/inquire-daily-ccld"
+            << "?CANO=" << auth.getAccountNo()
+            << "&ACNT_PRDT_CD=" << auth.getAccountProd()
+            << "&INQR_STRT_DT=" << from
+            << "&INQR_END_DT=" << to
+            << "&SLL_BUY_DVSN_CD=00"   // 00: both sides
+            << "&INQR_DVSN=01"         // 01: oldest first
+            << "&PDNO="
+            << "&CCLD_DVSN=" << (filledOnly ? "01" : "00")
+            << "&ORD_GNO_BRNO="
+            << "&ODNO="
+            << "&INQR_DVSN_3=00"
+            << "&INQR_DVSN_1="
+            << "&EXCG_ID_DVSN_CD=KRX"
+            << "&CTX_AREA_FK100=" << fk100
+            << "&CTX_AREA_NK100=" << nk100;
+        // clang-format on
+        const std::string urlStr = url.str();
+
+        CURL* curl = curl_easy_init();
+        if (!curl) {
+            result.message = "curl_easy_init failed.";
+            return result;
+        }
+
+        std::string        response;
+        struct curl_slist* headers = nullptr;
+        headers                    = curl_slist_append(headers, "Content-Type: application/json; charset=utf-8");
+        headers                    = curl_slist_append(headers, ("authorization: Bearer " + token).c_str());
+        headers                    = curl_slist_append(headers, ("appkey: " + auth.getAppKey()).c_str());
+        headers                    = curl_slist_append(headers, ("appsecret: " + auth.getAppSecret()).c_str());
+        headers                    = curl_slist_append(headers, ("tr_id: " + trId).c_str());
+        headers                    = curl_slist_append(headers, "custtype: P");
+        headers                    = curl_slist_append(headers, page == 0 ? "tr_cont: " : "tr_cont: N");
+
+        curl_easy_setopt(curl, CURLOPT_URL, urlStr.c_str());
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+
+        CURLcode res = curl_easy_perform(curl);
+        curl_slist_free_all(headers);
+        curl_easy_cleanup(curl);
+
+        if (res != CURLE_OK) {
+            result.message = std::string("Fill history request failed: ") + curl_easy_strerror(res);
+            return result;
+        }
+
+        try {
+            const auto j = nlohmann::json::parse(response);
+            if (j.value("rt_cd", "1") != "0") {
+                result.message = j.value("msg1", "Unknown error");
+                return result;
+            }
+
+            const std::size_t before = result.fills.size();
+            if (j.contains("output1")) {
+                for (const auto& item : j["output1"]) {
+                    const std::string ticker = item.value("pdno", "");
+                    if (ticker.empty()) {
+                        continue;  // padding row
+                    }
+                    Fill f;
+                    f.orderDate    = item.value("ord_dt", "");
+                    f.orderTime    = item.value("ord_tmd", "");
+                    f.orderNo      = item.value("odno", "");
+                    f.ticker       = ticker;
+                    f.name         = item.value("prdt_name", "");
+                    f.side         = (item.value("sll_buy_dvsn_cd", "02") == "01") ? OrderSide::Sell : OrderSide::Buy;
+                    f.orderQty     = parseLong(item.value("ord_qty", "0"));
+                    f.filledQty    = parseLong(item.value("tot_ccld_qty", "0"));
+                    f.orderPrice   = parseDouble(item.value("ord_unpr", "0"));
+                    f.avgPrice     = parseDouble(item.value("avg_prvs", "0"));
+                    f.filledAmount = parseDouble(item.value("tot_ccld_amt", "0"));
+                    f.cancelled    = (item.value("cncl_yn", "N") == "Y");
+                    result.fills.push_back(f);
+                }
+            }
+
+            const std::string nextFk = trim(j.value("ctx_area_fk100", ""));
+            const std::string nextNk = trim(j.value("ctx_area_nk100", ""));
+            // Stop when the server hands back no continuation key, repeats the one we
+            // just used, or returns a page that added nothing.
+            if (nextNk.empty() || nextNk == nk100 || result.fills.size() == before) {
+                break;
+            }
+            fk100 = nextFk;
+            nk100 = nextNk;
+        } catch (const std::exception& e) {
+            result.message = std::string("JSON parse error: ") + e.what();
+            return result;
+        }
+    }
+
+    result.success = true;
     return result;
 }

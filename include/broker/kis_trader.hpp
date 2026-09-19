@@ -36,6 +36,33 @@ struct AccountBalance {
 };
 
 /**
+ * @brief One order as KIS recorded it, including how much of it actually filled.
+ *
+ * This is the authoritative side of the trade log: the journal knows why an
+ * order was sent, KIS knows what it cost. Records are matched on orderNo.
+ */
+struct Fill {
+    std::string orderDate;                      ///< ord_dt, YYYYMMDD
+    std::string orderTime;                      ///< ord_tmd, HHMMSS
+    std::string orderNo;                        ///< odno
+    std::string ticker;                         ///< pdno
+    std::string name;                           ///< prdt_name
+    OrderSide   side         = OrderSide::Buy;  ///< sll_buy_dvsn_cd (01 sell, 02 buy)
+    int64_t     orderQty     = 0;               ///< ord_qty
+    int64_t     filledQty    = 0;               ///< tot_ccld_qty (0 = accepted but unfilled)
+    double      orderPrice   = 0.0;             ///< ord_unpr (0 for market orders)
+    double      avgPrice     = 0.0;             ///< avg_prvs, average fill price
+    double      filledAmount = 0.0;             ///< tot_ccld_amt
+    bool        cancelled    = false;           ///< cncl_yn == "Y"
+};
+
+struct FillHistory {
+    bool              success = false;
+    std::string       message;
+    std::vector<Fill> fills;
+};
+
+/**
  * @brief KIS domestic-stock cash order placement and balance inquiry.
  *
  * Reads credentials via KisAuth::instance() (paper vs real mode follows
@@ -57,6 +84,20 @@ class KisTrader {
      * @brief Fetch cash balance and per-stock holdings for the configured account.
      */
     [[nodiscard]] static AccountBalance getBalance();
+
+    /**
+     * @brief Fetch order/fill history (KIS: 주식일별주문체결조회) for a date range.
+     *
+     * Paper accounts return only 15 records per call, so the continuation keys are
+     * followed until the server stops handing one back. KIS recommends querying
+     * after 15:30 KST — same-day results before the close may still be incomplete.
+     *
+     * @param startYmd Inclusive start date, "YYYYMMDD".
+     * @param endYmd   Inclusive end date, "YYYYMMDD". Empty (default) means startYmd.
+     * @param filledOnly Return only orders with a fill (CCLD_DVSN=01) instead of all.
+     */
+    [[nodiscard]] static FillHistory getDailyFills(const std::string& startYmd, const std::string& endYmd = "",
+                                                   bool filledOnly = true);
 
    private:
     static std::size_t writeCallback(void* contents, std::size_t size, std::size_t nmemb, void* userp);

@@ -59,4 +59,30 @@ bool TradeJournal::append(const JournalEntry& entry) const {
     return out.good();
 }
 
+std::set<std::string> TradeJournal::recordedFillKeys() const {
+    std::set<std::string> keys;
+
+    std::ifstream in(path_);
+    if (!in.is_open()) {
+        return keys;  // no journal yet — nothing has been recorded
+    }
+
+    std::string line;
+    while (std::getline(in, line)) {
+        if (line.empty()) {
+            continue;
+        }
+        try {
+            const auto j = nlohmann::json::parse(line);
+            if (j.value("event", "") != "fill") {
+                continue;
+            }
+            keys.insert(j.value("order_no", "") + ":" + std::to_string(j.value("qty", static_cast<int64_t>(0))));
+        } catch (const std::exception&) {
+            continue;  // a torn final line from a killed process must not hide the rest
+        }
+    }
+    return keys;
+}
+
 }  // namespace trade

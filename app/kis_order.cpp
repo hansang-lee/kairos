@@ -1,6 +1,8 @@
 #include <cstdint>
+#include <ctime>
 #include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <string>
 
 #include "broker/kis_auth.hpp"
@@ -9,9 +11,17 @@
 
 namespace {
 
+std::string todayKst() {
+    const std::time_t  kst = std::time(nullptr) + 9 * 3600;
+    std::ostringstream oss;
+    oss << std::put_time(std::gmtime(&kst), "%Y%m%d");
+    return oss.str();
+}
+
 void printUsage() {
     std::cout << "Usage:\n"
               << "  kis_order balance\n"
+              << "  kis_order fills [YYYYMMDD] [YYYYMMDD]  (default: today; syncs into the trade journal)\n"
               << "  kis_order buy  <ticker> <qty> [price]   (price omitted or 0 = market order)\n"
               << "  kis_order sell <ticker> <qty> [price]\n";
 }
@@ -41,6 +51,63 @@ int runBalance() {
                   << h.profitLossAmount << std::setprecision(2) << std::setw(9) << h.profitLossRate << "%"
                   << std::setprecision(0) << "\n";
     }
+    return 0;
+}
+
+int runFills(int argc, char* argv[]) {
+    const std::string from = (argc >= 3) ? argv[2] : todayKst();
+    const std::string to   = (argc >= 4) ? argv[3] : from;
+
+    const auto history = KisTrader::getDailyFills(from, to);
+    if (!history.success) {
+        std::cerr << "[-] Failed to fetch fill history: " << history.message << std::endl;
+        return 1;
+    }
+
+    std::cout << "[*] " << from << " ~ " << to << ": " << history.fills.size() << " order(s)\n\n";
+    if (history.fills.empty()) {
+        return 0;
+    }
+
+    std::cout << std::fixed << std::setprecision(0);
+    std::cout << std::left << std::setw(10) << "Date" << std::setw(8) << "Time" << std::setw(12) << "OrderNo"
+              << std::setw(10) << "Ticker" << std::setw(6) << "Side" << std::right << std::setw(8) << "Qty"
+              << std::setw(8) << "Filled" << std::setw(12) << "AvgPrice" << std::setw(14) << "Amount" << "\n";
+    for (const auto& f : history.fills) {
+        std::cout << std::left << std::setw(10) << f.orderDate << std::setw(8) << f.orderTime << std::setw(12)
+                  << f.orderNo << std::setw(10) << f.ticker << std::setw(6)
+                  << (f.side == OrderSide::Buy ? "BUY" : "SELL") << std::right << std::setw(8) << f.orderQty
+                  << std::setw(8) << f.filledQty << std::setw(12) << f.avgPrice << std::setw(14) << f.filledAmount
+                  << (f.cancelled ? "  (cancelled)" : "") << "\n";
+    }
+
+    // Append what KIS confirmed, so the journal carries real fill prices next to
+    // the intent we recorded when the order was sent. Re-running is a no-op.
+    const trade::TradeJournal journal;
+    const auto                already = journal.recordedFillKeys();
+    const std::string         mode    = KisAuth::instance().isPaper() ? "paper" : "live";
+
+    int added = 0;
+    for (const auto& f : history.fills) {
+        if (f.filledQty == 0 || already.count(f.orderNo + ":" + std::to_string(f.filledQty))) {
+            continue;
+        }
+        trade::JournalEntry entry;
+        entry.event    = "fill";
+        entry.mode     = mode;
+        entry.ticker   = f.ticker;
+        entry.side     = (f.side == OrderSide::Buy) ? "BUY" : "SELL";
+        entry.quantity = f.filledQty;
+        entry.price    = f.avgPrice;
+        entry.reason   = f.cancelled ? "cancelled" : "filled";
+        entry.orderNo  = f.orderNo;
+        entry.success  = !f.cancelled;
+        entry.message  = f.orderDate + " " + f.orderTime + " " + f.name;
+        if (journal.append(entry)) {
+            ++added;
+        }
+    }
+    std::cout << "\n[+] Journal: " << added << " new fill record(s) -> " << journal.path() << std::endl;
     return 0;
 }
 
@@ -97,6 +164,9 @@ int main(int argc, char* argv[]) {
     const std::string cmd = argv[1];
     if (cmd == "balance") {
         return runBalance();
+    }
+    if (cmd == "fills") {
+        return runFills(argc, argv);
     }
     if (cmd == "buy") {
         return runOrder(OrderSide::Buy, argc, argv);
