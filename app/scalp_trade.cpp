@@ -14,7 +14,7 @@
 #include "common/util.hpp"
 #include "data/kis_provider.hpp"
 #include "strategy/strategy_factory.hpp"
-#include "trade/trade_journal.hpp"
+#include "trade/signal_executor.hpp"
 
 namespace {
 
@@ -48,15 +48,6 @@ std::string nowLabel() {
     std::ostringstream oss;
     oss << std::setfill('0') << std::setw(4) << hm;
     return oss.str();
-}
-
-const StockHolding* findHolding(const AccountBalance& balance, const std::string& ticker) {
-    for (const auto& h : balance.holdings) {
-        if (h.ticker == ticker) {
-            return &h;
-        }
-    }
-    return nullptr;
 }
 
 void printUsage() {
@@ -131,13 +122,10 @@ int main(int argc, char* argv[]) {
 
     std::signal(SIGINT, onSigint);
 
-    KisAuth::instance().loadFromEnv();
-    const std::string   accountMode = KisAuth::instance().isPaper() ? "paper" : "live";
-    trade::TradeJournal journal;
-    std::cout << "[*] Trade journal: " << journal.path() << "\n";
+    trade::SignalExecutor executor(*profile, live, maxTrades);
+    std::cout << "[*] Trade journal: " << executor.journal().path() << "\n";
 
     KisProvider provider;
-    int         tradesThisSession = 0;
 
     while (!g_stop) {
         if (!isKrxMarketOpen()) {
@@ -160,89 +148,43 @@ int main(int argc, char* argv[]) {
         }
 
         strat->init(*data);
+        // Index convention: evaluate(i) decides the order executed at bar i using
+        // closes through i-1. The last bar is the minute still forming, so that
+        // bar is "now" — exactly what the backtest does, with no look-ahead.
         const Signal signal       = strat->evaluate(*data, data->close.size() - 1);
         const double currentPrice = data->close.back();
 
-        const auto          balance = KisTrader::getBalance();
-        const StockHolding* holding = balance.success ? findHolding(balance, profile->ticker) : nullptr;
-
-        bool        doBuy  = false;
-        bool        doSell = false;
-        std::string reason;
-
-        if (holding && profile->stopLossPct > 0.0
-            && currentPrice <= holding->avgPrice * (1.0 - profile->stopLossPct / 100.0)) {
-            doSell = true;
-            reason = "STOP-LOSS";
-        } else if (signal == Signal::BUY && !holding) {
-            doBuy  = true;
-            reason = "signal BUY";
-        } else if (signal == Signal::SELL && holding) {
-            doSell = true;
-            reason = "signal SELL";
-        }
+        const auto decision = executor.execute(signal, currentPrice, KisTrader::getBalance());
 
         std::cout << "[" << nowLabel() << "] price=" << currentPrice << " signal="
                   << (signal == Signal::BUY    ? "BUY"
                       : signal == Signal::SELL ? "SELL"
                                                : "HOLD")
-                  << " holding=" << (holding ? std::to_string(holding->quantity) : "0");
-        if (holding) {
-            std::cout << " avgPrice=" << holding->avgPrice;
+                  << " holding=" << decision.heldQty;
+        if (decision.heldQty > 0) {
+            std::cout << " avgPrice=" << decision.heldAvgPrice;
         }
         std::cout << std::endl;
 
-        if (doBuy || doSell) {
-            // Size the order up front so the journal records it even when nothing is sent.
-            int64_t qty = 1;
-            if (doBuy) {
-                const double allocCash = balance.cashBalance * profile->positionPct;
-                qty                    = std::max<int64_t>(1, static_cast<int64_t>(allocCash / currentPrice));
-            } else if (holding) {
-                qty = holding->quantity;
-            }
-
-            trade::JournalEntry entry;
-            entry.mode       = accountMode;
-            entry.dryRun     = !live;
-            entry.strategyId = profile->id;
-            entry.strategy   = profile->name;
-            entry.category   = profile->category;
-            entry.ticker     = profile->ticker;
-            entry.side       = doBuy ? "BUY" : "SELL";
-            entry.quantity   = qty;
-            entry.price      = currentPrice;
-            entry.reason     = reason;
-
-            if (tradesThisSession >= maxTrades) {
-                std::cout << "  [SKIPPED] max-trades (" << maxTrades << ") reached this session (" << reason << ")\n";
-                entry.event   = "skip";
-                entry.message = "max-trades reached this session";
-            } else if (!live) {
-                std::cout << "  [DRY-RUN] would " << entry.side << " x" << qty << " (" << reason << ")\n";
+        if (decision.acted) {
+            if (decision.skipped) {
+                std::cout << "  [SKIPPED] max-trades (" << maxTrades << ") reached this session (" << decision.reason
+                          << ")\n";
+            } else if (!decision.sent) {
+                std::cout << "  [DRY-RUN] would " << decision.side << " x" << decision.quantity << " ("
+                          << decision.reason << ")\n";
+            } else if (decision.order.success) {
+                std::cout << "  [ORDER] " << decision.side << " x" << decision.quantity << " (" << decision.reason
+                          << ") -> No: " << decision.order.orderNo << "\n";
             } else {
-                const auto result =
-                    KisTrader::placeOrder(doBuy ? OrderSide::Buy : OrderSide::Sell, profile->ticker, qty);
-                tradesThisSession++;
-                entry.orderNo = result.orderNo;
-                entry.success = result.success;
-                entry.message = result.message;
-                if (result.success) {
-                    std::cout << "  [ORDER] " << entry.side << " x" << qty << " (" << reason
-                              << ") -> No: " << result.orderNo << "\n";
-                } else {
-                    std::cout << "  [ORDER FAILED] " << entry.side << " x" << qty << ": " << result.message << "\n";
-                }
-            }
-
-            if (!journal.append(entry)) {
-                std::cerr << "  [!] Failed to write trade journal at " << journal.path() << "\n";
+                std::cout << "  [ORDER FAILED] " << decision.side << " x" << decision.quantity << ": "
+                          << decision.order.message << "\n";
             }
         }
 
         std::this_thread::sleep_for(std::chrono::seconds(intervalSec));
     }
 
-    std::cout << "\n[*] Stopped (Ctrl+C). " << tradesThisSession << " order(s) attempted this session.\n";
+    std::cout << "\n[*] Stopped (Ctrl+C). " << executor.ordersSent() << " order(s) attempted this session.\n";
     return 0;
 }
