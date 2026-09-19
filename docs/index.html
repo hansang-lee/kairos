@@ -638,6 +638,45 @@
             margin-left: 0.35rem;
         }
 
+        /* Trade journal */
+        .trade-time {
+            color: var(--text-muted);
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+        }
+
+        .trade-sent, .trade-fill, .trade-dry, .trade-skip, .trade-fail {
+            display: inline-block;
+            padding: 0.1rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .trade-sent { background: rgba(56, 161, 105, 0.18); color: #48bb78; }
+        .trade-fill { background: rgba(56, 161, 105, 0.28); color: #68d391; }
+        .trade-dry  { background: rgba(255, 255, 255, 0.07); color: var(--text-muted); }
+        .trade-skip { background: rgba(214, 158, 46, 0.18); color: #ecc94b; }
+        .trade-fail { background: rgba(229, 62, 62, 0.18); color: #fc8181; }
+
+        .side-buy  { color: #fc8181; font-weight: 600; white-space: nowrap; }
+        .side-sell { color: #63b3ed; font-weight: 600; white-space: nowrap; }
+
+        .trade-why {
+            color: var(--text-muted);
+            font-size: 0.78rem;
+            max-width: 18rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .trade-strategy {
+            color: var(--text-muted);
+            font-size: 0.78rem;
+        }
+
         .empty-msg {
             color: var(--text-muted);
             font-size: 0.85rem;
@@ -721,7 +760,8 @@
                 const p = await loadJson(['live/portfolio.json', 'portfolio.json']);
                 if (!p || !p.success) return;
                 const history = (await loadJson(['live/portfolio_history.json', 'portfolio_history.json'])) || [];
-                renderPortfolio(p, history);
+                const trades = (await loadJson(['live/trades.json', 'trades.json'])) || [];
+                renderPortfolio(p, history, trades);
             }
 
             await loadPortfolio();
@@ -891,7 +931,7 @@
             `;
             }
 
-            function renderPortfolio(p, history) {
+            function renderPortfolio(p, history, trades) {
                 portfolioState = { p, history };
                 const principal = p.initial_capital_krw || 0;
                 const total = p.total_eval_krw || 0;
@@ -931,6 +971,10 @@
                 <div class="card">
                     <div class="card-title">보유 종목</div>
                     ${buildHoldingsTable(p.holdings, total)}
+                </div>
+                <div class="card">
+                    <div class="card-title">매매 내역</div>
+                    ${buildTradesTable(trades)}
                 </div>`;
 
                 attachChartHandlers(history, principal);
@@ -1070,6 +1114,60 @@
                     cross.style.opacity = '0';
                     dot.style.opacity = '0';
                 });
+            }
+
+            /* Every decision the trading loops made, including the ones they chose not
+               to act on — a dry run or a blocked order leaves no other visible trace. */
+            function buildTradesTable(trades) {
+                if (!trades || !trades.length) {
+                    return '<div class="empty-msg">아직 매매 기록이 없습니다.</div>';
+                }
+
+                const rows = trades.map(t => {
+                    const isBuy = t.side === 'BUY';
+                    const time = (t.time || '').slice(5, 16);   // MM-DD HH:MM
+
+                    let status, cls;
+                    if (t.event === 'skip') {
+                        status = '차단됨';
+                        cls = 'trade-skip';
+                    } else if (t.event === 'fill') {
+                        status = '체결';
+                        cls = 'trade-fill';
+                    } else if (t.dry_run) {
+                        status = '모의';
+                        cls = 'trade-dry';
+                    } else if (t.success) {
+                        status = '주문';
+                        cls = 'trade-sent';
+                    } else {
+                        status = '실패';
+                        cls = 'trade-fail';
+                    }
+
+                    const qty = Number(t.qty || 0).toLocaleString();
+                    const price = Number(t.price || 0).toLocaleString();
+                    const why = t.message ? `${t.reason} — ${t.message}` : (t.reason || '');
+
+                    return `<tr>
+                        <td class="trade-time">${time}</td>
+                        <td><span class="${cls}">${status}</span></td>
+                        <td class="${isBuy ? 'side-buy' : 'side-sell'}">${isBuy ? '매수' : '매도'}</td>
+                        <td>${t.ticker || ''}</td>
+                        <td class="num">${qty}</td>
+                        <td class="num">${price}</td>
+                        <td class="trade-why" title="${(why || '').replace(/"/g, '&quot;')}">${why}</td>
+                        <td class="trade-strategy">${t.strategy || ''}</td>
+                    </tr>`;
+                }).join('');
+
+                return `<table class="holdings-table">
+                    <thead><tr>
+                        <th>시각</th><th>상태</th><th>구분</th><th>종목</th>
+                        <th class="num">수량</th><th class="num">가격</th><th>사유</th><th>전략</th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>`;
             }
 
             function buildHoldingsTable(holdings, total) {

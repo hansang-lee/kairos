@@ -25,6 +25,9 @@ REPORT_BIN = os.path.join(ROOT, "build", "Release", "app", "portfolio_report")
 LIB_DIR = os.path.join(ROOT, "build", "Release")
 SNAPSHOT_PATH = os.path.join(CACHE_DIR, "portfolio.json")
 HISTORY_PATH = os.path.join(CACHE_DIR, "portfolio_history.json")
+JOURNAL_PATH = os.path.join(ROOT, "data", "trades.jsonl")
+TRADES_PATH = os.path.join(CACHE_DIR, "trades.json")
+MAX_TRADES = 50
 MAX_HISTORY = 5000
 
 
@@ -77,6 +80,31 @@ def append_history(snapshot):
     return len(history)
 
 
+def collect_trades():
+    """Most recent journal entries, newest first, for the dashboard.
+
+    The journal is append-only JSONL under data/ and grows without bound, so the
+    page gets a bounded slice rather than the file. Malformed lines are skipped:
+    a process killed mid-write leaves a partial one, and it must not hide the rest.
+    """
+    if not os.path.exists(JOURNAL_PATH):
+        return []
+
+    entries = []
+    with open(JOURNAL_PATH, encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entries.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+
+    entries.sort(key=lambda e: e.get("ts", 0), reverse=True)
+    return entries[:MAX_TRADES]
+
+
 def refresh_once():
     snapshot = run_report()
     if snapshot is None:
@@ -87,11 +115,15 @@ def refresh_once():
         print(f"[dashboard] snapshot reported failure: {snapshot.get('message', '')}", flush=True)
         return
     count = append_history(snapshot)
+
+    trades = collect_trades()
+    with open(TRADES_PATH, "w", encoding="utf-8") as fh:
+        json.dump(trades, fh, ensure_ascii=False, indent=2)
     print(
         f"[dashboard] {time.strftime('%H:%M:%S')} "
         f"return={snapshot.get('total_return_pct', 0):+.2f}% "
         f"eval={snapshot.get('total_eval_krw', 0):,.0f} KRW "
-        f"holdings={len(snapshot.get('holdings', []))} history={count}",
+        f"holdings={len(snapshot.get('holdings', []))} history={count} trades={len(trades)}",
         flush=True,
     )
 

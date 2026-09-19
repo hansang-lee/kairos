@@ -67,7 +67,7 @@ void printUsage() {
  * @return true if the profile was evaluated (not that an order was placed).
  */
 bool runProfile(const StrategyProfile& profile, KisProvider& kis, bool live, int lookbackDays,
-                const trade::RiskLimits& limits) {
+                const trade::ExecutionContext& ctx) {
     std::cout << "\n----------------------------------------------------------------------------------------\n";
     std::cout << " #" << profile.id << " " << profile.name << " (" << profile.ticker
               << ")  position=" << (profile.positionPct * 100.0) << "%  stop-loss=" << profile.stopLossPct << "%\n";
@@ -106,8 +106,14 @@ bool runProfile(const StrategyProfile& profile, KisProvider& kis, bool live, int
               << (hasToday ? " (today, still forming)" : " (today not published yet)")
               << "  signal=" << signalName(signal) << "\n";
 
-    trade::SignalExecutor executor(profile, live, 1, limits);  // one order per run, per profile
-    const auto            decision = executor.execute(signal, lastClose, KisTrader::getBalance());
+    // One order per profile per run, and one shared context across profiles: the
+    // risk guard and position store describe the account, not a strategy. Separate
+    // copies would overwrite each other's file — it only worked here because the
+    // profiles run strictly one after another, which is not a property to rely on.
+    trade::SignalExecutor executor(profile, live, 1, ctx);
+    // The balance is re-fetched per profile on purpose: an order placed by the
+    // previous one has already changed the cash the next one should size against.
+    const auto decision = executor.execute(signal, lastClose, KisTrader::getBalance());
 
     std::cout << " holding=" << decision.heldQty;
     if (decision.heldQty > 0) {
@@ -223,9 +229,10 @@ int main(int argc, char* argv[]) {
     }
 
     KisProvider kis;
+    auto        ctx       = trade::ExecutionContext::create(limits);
     int         evaluated = 0;
     for (const auto* p : targets) {
-        if (runProfile(*p, kis, live, lookbackDays, config.getRiskLimits())) {
+        if (runProfile(*p, kis, live, lookbackDays, ctx)) {
             ++evaluated;
         }
     }
