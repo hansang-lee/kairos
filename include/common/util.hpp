@@ -1,11 +1,13 @@
 #pragma once
 
+#include <cstdlib>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <functional>
 #include <iomanip>
 #include <iostream>
+#include <map>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -26,7 +28,8 @@ struct Defer {
     explicit Defer(std::function<void()> f)
         : f(std::move(f)) {}
     ~Defer() {
-        if (f) f();
+        if (f)
+            f();
     }
 };
 
@@ -36,8 +39,8 @@ struct Defer {
  * @return Formatted date string.
  */
 [[nodiscard]] inline std::string formatTime(const int64_t timestamp) {
-    const std::time_t t = static_cast<std::time_t>(timestamp);
-    const std::tm*    lt = std::localtime(&t);
+    const std::time_t  t  = static_cast<std::time_t>(timestamp);
+    const std::tm*     lt = std::localtime(&t);
     std::ostringstream oss;
     oss << std::put_time(lt, "%Y-%m-%d");
     return oss.str();
@@ -49,8 +52,8 @@ struct Defer {
  * @return Formatted datetime string.
  */
 [[nodiscard]] inline std::string formatDateTime(const int64_t timestamp) {
-    const std::time_t t = static_cast<std::time_t>(timestamp);
-    const std::tm*    lt = std::localtime(&t);
+    const std::time_t  t  = static_cast<std::time_t>(timestamp);
+    const std::tm*     lt = std::localtime(&t);
     std::ostringstream oss;
     oss << std::put_time(lt, "%Y-%m-%d %H:%M:%S");
     return oss.str();
@@ -72,6 +75,50 @@ struct Defer {
     auto exePath    = fs::read_symlink("/proc/self/exe");
     auto projectDir = exePath.parent_path().parent_path().parent_path().parent_path();
     return (projectDir / relativePath).string();
+}
+
+/**
+ * @brief Look up a key from a .env file, falling back to the process environment.
+ *
+ * The file is read once per path and cached, so this is cheap to call repeatedly.
+ * Returns an empty string when the key is absent or blank, which callers treat as
+ * "feature not configured" rather than an error.
+ */
+[[nodiscard]] inline std::string envValue(const std::string& key, const std::string& envPath = ".env") {
+    static std::map<std::string, std::map<std::string, std::string>> cache;
+
+    auto it = cache.find(envPath);
+    if (it == cache.end()) {
+        std::map<std::string, std::string> values;
+        std::ifstream                      file(envPath);
+        std::string                        line;
+        while (std::getline(file, line)) {
+            if (line.empty() || line[0] == '#') {
+                continue;
+            }
+            const auto pos = line.find('=');
+            if (pos == std::string::npos) {
+                continue;
+            }
+            auto trim = [](std::string s) {
+                const auto first = s.find_first_not_of(" \t\r\n");
+                if (first == std::string::npos) {
+                    return std::string();
+                }
+                return s.substr(first, s.find_last_not_of(" \t\r\n") - first + 1);
+            };
+            values[trim(line.substr(0, pos))] = trim(line.substr(pos + 1));
+        }
+        it = cache.emplace(envPath, std::move(values)).first;
+    }
+
+    if (const auto v = it->second.find(key); v != it->second.end() && !v->second.empty()) {
+        return v->second;
+    }
+    if (const char* v = std::getenv(key.c_str()); v && *v) {
+        return v;
+    }
+    return "";
 }
 
 /**

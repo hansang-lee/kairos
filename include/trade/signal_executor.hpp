@@ -4,6 +4,7 @@
 #include <string>
 
 #include "broker/kis_trader.hpp"
+#include "notify/telegram.hpp"
 #include "strategy/istrategy.hpp"
 #include "strategy/strategy_factory.hpp"
 #include "trade/risk_guard.hpp"
@@ -58,9 +59,10 @@ class SignalExecutor {
      */
     Decision execute(Signal signal, double price, const AccountBalance& balance);
 
-    [[nodiscard]] int                 ordersSent() const { return ordersSent_; }
-    [[nodiscard]] const TradeJournal& journal() const { return journal_; }
-    [[nodiscard]] const RiskGuard&    risk() const { return risk_; }
+    [[nodiscard]] int                     ordersSent() const { return ordersSent_; }
+    [[nodiscard]] const TradeJournal&     journal() const { return journal_; }
+    [[nodiscard]] const RiskGuard&        risk() const { return risk_; }
+    [[nodiscard]] const notify::Telegram& notifier() const { return notify_; }
 
    private:
     const StrategyProfile& profile_;
@@ -69,6 +71,7 @@ class SignalExecutor {
     int                    ordersSent_ = 0;
     TradeJournal           journal_;
     RiskGuard              risk_;
+    notify::Telegram       notify_;
     std::string            mode_;
 };
 

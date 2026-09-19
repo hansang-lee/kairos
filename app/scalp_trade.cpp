@@ -14,6 +14,7 @@
 #include "common/util.hpp"
 #include "data/kis_provider.hpp"
 #include "data/krx_calendar.hpp"
+#include "notify/telegram.hpp"
 #include "strategy/strategy_factory.hpp"
 #include "trade/signal_executor.hpp"
 
@@ -125,7 +126,8 @@ int main(int argc, char* argv[]) {
     std::cout << "========================================================================================\n";
     std::cout << " Scalp Trade: #" << profile->id << " " << profile->name << " (" << profile->ticker << ")\n";
     std::cout << " interval=" << intervalSec << "s  mode=" << (live ? "LIVE" : "DRY-RUN")
-              << "  max-trades=" << maxTrades << "  stop-loss=" << profile->stopLossPct << "%\n";
+              << "  max-trades=" << maxTrades << "  stop-loss=" << profile->stopLossPct
+              << "%  alerts=" << (notify::Telegram().enabled() ? "on" : "off") << "\n";
     std::cout << "========================================================================================\n";
     if (!live) {
         std::cout << "[*] Dry-run mode: no real orders will be placed. Pass --live to trade for real.\n";

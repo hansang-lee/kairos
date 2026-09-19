@@ -28,6 +28,7 @@ add_library(${PROJECT_NAME} SHARED
   src/trade/trade_journal.cpp
   src/trade/signal_executor.cpp
   src/trade/risk_guard.cpp
+  src/notify/telegram.cpp
   lib/sma_crossover/sma_crossover.cpp
   lib/rsi/rsi_strategy.cpp
   lib/macd/macd_strategy.cpp

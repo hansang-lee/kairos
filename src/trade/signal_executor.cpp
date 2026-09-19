@@ -1,6 +1,7 @@
 #include "trade/signal_executor.hpp"
 
 #include <algorithm>
+#include <sstream>
 
 #include "broker/kis_auth.hpp"
 
@@ -109,6 +110,21 @@ Decision SignalExecutor::execute(Signal signal, double price, const AccountBalan
     }
 
     journal_.append(entry);
+
+    // Only real activity is worth a push: a dry run that would have traded, or a
+    // limit blocking a run that never intended to trade, is noise.
+    if (live_ && (d.sent || d.skipped)) {
+        std::ostringstream msg;
+        msg << (d.sent ? (d.order.success ? "[ORDER] " : "[ORDER FAILED] ") : "[BLOCKED] ") << d.side << " "
+            << profile_.ticker << " x" << d.quantity << " @ " << static_cast<int64_t>(price) << " KRW\n"
+            << profile_.name << " (#" << profile_.id << ")\n"
+            << "reason: " << d.reason;
+        if (!entry.message.empty()) {
+            msg << "\n" << entry.message;
+        }
+        notify_.send(msg.str());
+    }
+
     return d;
 }
 

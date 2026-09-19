@@ -7,6 +7,7 @@
 
 #include "data/kis_provider.hpp"
 #include "data/krx_calendar.hpp"
+#include "notify/telegram.hpp"
 #include "strategy/strategy_factory.hpp"
 #include "trade/signal_executor.hpp"
 
@@ -201,7 +202,8 @@ int main(int argc, char* argv[]) {
     std::cout << " Daily Trade  mode=" << (live ? "LIVE" : "DRY-RUN") << "  profiles=" << targets.size()
               << "  lookback=" << lookbackDays << "d\n";
     std::cout << " Risk  daily-loss-limit=" << limits.dailyLossLimitPct
-              << "%  max-orders/day=" << limits.maxOrdersPerDay << "\n";
+              << "%  max-orders/day=" << limits.maxOrdersPerDay
+              << "  alerts=" << (notify::Telegram().enabled() ? "on" : "off") << "\n";
     std::cout << "========================================================================================\n";
 
     const data::KrxCalendar calendar;
