@@ -5,7 +5,9 @@ what each edit changes, when a restart is needed, and where to look when
 something seems wrong.
 
 For what the system *is*, see [../README.md](../README.md). For the roadmap and
-what shipped versus what was planned, see [PLAN.md](PLAN.md).
+what shipped versus what was planned, see [PLAN.md](PLAN.md). For what the
+numbers in the output mean, see [GLOSSARY.md](GLOSSARY.md). For placing the
+first real order, see [FIRST_LIVE_ORDER.md](FIRST_LIVE_ORDER.md).
 
 ---
 

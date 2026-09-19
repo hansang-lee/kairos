@@ -501,6 +501,8 @@ macro report.
 
 > Full plan: [docs/PLAN.md](docs/PLAN.md)
 > Running it day to day: [docs/OPERATIONS.md](docs/OPERATIONS.md)
+> Terms used in the output: [docs/GLOSSARY.md](docs/GLOSSARY.md)
+> Placing the first real order: [docs/FIRST_LIVE_ORDER.md](docs/FIRST_LIVE_ORDER.md)
 
 ---
 
