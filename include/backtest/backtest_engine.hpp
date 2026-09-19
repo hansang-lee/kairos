@@ -17,10 +17,28 @@ struct Trade {
 };
 
 struct BacktestConfig {
-    double commissionRate    = 0.00015;  // 0.015% commission
+    double commissionRate    = 0.00015;  // brokerage commission, charged on both sides
     double slippagePct       = 0.001;    // 0.1% slippage
     double positionPct       = 1.0;      // position fraction (1.0 = full account)
     bool   reinvestDividends = false;
+
+    // Sell-side-only cost: Korean securities transaction tax, or the US SEC fee.
+    // Large enough to decide whether a high-frequency strategy is viable at all,
+    // so it is modelled separately rather than folded into the commission.
+    double sellTaxRate = 0.0;
+
+    /**
+     * @brief Real-world costs for a market, as charged by KIS (checked 2026-09).
+     *
+     * KRX: 뱅키스 online commission 0.0140527% + 유관기관수수료 ~0.0036%, and a
+     * 0.20% transaction tax on sells (KOSPI 0.05% + 농특세 0.15%; KOSDAQ 0.20%),
+     * which rose from 0.18% on 2026-01-01.
+     * US: 0.25% online commission per side plus a 0.00206% SEC fee on sells —
+     * more than twice the KRX round trip, because of the commission.
+     *
+     * @param market "KRX" or "US".
+     */
+    [[nodiscard]] static BacktestConfig forMarket(const std::string& market);
     // Stop-loss (%, 0 = disabled). If the day's low falls this far below the entry
     // price, the position is closed that same bar without waiting for a SELL signal.
     double stopLossPct = 0.0;

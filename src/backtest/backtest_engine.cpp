@@ -4,6 +4,20 @@
 #include <cmath>
 #include <numeric>
 
+BacktestConfig BacktestConfig::forMarket(const std::string& market) {
+    BacktestConfig cfg;
+    if (market == "US") {
+        cfg.commissionRate = 0.0025;     // 0.25% online, each side
+        cfg.sellTaxRate    = 0.0000206;  // 0.00206% SEC fee, sells only
+        cfg.slippagePct    = 0.0005;
+    } else {
+        cfg.commissionRate = 0.000177;  // 0.0140527% commission + ~0.0036% 유관기관수수료
+        cfg.sellTaxRate    = 0.0020;    // 0.20% 증권거래세 + 농특세, sells only
+        cfg.slippagePct    = 0.0005;
+    }
+    return cfg;
+}
+
 BacktestEngine::BacktestEngine(double initialCapital)
     : initialCapital_(initialCapital) {}
 
@@ -59,7 +73,7 @@ BacktestResult BacktestEngine::run(IStrategy& strategy, const StockInfo& data, c
             const double stopPrice = buyPrice * (1.0 - config.stopLossPct / 100.0);
             if (data.low[i] <= stopPrice) {
                 const double effectiveSellPrice =
-                    stopPrice * (1.0 - config.slippagePct) * (1.0 - config.commissionRate);
+                    stopPrice * (1.0 - config.slippagePct) * (1.0 - config.commissionRate) * (1.0 - config.sellTaxRate);
                 capital += shares * effectiveSellPrice;
 
                 Trade trade;
@@ -112,7 +126,8 @@ BacktestResult BacktestEngine::run(IStrategy& strategy, const StockInfo& data, c
             capital -= allocCapital;
         } else if (signal == Signal::SELL && inPos) {
             // Sell: apply commission & slippage to exit price
-            const double effectiveSellPrice = price * (1.0 - config.slippagePct) * (1.0 - config.commissionRate);
+            const double effectiveSellPrice =
+                price * (1.0 - config.slippagePct) * (1.0 - config.commissionRate) * (1.0 - config.sellTaxRate);
             capital += shares * effectiveSellPrice;
 
             Trade trade;
@@ -131,8 +146,9 @@ BacktestResult BacktestEngine::run(IStrategy& strategy, const StockInfo& data, c
 
     // If still in position at the end, close at last price
     if (inPos && !data.close.empty()) {
-        const double lastPrice          = data.close.back();
-        const double effectiveSellPrice = lastPrice * (1.0 - config.slippagePct) * (1.0 - config.commissionRate);
+        const double lastPrice = data.close.back();
+        const double effectiveSellPrice =
+            lastPrice * (1.0 - config.slippagePct) * (1.0 - config.commissionRate) * (1.0 - config.sellTaxRate);
         capital += shares * effectiveSellPrice;
 
         Trade trade;

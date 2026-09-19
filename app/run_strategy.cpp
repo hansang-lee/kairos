@@ -63,16 +63,16 @@ void executeProfile(const StrategyProfile& p, KisProvider& kis, const std::strin
     bConfig.stopLossPct = p.stopLossPct;
 
     if (p.market == "KRX") {
-        bConfig.commissionRate = 0.00015;
-        bConfig.slippagePct    = 0.0005;
-        bConfig.positionPct    = p.positionPct;
+        bConfig             = BacktestConfig::forMarket("KRX");
+        bConfig.stopLossPct = p.stopLossPct;
+        bConfig.positionPct = p.positionPct;
         std::cout << "[*] Fetching Korean stock data via KisProvider (" << startDate << " ~ " << endDate << ")..."
                   << std::endl;
         stock = kis.getStockInfo(p.ticker, startDate, endDate);
     } else {
-        bConfig.commissionRate = 0.0005;
-        bConfig.slippagePct    = 0.0005;
-        bConfig.positionPct    = p.positionPct;
+        bConfig             = BacktestConfig::forMarket("US");
+        bConfig.stopLossPct = p.stopLossPct;
+        bConfig.positionPct = p.positionPct;
         std::cout << "[*] Fetching US stock data via Yahoo Finance (" << startDate << " ~ " << endDate << ")..."
                   << std::endl;
         stock = yFinance::getStockInfo(p.ticker, startDate, endDate, "1d");
