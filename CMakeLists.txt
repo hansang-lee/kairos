@@ -25,6 +25,7 @@ add_library(${PROJECT_NAME} SHARED
   src/broker/kis_trader.cpp
   src/data/kis_provider.cpp
   src/data/krx_calendar.cpp
+  src/data/bar_recorder.cpp
   src/trade/trade_journal.cpp
   src/trade/signal_executor.cpp
   src/trade/risk_guard.cpp

@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "broker/kis_trader.hpp"
+#include "data/bar_recorder.hpp"
 #include "data/kis_provider.hpp"
 #include "data/krx_calendar.hpp"
 #include "notify/telegram.hpp"
@@ -230,7 +231,10 @@ int main(int argc, char* argv[]) {
         std::cout << "[!] No holiday list loaded; only weekends are treated as closed.\n";
     }
 
-    KisProvider provider;
+    KisProvider       provider;
+    data::BarRecorder recorder;
+    int               barsRecorded = 0;
+    std::cout << "[*] Bar archive: " << recorder.root() << "\n";
 
     while (!g_stop) {
         // An edit to the config takes effect on the next cycle. Rebuilding the
@@ -282,6 +286,12 @@ int main(int argc, char* argv[]) {
                 continue;
             }
 
+            // Minute history cannot be fetched back later, so keep what we just saw.
+            // Runs before the signal so a strategy error still leaves the data behind.
+            if (const int added = recorder.record(r.profile->ticker, *data); added > 0) {
+                barsRecorded += added;  // record() returns -1 on write failure
+            }
+
             r.strategy->init(*data);
             // Index convention: evaluate(i) decides the order executed at bar i using
             // closes through i-1. The last bar is the minute still forming, so that
@@ -324,6 +334,7 @@ int main(int argc, char* argv[]) {
     for (const auto& r : runners) {
         total += r.executor->ordersSent();
     }
-    std::cout << "\n[*] Stopped (Ctrl+C). " << total << " order(s) attempted this session.\n";
+    std::cout << "\n[*] Stopped (Ctrl+C). " << total << " order(s) attempted this session, " << barsRecorded
+              << " bar(s) archived.\n";
     return 0;
 }

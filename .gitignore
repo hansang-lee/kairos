@@ -28,3 +28,6 @@ Thumbs.db
 .venv/
 __pycache__/
 *.pyc
+
+# Recorded intraday bars (large, regenerable, account-independent market data)
+/data/bars/
