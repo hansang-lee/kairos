@@ -1,5 +1,6 @@
 #include "strategy/strategy_factory.hpp"
 #include <algorithm>
+#include <filesystem>
 
 #include <iostream>
 
@@ -118,9 +119,33 @@ std::unique_ptr<IStrategy> StrategyProfile::createStrategy() const {
     return nullptr;
 }
 
+namespace {
+
+/** Last-write time of a file as unix seconds; 0 when it cannot be read. */
+std::int64_t fileMtime(const std::string& path) {
+    std::error_code ec;
+    const auto      t = std::filesystem::last_write_time(path, ec);
+    if (ec) {
+        return 0;
+    }
+    return static_cast<std::int64_t>(t.time_since_epoch().count());
+}
+
+}  // namespace
+
+bool PortfolioConfig::sourceChanged() const {
+    if (sourcePath_.empty() || sourceMtime_ == 0) {
+        return false;  // nothing to compare against; never claim a spurious change
+    }
+    const std::int64_t now = fileMtime(sourcePath_);
+    return now != 0 && now != sourceMtime_;
+}
+
 PortfolioConfig PortfolioConfig::loadFromFile(const std::string& configPath) {
     PortfolioConfig cfg;
-    const auto      j = util::loadJsonConfig(configPath);
+    cfg.sourcePath_  = configPath;
+    cfg.sourceMtime_ = fileMtime(configPath);
+    const auto j     = util::loadJsonConfig(configPath);
     if (!j || !j->contains("strategies") || !(*j)["strategies"].is_array()) {
         return cfg;
     }

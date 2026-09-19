@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -70,8 +71,22 @@ class PortfolioConfig {
     /** @brief Account-wide per-day trading limits from the config's "risk" object. */
     [[nodiscard]] const trade::RiskLimits& getRiskLimits() const { return riskLimits_; }
 
+    /**
+     * @brief Last-modified time of the file this config was loaded from, 0 if unknown.
+     *
+     * Long-running loops compare this against the file on disk so an edit can be
+     * picked up without a restart.
+     */
+    [[nodiscard]] std::int64_t       getSourceMtime() const { return sourceMtime_; }
+    [[nodiscard]] const std::string& getSourcePath() const { return sourcePath_; }
+
+    /** @brief True when the source file has changed since it was loaded. */
+    [[nodiscard]] bool sourceChanged() const;
+
    private:
     std::vector<StrategyProfile> profiles_;
     double                       initialCapitalKrw_ = 10000000.0;
     trade::RiskLimits            riskLimits_;
+    std::string                  sourcePath_;
+    std::int64_t                 sourceMtime_ = 0;
 };

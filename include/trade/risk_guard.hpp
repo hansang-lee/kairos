@@ -47,6 +47,11 @@ class RiskGuard {
     /** @brief Record that an order was actually sent, for the per-day cap. */
     void recordOrder();
 
+    /** @brief Adopt new limits, e.g. after the config was edited while running. */
+    void setLimits(const RiskLimits& limits) { limits_ = limits; }
+
+    [[nodiscard]] const RiskLimits& limits() const { return limits_; }
+
     /** @brief Day's opening equity, 0 before the first check(). */
     [[nodiscard]] double openingEquity() const { return openingEquity_; }
 

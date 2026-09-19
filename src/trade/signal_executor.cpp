@@ -47,11 +47,18 @@ std::string pctString(double v) {
 
 }  // namespace
 
+ExecutionContext ExecutionContext::create(const RiskLimits& limits) {
+    return {std::make_shared<RiskGuard>(limits), std::make_shared<PositionStore>(), std::make_shared<TradeJournal>()};
+}
+
 SignalExecutor::SignalExecutor(const StrategyProfile& profile, bool live, int maxOrders, const RiskLimits& limits)
+    : SignalExecutor(profile, live, maxOrders, ExecutionContext::create(limits)) {}
+
+SignalExecutor::SignalExecutor(const StrategyProfile& profile, bool live, int maxOrders, ExecutionContext context)
     : profile_(profile)
     , live_(live)
     , maxOrders_(maxOrders)
-    , risk_(limits) {
+    , ctx_(std::move(context)) {
     KisAuth::instance().loadFromEnv();
     mode_ = KisAuth::instance().isPaper() ? "paper" : "live";
 }
@@ -91,7 +98,7 @@ Decision SignalExecutor::execute(Signal signal, double price, const AccountBalan
 
     // Reconcile local state with the broker before reading anything from it, so a
     // position closed by hand cannot leave a stale peak behind.
-    const PositionState& state = positions_.sync(profile_.ticker, heldQty, price);
+    const PositionState& state = ctx_.positions->sync(profile_.ticker, heldQty, price);
     d.heldQty                  = heldQty;
     d.heldAvgPrice             = holding ? holding->avgPrice : 0.0;
     d.peakPrice                = state.peakPrice;
@@ -167,7 +174,7 @@ Decision SignalExecutor::execute(Signal signal, double price, const AccountBalan
     entry.reason     = d.reason;
 
     const OrderSide side    = isBuy ? OrderSide::Buy : OrderSide::Sell;
-    const auto      verdict = risk_.check(side, balance);
+    const auto      verdict = ctx_.risk->check(side, balance);
 
     // Entry-side gates (window, cooldown) never apply to an exit: refusing to close
     // a position is the one thing these rules must not do.
@@ -191,12 +198,12 @@ Decision SignalExecutor::execute(Signal signal, double price, const AccountBalan
         d.order = KisTrader::placeOrder(side, profile_.ticker, d.quantity);
         d.sent  = true;
         ++ordersSent_;
-        risk_.recordOrder();
+        ctx_.risk->recordOrder();
         if (d.order.success) {
             if (isBuy) {
-                positions_.recordEntryTranche(profile_.ticker);
+                ctx_.positions->recordEntryTranche(profile_.ticker);
             } else {
-                positions_.recordExitTranche(profile_.ticker);
+                ctx_.positions->recordExitTranche(profile_.ticker);
             }
         }
         entry.orderNo = d.order.orderNo;
@@ -204,7 +211,7 @@ Decision SignalExecutor::execute(Signal signal, double price, const AccountBalan
         entry.message = d.order.message;
     }
 
-    journal_.append(entry);
+    ctx_.journal->append(entry);
 
     // Only real activity is worth a push: a dry run that would have traded, or a
     // limit blocking a run that never intended to trade, is noise.

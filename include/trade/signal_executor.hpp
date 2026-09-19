@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <string>
 
 #include "broker/kis_trader.hpp"
@@ -34,6 +35,24 @@ struct Decision {
 };
 
 /**
+ * @brief State shared by every executor in a process.
+ *
+ * The risk guard is account-wide and the position store is keyed by ticker, so
+ * both describe the account rather than one strategy. Giving each executor its
+ * own copy would have them overwrite each other's file — the day's order count
+ * and other tickers' peaks would vanish on every save — so a multi-profile loop
+ * must build one context and hand it to all of them.
+ */
+struct ExecutionContext {
+    std::shared_ptr<RiskGuard>     risk;
+    std::shared_ptr<PositionStore> positions;
+    std::shared_ptr<TradeJournal>  journal;
+
+    /** @brief Build a context with the default file locations. */
+    static ExecutionContext create(const RiskLimits& limits);
+};
+
+/**
  * @brief Turns one strategy signal into at most one order against the KIS account.
  *
  * Shared by the intraday (scalp_trade) and daily (daily_trade) loops so their
@@ -56,6 +75,12 @@ class SignalExecutor {
                             const RiskLimits& limits = {});
 
     /**
+     * @brief Executor sharing account-wide state with others in the same process.
+     * @param context Shared risk guard, position store and journal.
+     */
+    SignalExecutor(const StrategyProfile& profile, bool live, int maxOrders, ExecutionContext context);
+
+    /**
      * @param signal  Strategy output for the bar about to be executed.
      * @param price   Current price the order would fill near.
      * @param balance Freshly fetched account balance (source of truth for holdings).
@@ -63,8 +88,9 @@ class SignalExecutor {
     Decision execute(Signal signal, double price, const AccountBalance& balance);
 
     [[nodiscard]] int                     ordersSent() const { return ordersSent_; }
-    [[nodiscard]] const TradeJournal&     journal() const { return journal_; }
-    [[nodiscard]] const RiskGuard&        risk() const { return risk_; }
+    [[nodiscard]] const TradeJournal&     journal() const { return *ctx_.journal; }
+    [[nodiscard]] const RiskGuard&        risk() const { return *ctx_.risk; }
+    [[nodiscard]] const PositionStore&    positions() const { return *ctx_.positions; }
     [[nodiscard]] const notify::Telegram& notifier() const { return notify_; }
 
    private:
@@ -75,9 +101,7 @@ class SignalExecutor {
     bool                   live_;
     int                    maxOrders_;
     int                    ordersSent_ = 0;
-    TradeJournal           journal_;
-    RiskGuard              risk_;
-    PositionStore          positions_;
+    ExecutionContext       ctx_;
     notify::Telegram       notify_;
     std::string            mode_;
 };
