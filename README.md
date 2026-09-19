@@ -250,6 +250,33 @@ The index it evaluates is the bar the order would fill at: today's bar once KIS 
 
 KIS's `inquire-time-itemchartprice` (TR_ID `FHKST03010200`) serves **today's minute bars only, ~30 per call**. `scalp_trade` polls only during KRX hours (09:00–15:30 KST, weekdays) and re-reads holdings and average price from `KisTrader::getBalance()` on every cycle, treating KIS as the source of truth rather than keeping local position state. Overseas (US) order placement is not implemented, so only KRX tickers are supported.
 
+### Risk limits
+
+`config/portfolio.json` carries an account-wide `risk` block, enforced by both trading apps:
+
+```json
+"risk": {
+  "daily_loss_limit_pct": 3.0,
+  "max_orders_per_day": 20
+}
+```
+
+The day's opening equity is recorded on the first balance of each KST day and kept in `data/risk_state.json`, so restarting a process cannot reset the count. Once either limit is hit, **buys** are blocked for the rest of the day and journaled as a `skip` with the limit that stopped them. **Sells are never blocked** — a limit that prevented closing a losing position would do the opposite of what it exists for.
+
+### Market calendar
+
+KRX closures live in `config/krx_holidays.json`; weekends are handled in code. KIS's own holiday API (`CTCA0903R`) is a ledger service rejected on paper accounts (`모의투자 TR 이 아닙니다`), so the file is the paper-mode substitute — switch to the API on a live account.
+
+The 2026 dates up to the file's `verified_through` were derived from real KIS daily bars (every weekday with no bar is a closure); later dates are marked projected and need confirming before they arrive. A date missing from the list is treated as a trading day, so a stale list only wastes a poll rather than silently halting trading.
+
+### Alerts
+
+Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `.env` to get a push when a **live** order is placed, fails, or is blocked by a risk limit. Dry runs stay silent. Both apps print `alerts=on/off` at startup, and `notify_test` verifies a setup before you depend on it:
+
+```bash
+./build/Release/app/notify_test "hello from libyfinance"
+```
+
 ### Trade journal
 
 KIS records what was ordered but has no concept of our strategies, so the link from an order back to the profile that produced it only exists if we write it down. Both executables append one JSON line per decision — dry runs and orders suppressed by the cap included — to `data/trades.jsonl` (gitignored; it is account activity).
@@ -261,6 +288,31 @@ KIS records what was ordered but has no concept of our strategies, so the link f
 ```
 
 Re-running the sync adds nothing, since fills are keyed on order number + filled quantity — but a partial fill that later fills further is recorded again. KIS recommends querying after 15:30 KST; earlier in the session the same-day results may still be incomplete.
+
+---
+
+## 🖥 Running it unattended
+
+systemd **user** units (no root, nothing installed system-wide):
+
+```bash
+./scripts/install_systemd.sh           # dashboard + daily timer
+./scripts/install_systemd.sh --scalp   # also the intraday loop
+./scripts/install_systemd.sh --uninstall
+```
+
+| Unit | What it does |
+|----|------|
+| `libyfinance-dashboard.service` | Serves the dashboard on :8800, refreshing every 60s |
+| `libyfinance-daily.timer` | Fires `daily_trade --all` at 15:15 on weekdays |
+| `libyfinance-scalp.service` | Runs the scalping loop continuously (it gates itself on market hours) |
+
+They install in **dry-run**: no orders are placed until `--live` is added to the `ExecStart` line. The installer warns if the system timezone is not `Asia/Seoul`, since `OnCalendar` is wall-clock — `15:15` on a UTC host is not 15:15 KST. User services stop at logout unless lingering is enabled (`sudo loginctl enable-linger $USER`), which the installer also checks.
+
+```bash
+systemctl --user list-timers 'libyfinance*'
+journalctl --user -u libyfinance-scalp.service -f
+```
 
 ---
 
@@ -421,6 +473,7 @@ macro report.
 | `daily_trade` | **Live** daily-bar execution, one run per day (KRX, dry-run by default) |
 | `scalp_trade` | Intraday scalping via minute-bar polling (KRX, dry-run by default) |
 | `portfolio_report` | Paper-account snapshot as JSON (return vs principal + holdings) |
+| `notify_test` | Sends one Telegram message to verify alert setup |
 | `test_indicators` | Technical indicator smoke tests |
 
 ---

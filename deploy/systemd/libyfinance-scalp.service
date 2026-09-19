@@ -1,0 +1,18 @@
+[Unit]
+Description=libyfinance intraday scalping loop
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=__ROOT__
+# Dry-run by default: this places no orders. Append --live once a real order has
+# been confirmed end to end.
+# The loop gates itself on KRX hours and holidays, so running it continuously is
+# safe — outside the session it only logs and sleeps.
+ExecStart=__ROOT__/build/Release/app/scalp_trade --id 18 --interval 60
+Restart=on-failure
+RestartSec=60
+
+[Install]
+WantedBy=default.target

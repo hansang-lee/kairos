@@ -1,0 +1,14 @@
+[Unit]
+Description=libyfinance paper-trading dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=__ROOT__
+ExecStart=__ROOT__/scripts/dashboard_server.py --port 8800 --interval 60
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=default.target

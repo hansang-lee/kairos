@@ -1,0 +1,13 @@
+[Unit]
+Description=Run libyfinance daily strategies before the KRX close
+
+[Timer]
+# 15:15 KST on weekdays — inside the session, so orders can still fill, and late
+# enough that the day's bar is essentially final. OnCalendar uses the system
+# timezone, which must be Asia/Seoul for this to mean what it says.
+OnCalendar=Mon..Fri 15:15
+Persistent=false
+Unit=libyfinance-daily.service
+
+[Install]
+WantedBy=timers.target
