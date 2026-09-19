@@ -44,6 +44,15 @@ class RiskGuard {
      */
     [[nodiscard]] RiskVerdict check(OrderSide side, const AccountBalance& balance);
 
+    /**
+     * @brief Record the day's opening equity from a balance, without judging an order.
+     *
+     * check() only runs when an order is being considered, which could be hours
+     * into the session — the loss limit would then measure from an already-fallen
+     * account. Every cycle calls this so the baseline is the first equity of the day.
+     */
+    void observe(const AccountBalance& balance);
+
     /** @brief Record that an order was actually sent, for the per-day cap. */
     void recordOrder();
 

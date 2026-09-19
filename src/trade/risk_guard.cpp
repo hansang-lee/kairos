@@ -67,7 +67,7 @@ void RiskGuard::save() const {
     }
 }
 
-RiskVerdict RiskGuard::check(OrderSide side, const AccountBalance& balance) {
+void RiskGuard::observe(const AccountBalance& balance) {
     // A day boundary crossed while the process was running still rolls over.
     if (const std::string today = kstToday(); today != date_) {
         date_          = today;
@@ -79,6 +79,10 @@ RiskVerdict RiskGuard::check(OrderSide side, const AccountBalance& balance) {
         openingEquity_ = balance.totalEvalAmount;
         save();
     }
+}
+
+RiskVerdict RiskGuard::check(OrderSide side, const AccountBalance& balance) {
+    observe(balance);
 
     // Closing a position is always permitted — see the class comment.
     if (side == OrderSide::Sell) {

@@ -15,9 +15,17 @@ int weekdayOf(const std::string& date) {
     }
     std::tm tm = {};
     try {
-        tm.tm_year = std::stoi(date.substr(0, 4)) - 1900;
-        tm.tm_mon  = std::stoi(date.substr(5, 2)) - 1;
-        tm.tm_mday = std::stoi(date.substr(8, 2));
+        const int year  = std::stoi(date.substr(0, 4));
+        const int month = std::stoi(date.substr(5, 2));
+        const int day   = std::stoi(date.substr(8, 2));
+        // timegm would happily normalise month 13 into next January, turning a
+        // malformed date into a real but wrong one.
+        if (month < 1 || month > 12 || day < 1 || day > 31) {
+            return -1;
+        }
+        tm.tm_year = year - 1900;
+        tm.tm_mon  = month - 1;
+        tm.tm_mday = day;
     } catch (const std::exception&) {
         return -1;
     }

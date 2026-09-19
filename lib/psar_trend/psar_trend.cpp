@@ -20,7 +20,10 @@ std::size_t PsarTrend::warmupPeriod() const {
 
 Signal PsarTrend::evaluate(const StockInfo& data, std::size_t index) {
     // Use data strictly through (index - 1) to avoid look-ahead into the current bar.
-    if (index < 2 || index >= sar_.size()) {
+    // sar_ is aligned 1:1 with the input, so reading index-1 needs index <= size.
+    // The guard was `index >= size`, which rejected the one-past-the-last index that
+    // live trading uses before the current bar exists.
+    if (index < 2 || index > sar_.size()) {
         return Signal::HOLD;
     }
 

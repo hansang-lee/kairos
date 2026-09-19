@@ -93,6 +93,10 @@ Decision SignalExecutor::execute(Signal signal, double price, const AccountBalan
         return d;
     }
 
+    // Record the day's opening equity now, not when an order first happens to be
+    // considered — otherwise the loss limit measures from a mid-day level.
+    ctx_.risk->observe(balance);
+
     const StockHolding* holding = findHolding(balance, profile_.ticker);
     const int64_t       heldQty = holding ? holding->quantity : 0;
 

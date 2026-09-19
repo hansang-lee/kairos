@@ -14,7 +14,10 @@ std::string MacdStrategy::name() const {
 
 void MacdStrategy::init(const StockInfo& data) {
     macdResult_ = indicator::macd(data.close, fastPeriod_, slowPeriod_, signalPeriod_);
-    startIndex_ = slowPeriod_ + signalPeriod_ - 2;
+    // macdResult_.macd[j] belongs to data index j + slowPeriod_ + signalPeriod_ - 2, so this
+    // offset makes evaluate()'s idx resolve to data index (index - 1): the last closed bar.
+    // It was one lower, which resolved to `index` itself — the bar being traded.
+    startIndex_ = slowPeriod_ + signalPeriod_ - 1;
 }
 
 std::size_t MacdStrategy::warmupPeriod() const {

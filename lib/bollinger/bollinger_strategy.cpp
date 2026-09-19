@@ -9,8 +9,10 @@ std::string BollingerStrategy::name() const {
 }
 
 void BollingerStrategy::init(const StockInfo& data) {
-    bands_      = indicator::bollinger(data.close, period_, numStdDev_);
-    startIndex_ = period_ - 1;
+    bands_ = indicator::bollinger(data.close, period_, numStdDev_);
+    // bands_[j] belongs to data index j + period_ - 1; this offset makes evaluate()'s
+    // idx resolve to data index (index - 1) rather than to `index` itself.
+    startIndex_ = period_;
 }
 
 std::size_t BollingerStrategy::warmupPeriod() const {
@@ -22,7 +24,7 @@ Signal BollingerStrategy::evaluate(const StockInfo& data, std::size_t index) {
         return Signal::HOLD;
     }
 
-    if (index <= startIndex_) {
+    if (index <= startIndex_ || index < 2) {
         return Signal::HOLD;
     }
 
@@ -31,8 +33,10 @@ Signal BollingerStrategy::evaluate(const StockInfo& data, std::size_t index) {
         return Signal::HOLD;
     }
 
-    const double prevPrice = data.close[index - 1];
-    const double currPrice = data.close[index];
+    // "curr" is the last closed bar (index - 1); the bar at `index` is the one this
+    // decision will be executed at and must not be read.
+    const double prevPrice = data.close[index - 2];
+    const double currPrice = data.close[index - 1];
     const double prevLower = bands_.lower[idx - 1];
     const double currLower = bands_.lower[idx];
     const double currUpper = bands_.upper[idx];

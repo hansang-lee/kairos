@@ -104,3 +104,27 @@ endif()
 if (IS_TOP_LEVEL)
   add_subdirectory(app)
 endif()
+
+# ----- Tests -----
+# Built by default so a broken test is a broken build, not something to remember
+# to run. Uses a small in-tree framework rather than GTest: the project's only
+# dependencies are libcurl and nlohmann/json, and a test harness is not worth a
+# third.
+enable_testing()
+
+add_executable(kairos_tests
+  tests/main.cpp
+  tests/test_indicator.cpp
+  tests/test_backtest_engine.cpp
+  tests/test_strategy_lookahead.cpp
+  tests/test_trade.cpp
+  tests/test_data_config.cpp
+)
+target_link_libraries(kairos_tests PRIVATE ${PROJECT_NAME})
+target_include_directories(kairos_tests PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/tests
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+set_target_properties(kairos_tests PROPERTIES OUTPUT_NAME "kairos_tests")
+
+add_test(NAME unit COMMAND kairos_tests)
