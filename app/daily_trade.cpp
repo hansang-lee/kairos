@@ -46,6 +46,14 @@ std::string krxClosedReason(const data::KrxCalendar& calendar) {
     return (hm >= 900 && hm <= 1530) ? "" : "outside 09:00-15:30 KST";
 }
 
+/** KST "YYYY-MM-DD HH:MM" for the summary message. */
+std::string kstTimeLabel() {
+    const std::time_t  kst = std::time(nullptr) + 9 * 3600;
+    std::ostringstream oss;
+    oss << std::put_time(std::gmtime(&kst), "%Y-%m-%d %H:%M");
+    return oss.str();
+}
+
 std::string signalName(Signal s) {
     return s == Signal::BUY ? "BUY" : (s == Signal::SELL ? "SELL" : "HOLD");
 }
@@ -59,35 +67,49 @@ void printUsage() {
               << "  not as a loop — for minute-bar scalping use scalp_trade instead.\n\n"
               << "  --all      every KRX profile except category 'scalp' (those belong to scalp_trade)\n"
               << "  --live     actually place orders; without it, decisions are logged and journaled only\n"
-              << "  --force    skip the KRX market-hours guard (dry-run inspection outside trading hours)\n";
+              << "  --force    skip the KRX market-hours guard (dry-run inspection outside trading hours)\n"
+              << "  --quiet    suppress the end-of-run Telegram summary (it is sent otherwise, even\n"
+              << "             when nothing happened, so silence means the run did not happen)\n";
 }
 
 /**
  * @brief Run one profile end to end: fetch bars, evaluate, execute.
  * @return true if the profile was evaluated (not that an order was placed).
  */
-bool runProfile(const StrategyProfile& profile, KisProvider& kis, bool live, int lookbackDays,
-                const trade::ExecutionContext& ctx) {
+/** What one profile did this run, for the end-of-run summary. */
+struct Outcome {
+    bool        evaluated = false;
+    std::string line;  ///< one-line description; empty when nothing notable happened
+};
+
+Outcome runProfile(const StrategyProfile& profile, KisProvider& kis, bool live, int lookbackDays,
+                   const trade::ExecutionContext& ctx) {
     std::cout << "\n----------------------------------------------------------------------------------------\n";
     std::cout << " #" << profile.id << " " << profile.name << " (" << profile.ticker
               << ")  position=" << (profile.positionPct * 100.0) << "%  stop-loss=" << profile.stopLossPct << "%\n";
 
+    Outcome outcome;
+
     auto strat = profile.createStrategy();
     if (!strat) {
         std::cerr << "[-] Failed to create strategy instance.\n";
-        return false;
+        outcome.line = "#" + std::to_string(profile.id) + " 전략 생성 실패";
+        return outcome;
     }
 
     auto data = kis.getStockInfo(profile.ticker, kstDate(lookbackDays), kstDate(0));
     if (!data || data->close.empty()) {
         std::cerr << "[-] No daily data fetched for " << profile.ticker << ".\n";
-        return false;
+        outcome.line = "#" + std::to_string(profile.id) + " " + profile.ticker + " 데이터 없음";
+        return outcome;
     }
     if (data->close.size() <= strat->warmupPeriod()) {
         std::cerr << "[-] Only " << data->close.size() << " bars, strategy needs " << (strat->warmupPeriod() + 1)
                   << ". Increase --lookback-days.\n";
-        return false;
+        outcome.line = "#" + std::to_string(profile.id) + " " + profile.ticker + " 봉 부족";
+        return outcome;
     }
+    outcome.evaluated = true;
 
     // Index convention: evaluate(i) decides the order executed at bar i using closes
     // through i-1. So the index to evaluate is the position of the bar we are about
@@ -121,21 +143,27 @@ bool runProfile(const StrategyProfile& profile, KisProvider& kis, bool live, int
     }
     std::cout << "\n";
 
+    const std::string tag = "#" + std::to_string(profile.id) + " " + profile.ticker + " ";
     if (!decision.acted) {
         std::cout << " -> no action\n";
     } else if (decision.skipped) {
         std::cout << " -> [BLOCKED] " << decision.blockedBy << " (" << decision.reason << ")\n";
+        outcome.line = tag + "차단됨 — " + decision.blockedBy;
     } else if (!decision.sent) {
         std::cout << " -> [DRY-RUN] would " << decision.side << " x" << decision.quantity << " (" << decision.reason
                   << ")\n";
+        outcome.line = tag + "모의 " + decision.side + " x" + std::to_string(decision.quantity);
     } else if (decision.order.success) {
         std::cout << " -> [ORDER] " << decision.side << " x" << decision.quantity << " (" << decision.reason
                   << ") No: " << decision.order.orderNo << "\n";
+        outcome.line =
+            tag + decision.side + " x" + std::to_string(decision.quantity) + " 주문 (" + decision.reason + ")";
     } else {
         std::cout << " -> [ORDER FAILED] " << decision.side << " x" << decision.quantity << ": "
                   << decision.order.message << "\n";
+        outcome.line = tag + decision.side + " 주문 실패 — " + decision.order.message;
     }
-    return true;
+    return outcome;
 }
 
 }  // namespace
@@ -147,6 +175,7 @@ int main(int argc, char* argv[]) {
     bool        live         = false;
     bool        force        = false;
     int         lookbackDays = 400;
+    bool        quiet        = false;
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -158,6 +187,8 @@ int main(int argc, char* argv[]) {
             live = true;
         } else if (arg == "--force") {
             force = true;
+        } else if (arg == "--quiet") {
+            quiet = true;
         } else if (arg == "--lookback-days" && i + 1 < argc) {
             lookbackDays = std::stoi(argv[++i]);
         } else if (arg == "--config" && i + 1 < argc) {
@@ -231,12 +262,45 @@ int main(int argc, char* argv[]) {
     KisProvider kis;
     auto        ctx       = trade::ExecutionContext::create(limits);
     int         evaluated = 0;
+
+    std::vector<std::string> notable;
     for (const auto* p : targets) {
-        if (runProfile(*p, kis, live, lookbackDays, ctx)) {
+        const auto outcome = runProfile(*p, kis, live, lookbackDays, ctx);
+        if (outcome.evaluated) {
             ++evaluated;
+        }
+        if (!outcome.line.empty()) {
+            notable.push_back(outcome.line);
         }
     }
 
     std::cout << "\n[*] Evaluated " << evaluated << "/" << targets.size() << " profile(s).\n";
+
+    // A run where nothing happened must still announce itself. Sending only on an
+    // order means silence covers both "held, correctly" and "never ran", and those
+    // need different reactions from whoever is not watching.
+    if (!quiet) {
+        const notify::Telegram telegram;
+        if (telegram.enabled()) {
+            const auto         balance = KisTrader::getBalance();
+            std::ostringstream msg;
+            msg << "kairos " << kstTimeLabel() << " — " << (live ? "실전" : "모의") << " 실행\n"
+                << evaluated << "/" << targets.size() << "개 평가";
+            if (balance.success) {
+                msg << "  ·  자산 " << std::fixed << std::setprecision(0) << balance.totalEvalAmount << "원";
+            }
+            if (notable.empty()) {
+                msg << "\n신호 없음";
+            } else {
+                for (const auto& line : notable) {
+                    msg << "\n" << line;
+                }
+            }
+            if (!telegram.send(msg.str())) {
+                std::cerr << "[!] Daily summary could not be delivered to Telegram.\n";
+            }
+        }
+    }
+
     return evaluated == 0 ? 1 : 0;
 }
