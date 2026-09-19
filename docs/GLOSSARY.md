@@ -1,332 +1,318 @@
-# Glossary
+# 용어 사전
 
-Every term this project's output actually prints, with a worked example. The
-numbers are small and made up so the arithmetic can be followed by hand.
+이 프로젝트가 실제로 출력하는 용어만, **손으로 따라갈 수 있는 예제**와 함께 정리했습니다.
+계산이 보이도록 숫자는 작고 단순하게 잡았습니다.
 
-Assume a starting account of **10,000,000 KRW** throughout.
+아래 전부 **시작 자금 10,000,000원** 기준입니다.
 
 ---
 
-## Performance
+## 성과 지표
 
-### Total return (총수익률)
+### 총수익률 (Total return)
 
-What the account ended with, against what it started with.
+시작 금액 대비 끝난 금액입니다.
 
 ```
-start  10,000,000
-end    11,500,000
-return = (11,500,000 - 10,000,000) / 10,000,000 = +15.0%
+시작   10,000,000
+종료   11,500,000
+수익률 = (11,500,000 - 10,000,000) / 10,000,000 = +15.0%
 ```
 
-Says nothing about how long it took or how unpleasant the ride was, which is why
-it is never read alone.
+얼마나 걸렸는지, 중간에 얼마나 괴로웠는지는 전혀 말해주지 않습니다. 그래서 이것만 보고
+판단하지 않습니다.
 
 ### CAGR (연평균 성장률)
 
-Total return expressed as the steady annual rate that would have produced it.
-Makes runs of different lengths comparable.
+총수익률을 "매년 이만큼씩 꾸준히 올랐다면" 형태로 바꾼 값입니다. 기간이 다른 결과를
+비교할 수 있게 해줍니다.
 
 ```
-+15% over 3 years
-CAGR = (1.15)^(1/3) - 1 = 4.77% per year
+3년간 +15%
+CAGR = (1.15)^(1/3) - 1 = 연 4.77%
 ```
 
-+15% over three years and +15% over three months are the same total return and
-very different results; CAGR is what separates them.
+3년에 +15%와 3개월에 +15%는 총수익률이 같지만 전혀 다른 결과입니다. CAGR이 그 둘을
+가릅니다.
 
-### MDD — maximum drawdown (최대낙폭)
+### MDD — 최대낙폭 (Maximum Drawdown)
 
-The worst peak-to-trough fall in account value over the period. Always negative.
+기간 중 **고점에서 저점까지** 자산이 가장 크게 떨어진 폭입니다. 항상 음수입니다.
 
 ```
-account: 10,000,000 → 13,000,000 → 9,100,000 → 12,000,000
-peak 13,000,000, trough after it 9,100,000
+자산: 10,000,000 → 13,000,000 → 9,100,000 → 12,000,000
+고점 13,000,000, 그 이후 저점 9,100,000
 MDD = (9,100,000 - 13,000,000) / 13,000,000 = -30.0%
 ```
 
-Measured from the **peak**, not from the start — so a strategy can finish up
-+20% and still have had a -30% MDD along the way.
+**시작점이 아니라 고점 기준**입니다. 그래서 최종적으로 +20%로 끝난 전략도 도중에
+-30% MDD를 겪었을 수 있습니다.
 
-This is usually the number that decides whether a strategy is livable. -30% on
-10,000,000 means watching 3,900,000 disappear and holding on. Most people stop a
-strategy at its worst moment, which converts a drawdown into a permanent loss,
-so a strategy you will actually stick with beats a better one you will not.
+보통 이 숫자가 "그 전략을 실제로 버틸 수 있는가"를 결정합니다. 1,000만원에서 MDD -30%는
+**390만원이 사라지는 걸 지켜보며 버티는 것**입니다. 대부분의 사람은 가장 나쁜 순간에
+전략을 멈추고, 그 순간 낙폭은 영구 손실로 바뀝니다. **끝까지 들고 갈 수 있는 전략이,
+더 좋지만 중간에 포기하게 되는 전략보다 낫습니다.**
 
-### Win rate (승률)
+### 승률 (Win rate)
 
-Share of closed trades that made money.
-
-```
-20 trades, 12 profitable
-win rate = 12 / 20 = 60%
-```
-
-Misleading on its own. Ten wins of +1% and one loss of -20% is a 91% win rate
-and a losing strategy.
-
-### Profit factor
-
-Total gains divided by total losses. Above 1.0 makes money; below 1.0 loses it.
+종료된 거래 중 이익으로 끝난 비율입니다.
 
 ```
-winning trades sum to +3,000,000
-losing  trades sum to -2,000,000
+20회 거래 중 12회 이익
+승률 = 12 / 20 = 60%
+```
+
+이것만 보면 속습니다. **+1%를 열 번 먹고 -20%를 한 번 맞으면 승률 91%짜리 손실 전략**입니다.
+
+### Profit factor (손익비)
+
+총이익을 총손실로 나눈 값입니다. 1.0보다 크면 돈을 벌고, 작으면 잃습니다.
+
+```
+이익 거래 합계  +3,000,000
+손실 거래 합계  -2,000,000
 profit factor = 3,000,000 / 2,000,000 = 1.5
 ```
 
-Fixes what win rate misses: the 91%-win-rate example above has a profit factor
-of 10 × 1 / 20 = 0.5, and the number says plainly that it loses.
+승률이 놓치는 걸 잡아줍니다. 위의 승률 91% 예시는 profit factor가
+10 × 1 / 20 = **0.5**로, 손실 전략임이 그대로 드러납니다.
 
-### Sharpe ratio
+### Sharpe ratio (샤프 지수)
 
-Return per unit of volatility — how much bumpiness was endured for the result.
-Higher is better; above 1 is good, below 0.5 is weak.
+변동성 대비 수익, 즉 **그 결과를 얻으려고 얼마나 흔들렸는지**입니다. 높을수록 좋고,
+1 이상이면 양호, 0.5 미만이면 약합니다.
 
 ```
-average daily return   0.05%
-daily standard deviation 1.0%
+일평균 수익률   0.05%
+일간 표준편차   1.0%
 Sharpe = 0.05 / 1.0 × sqrt(252) ≈ 0.79
 ```
 
-The `sqrt(252)` annualizes from daily bars (roughly 252 trading days a year).
-**This project hardcodes that 252**, so Sharpe is only meaningful for daily-bar
-backtests. `scalp_backtest` omits it for exactly this reason.
+`sqrt(252)`는 일봉을 연 단위로 환산하는 계수입니다(연 거래일 약 252일).
+**이 프로젝트는 252를 코드에 고정해 뒀기 때문에 Sharpe는 일봉 백테스트에서만 의미가
+있습니다.** `scalp_backtest`가 Sharpe를 출력하지 않는 이유가 이것입니다.
 
-### Composite score
+### 복합 점수 (Composite score)
 
-This project's own 0–100 blend, weighting total return 35%, MDD 30%, Sharpe 20%
-and win rate 15%. A convenience for ranking, not a standard measure — prefer
-reading the components.
-
----
-
-## Costs
-
-### Commission (수수료)
-
-The broker's fee, charged on both the buy and the sell. KIS online: about
-**0.0177%** per side domestically, **0.25%** per side for US stocks.
-
-### Transaction tax (증권거래세)
-
-A Korean tax charged **on sells only**, whether or not the trade made money.
-**0.20%** since 2026-01-01 (KOSPI 0.05% + 농특세 0.15%; KOSDAQ 0.20%).
-
-### Slippage (슬리피지)
-
-The gap between the price you decided at and the price you actually got. A
-market order takes whatever is on the book, which is rarely the last printed
-price.
-
-### Round trip (왕복 비용)
-
-Everything one complete buy-and-sell costs. This is the number that decides
-whether frequent trading can work at all.
-
-```
-KRX: 0.0177% × 2 (commission) + 0.20% (tax) + 0.05% × 2 (slippage) ≈ 0.335%
-```
-
-On a 71,500 KRW share that is about **240 KRW per round trip**. A strategy
-trading 30 times a day at 20% of the account pays roughly 2% of the account per
-day in costs alone — which is why scalping was shelved here.
-
-### Gross vs net
-
-**Gross** is the strategy's raw result with costs zeroed; **net** is what the
-account actually sees. Comparing them separates "no edge" from "an edge too
-small to pay for", which are different problems.
-
-```
-gross  -0.97%   ← the strategy itself barely loses
-net   -10.67%   ← costs turn it into a rout
-```
-
-That is a real measurement from this project's 1-minute scalping test.
-`scalp_backtest --gross` produces it.
+이 프로젝트 자체의 0~100 종합 점수로, 총수익률 35% · MDD 30% · Sharpe 20% · 승률 15%
+가중입니다. 표준 지표가 아니라 정렬용 편의 값이므로, 가능하면 개별 항목을 직접 보는 편이
+낫습니다.
 
 ---
 
-## Position and risk
+## 비용
 
-### Position sizing / `position_pct`
+### 수수료 (Commission)
 
-The fraction of available cash committed to one position.
+증권사가 가져가는 몫으로 **매수·매도 양쪽 모두** 부과됩니다. 한국투자증권 온라인 기준
+국내 **약 0.0177%**(편도), 미국 주식 **0.25%**(편도)입니다.
 
-```
-cash 10,000,000, position_pct 0.2, price 71,500
-allocated = 2,000,000 → 27 shares
-```
+### 증권거래세
 
-The single most effective risk control here: the same strategy at
-`position_pct` 1.0 ran a -42% drawdown where 0.2 ran -8%.
+**매도할 때만** 부과되는 세금입니다. **이익이 났든 손절이든 무조건** 붙습니다.
+2026년 1월 1일부터 **0.20%**입니다 (코스피 0.05% + 농특세 0.15%, 코스닥 0.20%).
 
-### Stop loss (손절)
+### 슬리피지 (Slippage)
 
-Exit when price falls a set amount below the **average purchase price**.
+판단한 가격과 실제로 체결된 가격의 차이입니다. 시장가 주문은 호가창에 있는 걸 그대로
+가져오는데, 그게 마지막에 찍힌 가격인 경우는 드뭅니다.
 
-```
-bought at 100,000, stop_loss_pct 8.0
-exit triggers at or below 92,000
-```
+### 왕복 비용 (Round trip)
 
-### Take profit (익절)
-
-The mirror image: exit when price rises a set amount above the average price.
+매수 후 매도까지 한 번 도는 데 드는 총비용입니다. **거래를 자주 해도 되는지를 결정하는
+숫자**입니다.
 
 ```
-bought at 100,000, take_profit_pct 12.0
-exit triggers at or above 112,000
+국내: 0.0177% × 2 (수수료) + 0.20% (거래세) + 0.05% × 2 (슬리피지) ≈ 0.335%
 ```
 
-### Trailing stop (트레일링 스탑)
+71,500원짜리 주식이면 **왕복 약 240원**입니다. 하루 30회 거래하며 자산의 20%를 쓰는
+전략이라면 **비용만으로 하루 약 2%**가 나갑니다. 이 프로젝트에서 초단타를 보류한 이유가
+정확히 이것입니다.
 
-Exit a set amount below the **highest price seen since entry**, not below the
-purchase price. It protects a gain already made.
+### Gross vs Net (비용 전 / 비용 후)
 
-```
-bought at 100,000, trailing_stop_pct 5.0
-price rises to 130,000  → peak is now 130,000, exit level 123,500
-price falls to 123,000  → exit, locking in about +23%
-```
-
-A plain stop loss would still be sitting at 92,000 here, giving the whole gain
-back. This is why the peak has to be remembered across restarts.
-
-### Tranches (분할 매수/매도)
-
-Entering or exiting over several orders instead of one, so a single bad price
-does not set the whole position.
+**Gross**는 비용을 0으로 놓은 전략 자체의 성과, **Net**은 계좌에 실제로 찍히는 결과입니다.
+둘을 비교하면 **"엣지가 없는 것"과 "엣지는 있지만 비용을 감당 못 하는 것"**을 구분할 수
+있습니다. 전혀 다른 문제입니다.
 
 ```
-entry_tranches 3, target 3,000,000
-→ roughly 1,000,000 per buy signal, three signals to be fully in
+gross  -0.97%   ← 전략 자체는 간신히 지는 수준
+net   -10.67%   ← 비용이 참패로 만듦
 ```
 
-Forced exits (stop, trailing, take-profit) always sell everything at once —
-scaling out of a stop defeats having one.
+이건 이 프로젝트의 실제 1분봉 초단타 측정값입니다. `scalp_backtest --gross`로 나옵니다.
 
-### Cooldown (재진입 대기)
+---
 
-A refusal to re-enter the same ticker for a set time after exiting it. Stops a
-strategy from churning in a sideways market, where signals flip repeatedly and
-each flip costs a round trip.
+## 포지션과 리스크
 
-### Daily loss limit (일일 손실 한도)
+### 포지션 비중 (`position_pct`)
 
-Stops **new buying** once the account falls a set amount below where the day
-opened. Selling is never blocked — a limit that trapped you in a losing position
-would do the opposite of its job.
+한 포지션에 투입할 현금 비율입니다.
 
 ```
-day opened at 10,000,000, limit 3%
-equity reaches 9,650,000 (-3.5%) → no more buys today
+현금 10,000,000, position_pct 0.2, 주가 71,500
+투입액 = 2,000,000 → 27주
+```
+
+**여기서 가장 효과가 큰 리스크 조절 수단입니다.** 같은 전략이 `position_pct` 1.0에서
+MDD -42%, 0.2에서 -8%였습니다.
+
+### 손절 (Stop loss)
+
+**평균 매수가** 대비 일정 폭 아래로 떨어지면 청산합니다.
+
+```
+100,000원에 매수, stop_loss_pct 8.0
+92,000원 이하에서 청산
+```
+
+### 익절 (Take profit)
+
+반대 방향입니다. 평균 매수가 대비 일정 폭 위로 오르면 청산합니다.
+
+```
+100,000원에 매수, take_profit_pct 12.0
+112,000원 이상에서 청산
+```
+
+### 트레일링 스탑 (Trailing stop)
+
+매수가가 아니라 **진입 이후 기록한 고점** 대비 일정 폭 아래에서 청산합니다.
+**이미 번 이익을 지키는** 장치입니다.
+
+```
+100,000원에 매수, trailing_stop_pct 5.0
+가격이 130,000원까지 상승 → 고점 130,000, 청산선 123,500
+가격이 123,000원으로 하락 → 청산, 약 +23% 확보
+```
+
+같은 상황에서 일반 손절선은 아직 92,000원에 머물러 있어서 **번 것을 전부 돌려주게**
+됩니다. 재시작 후에도 고점을 기억해야 하는 이유가 이것입니다.
+
+### 분할 매수/매도 (Tranches)
+
+한 번에 다 넣거나 빼지 않고 여러 주문으로 나누는 것입니다. 한 번의 나쁜 가격이 포지션
+전체를 결정하지 않게 합니다.
+
+```
+entry_tranches 3, 목표 3,000,000
+→ 매수 신호마다 약 1,000,000씩, 세 번에 걸쳐 완전 진입
+```
+
+**강제 청산(손절·트레일링·익절)은 항상 전량 매도**합니다. 손절을 나눠서 나가면 손절이
+아니게 됩니다.
+
+### 재진입 대기 (Cooldown)
+
+같은 종목을 청산한 뒤 일정 시간 다시 사지 않는 규칙입니다. 횡보장에서 신호가 계속
+뒤집히며 왕복 비용만 쌓이는 것을 막습니다.
+
+### 일일 손실 한도 (Daily loss limit)
+
+그날 시작 자산 대비 일정 폭 떨어지면 **신규 매수를 중단**합니다. **매도는 절대 막지
+않습니다** — 손실 포지션에 갇히게 만드는 한도는 존재 목적과 정반대입니다.
+
+```
+장 시작 자산 10,000,000, 한도 3%
+자산이 9,650,000 (-3.5%)에 닿으면 그날 매수 중단
 ```
 
 ---
 
-## Testing a strategy
+## 전략 검증
 
-### Backtest (백테스팅)
+### 백테스팅 (Backtest)
 
-Running a strategy over historical prices to see what it would have done.
-Cheap, and easy to fool yourself with — everything below is a way it lies.
+과거 가격에 전략을 돌려 어떻게 됐을지 보는 것입니다. 비용이 거의 안 들지만,
+**스스로를 속이기 쉽습니다.** 아래 항목들이 전부 그 속는 방식들입니다.
 
-### Buy and hold (단순 보유)
+### 단순 보유 (Buy and hold)
 
-Buy at the start, sell at the end, do nothing in between. The benchmark every
-strategy has to clear to justify its complexity. Frequently it does not: over
-2025–2026 in this project's sweep, **no strategy beat buy-and-hold on a majority
-of the universe**.
+처음에 사서 끝까지 들고 있는 것. 모든 전략이 넘어야 하는 기준선입니다. 복잡한 전략을 쓸
+이유를 증명해야 하는 상대죠. **자주 못 넘습니다** — 이 프로젝트 스윕에서 2025~2026
+구간에는 **어떤 전략도 종목 과반에서 단순 보유를 이기지 못했습니다.**
 
-### In-sample / out-of-sample (표본 내 / 표본 외)
+### 표본 내 / 표본 외 (In-sample / Out-of-sample)
 
-**In-sample** is the period used to choose a strategy. **Out-of-sample** is a
-period held back and never looked at until the choice was made. Only the
-out-of-sample result is evidence, because the in-sample one was selected for.
+**표본 내**는 전략을 고르는 데 쓴 기간, **표본 외**는 고르고 나서야 처음 보는, 떼어둔
+기간입니다. **표본 외 결과만이 증거입니다.** 표본 내 결과는 그렇게 되도록 고른 것이니까요.
 
 ```
-2021-2024  choose the strategy here
-2025-2026  report this, untouched
+2021~2024  여기서 전략을 고르고
+2025~2026  여기는 건드리지 않은 채로 보고
 ```
 
-### Overfitting (과최적화)
+### 과최적화 (Overfitting)
 
-Choosing something that fits the past in detail and the future not at all.
+과거에는 정교하게 들어맞지만 미래에는 전혀 맞지 않는 것을 고르는 일입니다.
 
-The trap is arithmetic: testing 20 strategies against 30 tickers gives 600
-results, and the best of 600 looks excellent even if all 600 are coin flips.
-Guarding against it means selecting out-of-sample, ranking by the **median**
-across tickers rather than the maximum, and distrusting any result resting on
-one ticker.
+함정은 산수입니다. **20개 전략 × 30개 종목 = 600개 결과**인데, 600개가 전부 동전 던지기라도
+그중 1등은 훌륭해 보입니다. 이를 막으려면 표본 외로 선정하고, 최고값이 아니라 종목 전체의
+**중앙값**으로 순위를 매기고, 한 종목에만 의존하는 결과를 믿지 않아야 합니다.
 
-### Look-ahead bias (미래 참조)
+### 미래 참조 (Look-ahead bias)
 
-Using information that was not available yet — reading today's close to decide
-today's trade. It makes a backtest look wonderful and cannot be reproduced live.
+아직 알 수 없었던 정보를 쓰는 것입니다. 오늘 종가를 보고 오늘 매매를 결정하는 식이죠.
+백테스트를 근사하게 만들지만 **실전에서는 절대 재현되지 않습니다.**
 
-This project found it in its own Bollinger and MACD strategies, where the code
-read the bar it was about to trade at. Every result from those strategies before
-the fix was fiction. The test suite now checks for it by running each strategy
-on the full series and again on the series cut off at the bar being decided, and
-requiring the same answer.
+이 프로젝트의 볼린저와 MACD 전략에서 실제로 발견됐습니다. **매매할 봉 자체를 읽고**
+있었고, 수정 전 그 전략들의 결과는 전부 허구였습니다. 지금은 테스트가 이걸 잡습니다 —
+전략을 전체 시계열로 한 번, 판단 대상 봉에서 잘라낸 시계열로 한 번 돌려 같은 답이
+나오는지 확인합니다.
 
-### Survivorship bias (생존 편향)
+### 생존 편향 (Survivorship bias)
 
-Testing only on companies that still exist. The ones that collapsed are missing
-from the list, so results come out better than what was actually achievable.
-This project's 30-ticker universe has this problem and says so in the file.
+지금까지 살아남은 회사만으로 검증하는 것입니다. 망한 회사는 목록에 없으니 결과가 실제보다
+좋게 나옵니다. 이 프로젝트의 30종목 유니버스도 이 문제가 있고, 파일에 그렇게 적어뒀습니다.
 
-### Regime (국면)
+### 국면 (Regime)
 
-The market's character over a period — rising, falling, or going sideways. It
-dominates results, so a strategy chosen in one regime is chosen *for* that
-regime. Measured here: over 2025–2026 almost nothing beat buy-and-hold; over the
-2022 decline almost everything did. Same strategies, opposite verdicts.
+시장의 성격 — 상승장인지, 하락장인지, 횡보장인지입니다. **결과를 지배합니다.** 한 국면에서
+고른 전략은 *그 국면에 맞춰* 고른 것입니다. 이 프로젝트 실측으로는, 2025~2026에는 거의
+아무것도 단순 보유를 못 이겼고 2022년 하락장에는 거의 전부가 이겼습니다. **같은 전략,
+정반대 결론.**
 
-### Warmup period (워밍업)
+### 워밍업 (Warmup period)
 
-Bars a strategy needs before it can say anything. A 40-day moving average has
-nothing to report until day 40.
+전략이 무언가 말하려면 필요한 최소 봉 개수입니다. 40일 이동평균은 40일째가 되기 전까지
+아무 말도 할 수 없습니다.
 
 ---
 
-## Signals
+## 신호
 
-### Golden cross / death cross (골든크로스 / 데드크로스)
+### 골든크로스 / 데드크로스
 
-A short moving average crossing **above** a long one is a golden cross, read as
-an uptrend beginning; crossing below is a death cross.
+단기 이동평균이 장기 이동평균을 **위로** 뚫으면 골든크로스로, 상승 추세 시작으로 읽습니다.
+아래로 뚫으면 데드크로스입니다.
 
 ```
-SMA(3) rises past SMA(8)  → BUY
-SMA(3) falls below SMA(8) → SELL
+SMA(3)이 SMA(8)을 위로 통과  → 매수
+SMA(3)이 SMA(8)을 아래로 통과 → 매도
 ```
 
-### Bollinger Bands (볼린저 밴드)
+### 볼린저 밴드 (Bollinger Bands)
 
-A moving average with bands drawn a number of standard deviations above and
-below it. Price at the lower band is unusually cheap against its own recent
-range, at the upper band unusually expensive.
+이동평균 위아래로 표준편차의 배수만큼 밴드를 그린 것입니다. 하단 밴드의 가격은 최근
+자기 범위 대비 비정상적으로 싸고, 상단은 비정상적으로 비쌉니다.
 
 ```
 period 40, std_devs 2.0
-middle = 40-day average
-upper  = middle + 2 × (40-day standard deviation)
-lower   = middle - 2 × (40-day standard deviation)
+중심선 = 40일 평균
+상단   = 중심선 + 2 × (40일 표준편차)
+하단   = 중심선 - 2 × (40일 표준편차)
 ```
 
-The strategy this project currently runs live: buy a bounce off the lower band,
-sell at the upper.
+**현재 이 프로젝트가 실전에 올린 전략**입니다. 하단에서 반등하면 매수, 상단에서 매도.
 
 ### RSI (상대강도지수)
 
-0–100, measuring how one-sided recent moves have been. Below 30 is conventionally
-"oversold", above 70 "overbought".
+0~100으로, 최근 움직임이 얼마나 한쪽으로 쏠렸는지를 봅니다. 통상 30 아래를 "과매도",
+70 위를 "과매수"로 읽습니다.
 
-### MDD vs volatility
+### MDD와 변동성의 차이
 
-Two different discomforts. Volatility is how much it moves day to day; MDD is
-the worst cumulative hole it dug. A strategy can be calm daily and still have a
-deep drawdown if it declines steadily.
+서로 다른 종류의 불편함입니다. **변동성**은 하루하루 얼마나 흔들리는지, **MDD**는 누적으로
+가장 깊이 판 구덩이입니다. 매일은 잔잔한데 꾸준히 흘러내리면 변동성은 낮고 MDD는 깊습니다.
