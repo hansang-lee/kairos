@@ -20,8 +20,8 @@
       "value": 2.7
     },
     "indpro": {
-      "change": 0.20709999999999695,
-      "value": 102.9939
+      "change": 0.022800000000003706,
+      "value": 103.0682
     },
     "payems": {
       "change": 162.0,
@@ -38,17 +38,17 @@
   },
   "fng": {
     "rating": "fear",
-    "score": 28.3428571428571
+    "score": 29.1142857142857
   },
   "regime": "OVERHEATING",
   "scores": {
-    "composite": 47.1,
-    "growth": 63.6,
+    "composite": 47.0,
+    "growth": 62.7,
     "inflation": 88.2,
     "liquidity": 65.2,
     "risk": 34.9,
-    "sentiment": 18.5
+    "sentiment": 18.9
   },
   "summary": "Signs of overheating are emerging. Strong growth is being coupled with rising inflationary pressure. Monetary tightening or market volatility may follow as the cycle matures.",
-  "timestamp": "2026-09-16T18:06:19Z"
+  "timestamp": "2026-09-19T17:09:13Z"
 }
