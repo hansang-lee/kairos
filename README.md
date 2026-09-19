@@ -13,7 +13,8 @@ libyfinance is a quant investing framework written in C++17.
 **Core features:**
 - **25 technical indicators** — trend (SMA/EMA/WMA/ADX/Parabolic SAR/SuperTrend/Aroon), momentum (RSI/MACD/ROC/CCI/Williams %R/TRIX/Stochastic/MA slope), volume (VWAP/OBV/MFI/CMF/A-D Line), volatility (Bollinger/ATR/StdDev/Keltner/Donchian)
 - **16 trading strategies** — grouped by category (swing / trend / position / scalp); see [Strategy categories](#-strategy-categories)
-- **Live intraday scalping** — `scalp_trade` polls KIS minute bars and places paper-trading orders (KRX)
+- **Live order execution** — `daily_trade` (daily bars, one run per day) and `scalp_trade` (minute-bar polling) place paper-trading orders on KRX
+- **Trade journal** — every decision, including dry runs, is appended to `data/trades.jsonl` with the strategy that produced it
 - **Backtest engine** — models commission, slippage and stop-loss; reports a 0–100 composite score
 - **Macro analysis** — 12 FRED series + CNN Fear & Greed, mapped onto a 4-regime model
 - **KIS OpenAPI integration** — KRX market data plus paper/live order placement and balance inquiry
@@ -208,16 +209,34 @@ Strategies are defined in JSON, so tickers and parameters can be added or change
 
 ## 🗂️ Strategy categories
 
-`IStrategy` operates on a `StockInfo` (an OHLCV time series) and never assumes daily bars — feeding it minute bars produces signals just the same. Backtesting (historical validation) uses the three daily-bar categories; live intraday execution goes through a separate minute-bar polling path (`scalp_trade`).
+`IStrategy` operates on a `StockInfo` (an OHLCV time series) and never assumes daily bars — feeding it minute bars produces signals just the same. Backtesting (historical validation) runs through `run_strategy`; live execution goes through `daily_trade` (daily bars) or `scalp_trade` (minute bars), which share one `SignalExecutor` so sizing and stop-loss rules cannot drift apart.
 
 | Category | Holding period | Character | Strategies | Runner |
 |---|---|---|---|---|
-| **swing** | days to 1–2 weeks | mean reversion (overbought/oversold) | rsi, bollinger, stochastic_reversal, williams_r, cci_reversal, mfi_reversal | `run_strategy` (daily) |
-| **trend** | 1 week to several weeks | trend following | sma_crossover, macd, adx_trend, supertrend, aroon_trend, psar_trend, ma_slope_trend | `run_strategy` (daily) |
-| **position** | weeks to months | volatility breakout / volume confirmation | donchian_breakout, obv_trend, keltner_breakout | `run_strategy` (daily) |
+| **swing** | days to 1–2 weeks | mean reversion (overbought/oversold) | rsi, bollinger, stochastic_reversal, williams_r, cci_reversal, mfi_reversal | `daily_trade` (daily) |
+| **trend** | 1 week to several weeks | trend following | sma_crossover, macd, adx_trend, supertrend, aroon_trend, psar_trend, ma_slope_trend | `daily_trade` (daily) |
+| **position** | weeks to months | volatility breakout / volume confirmation | donchian_breakout, obv_trend, keltner_breakout | `daily_trade` (daily) |
 | **scalp** | minutes | minute-bar polling, intraday live trading | sma_crossover (short parameters) | `scalp_trade` (intraday) |
 
 Every profile in `config/portfolio.json` carries a `category` field, visible directly in `run_strategy --list`.
+
+### Running the daily strategies live
+
+```bash
+# Requires KIS_PAPER_* credentials in .env. Dry-run by default (no real orders).
+./build/Release/app/daily_trade --id 3                  # one profile
+./build/Release/app/daily_trade --all                   # every KRX profile except 'scalp'
+
+# Add --live to actually place orders on the paper account
+./build/Release/app/daily_trade --all --live
+
+# --force evaluates outside KRX hours (dry-run inspection; live orders would be rejected)
+./build/Release/app/daily_trade --id 3 --force
+```
+
+`daily_trade` runs **once and exits**, placing at most one order per profile — the shape a cron job near the close wants (e.g. `15:15 KST`). It is the live counterpart to `run_strategy`, which only ever backtests.
+
+The index it evaluates is the bar the order would fill at: today's bar once KIS publishes it, otherwise the one past the last. This is the same convention the backtest uses, so a live signal matches what the backtest would have produced on that bar.
 
 ### Running the scalper
 
@@ -230,6 +249,18 @@ Every profile in `config/portfolio.json` carries a `category` field, visible dir
 ```
 
 KIS's `inquire-time-itemchartprice` (TR_ID `FHKST03010200`) serves **today's minute bars only, ~30 per call**. `scalp_trade` polls only during KRX hours (09:00–15:30 KST, weekdays) and re-reads holdings and average price from `KisTrader::getBalance()` on every cycle, treating KIS as the source of truth rather than keeping local position state. Overseas (US) order placement is not implemented, so only KRX tickers are supported.
+
+### Trade journal
+
+KIS records what was ordered but has no concept of our strategies, so the link from an order back to the profile that produced it only exists if we write it down. Both executables append one JSON line per decision — dry runs and orders suppressed by the cap included — to `data/trades.jsonl` (gitignored; it is account activity).
+
+```bash
+# Print KIS's own fill history and append the confirmed fills to the journal
+./build/Release/app/kis_order fills                 # today
+./build/Release/app/kis_order fills 20260901 20260919
+```
+
+Re-running the sync adds nothing, since fills are keyed on order number + filled quantity — but a partial fill that later fills further is recorded again. KIS recommends querying after 15:30 KST; earlier in the session the same-day results may still be incomplete.
 
 ---
 
@@ -386,7 +417,8 @@ macro report.
 | `macro_sweep` | Macro strategy profile comparison |
 | `qld_dca_backtest` | QLD dollar-cost-averaging backtest |
 | `strategy_sweep` | Multi-strategy × multi-ticker sweep |
-| `run_strategy` | Portfolio-driven strategy runs (daily bars; `--start`/`--end` for the window) |
+| `run_strategy` | Portfolio-driven **backtests** (daily bars; `--start`/`--end` for the window) |
+| `daily_trade` | **Live** daily-bar execution, one run per day (KRX, dry-run by default) |
 | `scalp_trade` | Intraday scalping via minute-bar polling (KRX, dry-run by default) |
 | `portfolio_report` | Paper-account snapshot as JSON (return vs principal + holdings) |
 | `test_indicators` | Technical indicator smoke tests |
@@ -403,7 +435,7 @@ macro report.
 | **1-D** | Korean market data collection (KIS API) | ✅ done |
 | **2-A** | Broker abstraction (IBroker) | 🔲 not started |
 | **2-B** | Order management (OrderManager, RiskManager) | 🔲 not started |
-| **2-C** | Automated trading daemon | 🟡 partial — `scalp_trade` covers the intraday KRX path |
+| **2-C** | Automated trading daemon | 🟡 partial — `daily_trade` + `scalp_trade` cover KRX; scheduling and risk limits pending |
 | **3** | Dashboard & alerts | 🟡 partial — local dashboard done; Go server, Telegram, external access pending |
 | **4** | AI / adaptive strategies (Python ML) | 🔲 not started |
 | **5** | Multi-tenant productization | 🔲 not started |
@@ -418,9 +450,12 @@ macro report.
 Yahoo Finance ─┐
 FRED API ──────┤                    ┌─── BacktestEngine ──→ BacktestResult
 CNN F&G ───────┼→ StockInfo/Macro  ─┤
-KIS OpenAPI ───┘                    └─── StrategyFactory ──→ run_strategy / scalp_trade
+KIS OpenAPI ───┘                    └─── StrategyFactory ──→ run_strategy (backtest)
                                                                   │
-                                                     KisTrader ───┴──→ paper account
+                                                    SignalExecutor ─┴──→ daily_trade / scalp_trade
+                                                          │
+                                     KisTrader ───────────┴──→ paper account
+                                     TradeJournal ────────┴──→ data/trades.jsonl
                                                                          │
                                                   portfolio_report ──────┴──→ dashboard
 ```
