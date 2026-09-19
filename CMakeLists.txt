@@ -119,6 +119,7 @@ add_executable(kairos_tests
   tests/test_strategy_lookahead.cpp
   tests/test_trade.cpp
   tests/test_data_config.cpp
+  tests/test_integration.cpp
 )
 target_link_libraries(kairos_tests PRIVATE ${PROJECT_NAME})
 target_include_directories(kairos_tests PRIVATE
