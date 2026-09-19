@@ -271,11 +271,15 @@ The 2026 dates up to the file's `verified_through` were derived from real KIS da
 
 ### Alerts
 
-Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `.env` to get a push when a **live** order is placed, fails, or is blocked by a risk limit. Dry runs stay silent. Both apps print `alerts=on/off` at startup, and `notify_test` verifies a setup before you depend on it:
+Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `.env` to get a push when a **live** order is placed, fails, or is blocked by a risk limit. Both apps print `alerts=on/off` at startup, and `notify_test` verifies a setup before you depend on it:
 
 ```bash
 ./build/Release/app/notify_test "hello from kairos"
 ```
+
+`daily_trade` also sends **one summary per run, whether or not anything happened**. Without it, silence means both "held, correctly" and "never ran" — which need opposite reactions from someone not watching the terminal. `--quiet` suppresses it for interactive runs.
+
+Every run also tees its output to `logs/<app>-<KST date>.log`, and `daily_trade` archives the bars each decision used to `data/bars/<ticker>/daily.csv`, so a past decision can be reconstructed after KIS has re-served its history.
 
 ### Trade journal
 
