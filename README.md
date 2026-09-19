@@ -314,6 +314,8 @@ systemctl --user list-timers 'kairos*'
 journalctl --user -u kairos-scalp.service -f
 ```
 
+What to edit, what needs a restart, and what to check when something looks wrong: [docs/OPERATIONS.md](docs/OPERATIONS.md).
+
 ---
 
 ## 📊 Technical indicators
@@ -494,6 +496,7 @@ macro report.
 | **5** | Multi-tenant productization | 🔲 not started |
 
 > Full plan: [docs/PLAN.md](docs/PLAN.md)
+> Running it day to day: [docs/OPERATIONS.md](docs/OPERATIONS.md)
 
 ---
 
