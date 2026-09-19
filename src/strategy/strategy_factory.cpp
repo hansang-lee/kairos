@@ -1,4 +1,5 @@
 #include "strategy/strategy_factory.hpp"
+#include <algorithm>
 
 #include <iostream>
 
@@ -134,14 +135,23 @@ PortfolioConfig PortfolioConfig::loadFromFile(const std::string& configPath) {
 
     for (const auto& item : (*j)["strategies"]) {
         StrategyProfile p;
-        p.id          = item.value("id", 0);
-        p.name        = item.value("name", "");
-        p.ticker      = item.value("ticker", "");
-        p.market      = item.value("market", "KRX");
-        p.type        = item.value("type", "");
-        p.category    = item.value("category", "");
-        p.positionPct = item.value("position_pct", 1.0);
-        p.stopLossPct = item.value("stop_loss_pct", 0.0);
+        p.id              = item.value("id", 0);
+        p.name            = item.value("name", "");
+        p.ticker          = item.value("ticker", "");
+        p.market          = item.value("market", "KRX");
+        p.type            = item.value("type", "");
+        p.category        = item.value("category", "");
+        p.positionPct     = item.value("position_pct", 1.0);
+        p.stopLossPct     = item.value("stop_loss_pct", 0.0);
+        p.takeProfitPct   = item.value("take_profit_pct", 0.0);
+        p.trailingStopPct = item.value("trailing_stop_pct", 0.0);
+        p.cooldownMinutes = item.value("cooldown_minutes", 0);
+        p.entryTranches   = std::max(1, item.value("entry_tranches", 1));
+        p.exitTranches    = std::max(1, item.value("exit_tranches", 1));
+        if (item.contains("trade_window") && item["trade_window"].is_object()) {
+            p.tradeStart = item["trade_window"].value("start", "");
+            p.tradeEnd   = item["trade_window"].value("end", "");
+        }
         p.description = item.value("description", "");
 
         if (item.contains("params") && item["params"].is_object()) {

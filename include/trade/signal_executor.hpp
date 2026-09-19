@@ -7,6 +7,7 @@
 #include "notify/telegram.hpp"
 #include "strategy/istrategy.hpp"
 #include "strategy/strategy_factory.hpp"
+#include "trade/position_store.hpp"
 #include "trade/risk_guard.hpp"
 #include "trade/trade_journal.hpp"
 
@@ -14,10 +15,12 @@ namespace trade {
 
 /** What one evaluation round decided, for the caller to log in its own format. */
 struct Decision {
-    Signal  signal       = Signal::HOLD;
-    double  price        = 0.0;  ///< price the order was sized against
-    int64_t heldQty      = 0;    ///< shares currently held, per the account balance
-    double  heldAvgPrice = 0.0;
+    Signal  signal            = Signal::HOLD;
+    double  price             = 0.0;  ///< price the order was sized against
+    int64_t heldQty           = 0;    ///< shares currently held, per the account balance
+    double  heldAvgPrice      = 0.0;
+    double  peakPrice         = 0.0;  ///< highest price seen since entry (trailing stop reference)
+    int     entryTranchesDone = 0;    ///< buy tranches already filled for this position
 
     bool        acted = false;  ///< an order was warranted by the signal or the stop
     std::string side;           ///< "BUY" / "SELL", empty when acted == false
@@ -65,12 +68,16 @@ class SignalExecutor {
     [[nodiscard]] const notify::Telegram& notifier() const { return notify_; }
 
    private:
+    /** @brief Why a new entry is not allowed right now (window, cooldown); empty if it is. */
+    [[nodiscard]] std::string entryBlockReason(const PositionState& state) const;
+
     const StrategyProfile& profile_;
     bool                   live_;
     int                    maxOrders_;
     int                    ordersSent_ = 0;
     TradeJournal           journal_;
     RiskGuard              risk_;
+    PositionStore          positions_;
     notify::Telegram       notify_;
     std::string            mode_;
 };

@@ -19,9 +19,22 @@ struct StrategyProfile {
     // or "position" (volatility breakout / volume-confirmed, weeks~months).
     std::string    category;
     nlohmann::json params;
-    double         positionPct = 1.0;
-    double         stopLossPct = 0.0;
-    std::string    description;
+    double         positionPct = 1.0;  ///< fraction of cash committed to a full position
+    double         stopLossPct = 0.0;  ///< exit when price falls this far below average price; 0 = off
+
+    /* ----- Exit rules beyond the plain stop (all 0 = off) ----- */
+    double takeProfitPct   = 0.0;  ///< exit when price rises this far above average price
+    double trailingStopPct = 0.0;  ///< exit when price falls this far below the peak seen since entry
+    int    cooldownMinutes = 0;    ///< refuse to re-enter this ticker for this long after an exit
+
+    /* ----- Order splitting (1 = all at once) ----- */
+    int entryTranches = 1;  ///< buy the position over this many orders
+    int exitTranches  = 1;  ///< sell it over this many orders
+
+    /* ----- Intraday trading window, HHMM KST; empty = the whole session ----- */
+    std::string tradeStart;  ///< e.g. "0930" to sit out the opening auction noise
+    std::string tradeEnd;    ///< e.g. "1520" to stop before the closing auction
+    std::string description;
 
     [[nodiscard]] std::unique_ptr<IStrategy> createStrategy() const;
 };
