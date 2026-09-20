@@ -53,6 +53,7 @@ add_library(${PROJECT_NAME} SHARED
   lib/squeeze_breakout/squeeze_breakout.cpp
   lib/ichimoku_trend/ichimoku_trend.cpp
   src/strategy/strategy_factory.cpp
+  src/strategy/strategy_catalog.cpp
 )
 
 target_include_directories(${PROJECT_NAME}

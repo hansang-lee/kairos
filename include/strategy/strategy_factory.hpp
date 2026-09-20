@@ -52,7 +52,26 @@ struct StrategyProfile {
 
 class PortfolioConfig {
    public:
-    static PortfolioConfig loadFromFile(const std::string& configPath = "config/portfolio.json");
+    /**
+     * @brief Load live positions, resolving strategy references against a catalog.
+     *
+     * A position may name a strategy by id — the normal case, so a backtest and
+     * the trader reference one definition instead of each carrying a copy that
+     * can drift — or carry `type` and `params` inline, which keeps a
+     * self-contained file usable.
+     *
+     * A reference that does not resolve is an error, not a default: a mistyped id
+     * silently falling back to some other strategy is the kind of failure that
+     * would only be noticed from the trades it produced.
+     *
+     * @param configPath  Live positions file.
+     * @param catalogPath Strategy catalog. Empty resolves to config/strategies.json.
+     */
+    static PortfolioConfig loadFromFile(const std::string& configPath  = "config/live.json",
+                                        const std::string& catalogPath = "");
+
+    /** @brief Strategy ids referenced by a position but missing from the catalog. */
+    [[nodiscard]] const std::vector<std::string>& unresolvedStrategies() const { return unresolved_; }
 
     [[nodiscard]] const std::vector<StrategyProfile>& getProfiles() const { return profiles_; }
 
@@ -109,6 +128,7 @@ class PortfolioConfig {
     std::vector<StrategyProfile> profiles_;
     double                       initialCapitalKrw_ = 10000000.0;
     trade::RiskLimits            riskLimits_;
+    std::vector<std::string>     unresolved_;
     std::string                  sourcePath_;
     std::int64_t                 sourceMtime_ = 0;
 };

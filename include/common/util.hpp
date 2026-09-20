@@ -63,7 +63,7 @@ struct Defer {
  * @brief Resolve a relative path from the executable's directory.
  *
  * Useful for finding config files when running from build/Release/app/:
- *   resolveFromExe("config/portfolio.json") → /project/root/config/portfolio.json
+ *   resolveFromExe("config/live.json") → /project/root/config/live.json
  *
  * @param relativePath Path relative to the project root.
  * @return Absolute path resolved from the executable's location.

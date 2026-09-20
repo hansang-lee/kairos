@@ -142,7 +142,7 @@ void printUsage() {
     std::cout << "Usage:\n"
               << "  trader [--live] [--interval <seconds>] [--daily-at <HHMM>] [--max-trades <n>]\n"
               << "         [--config <path>] [--quiet] [--once] [--force]\n\n"
-              << "  Runs every enabled KRX profile in config/portfolio.json. Minute-bar profiles\n"
+              << "  Runs every enabled KRX profile in config/live.json. Minute-bar profiles\n"
               << "  (category 'scalp') are evaluated each --interval; the rest run once a day at\n"
               << "  or after --daily-at, whenever the loop next looks.\n\n"
               << "  --live        actually place orders; without it, decisions are logged only\n"
@@ -160,7 +160,7 @@ void printUsage() {
 int main(int argc, char* argv[]) {
     std::setvbuf(stdout, nullptr, _IOLBF, 0);  // line-buffer stdout even when piped
 
-    std::string configPath   = "config/portfolio.json";
+    std::string configPath   = "config/live.json";
     int         intervalSec  = 60;
     int         dailyAtHhmm  = 1515;
     int         maxTrades    = 10;

@@ -24,7 +24,7 @@ std::string dateFromNow(int daysAgo) {
 
 void printList(const PortfolioConfig& config) {
     std::cout << "\n========================================================================================\n";
-    std::cout << " 📋 REGISTERED PORTFOLIO STRATEGIES (from config/portfolio.json)\n";
+    std::cout << " 📋 REGISTERED PORTFOLIO STRATEGIES (from config/live.json)\n";
     std::cout << "========================================================================================\n";
     std::cout << std::left << std::setw(6) << "ID" << std::setw(10) << "Market" << std::setw(10) << "Ticker"
               << std::setw(10) << "Category" << std::setw(21) << "Type" << std::setw(30) << "Name" << "Description\n";
@@ -117,7 +117,7 @@ void executeProfile(const StrategyProfile& p, KisProvider& kis, const std::strin
 }
 
 int main(int argc, char* argv[]) {
-    std::string configPath = "config/portfolio.json";
+    std::string configPath = "config/live.json";
     int         targetId   = -1;
     bool        runAll     = false;
     std::string startDate  = dateFromNow(365);  // default: last ~1 year

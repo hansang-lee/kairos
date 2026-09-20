@@ -16,6 +16,7 @@
 #include "backtest/backtest_engine.hpp"
 #include "common/util.hpp"
 #include "data/kis_provider.hpp"
+#include "strategy/strategy_catalog.hpp"
 #include "strategy/strategy_factory.hpp"
 
 /**
@@ -50,84 +51,21 @@ struct Candidate {
 };
 
 /**
- * @brief Parameter grid for one strategy, for --strategy mode.
+ * @brief Strategies to test, from the catalog rather than from this file.
  *
- * Kept deliberately coarse. A fine grid over 30 tickers produces thousands of
- * combinations, and the best of thousands is noise no matter how it is selected.
+ * These were hardcoded here, which meant the parameters a sweep reported on and
+ * the parameters the trader ran were two separate copies that nothing kept in
+ * step. Both now read config/strategies.json.
+ *
+ * @param gridFor Empty for every concrete definition; otherwise the grid for
+ *                that strategy type.
  */
-std::vector<Candidate> grid(const std::string& type) {
+std::vector<Candidate> candidatesFrom(const StrategyCatalog& catalog, const std::string& gridFor) {
     std::vector<Candidate> out;
-    auto                   add = [&](const std::string& label, const nlohmann::json& p) {
-        out.push_back({label, type, p});
-    };
-
-    if (type == "bollinger") {
-        for (int period : {14, 20, 30, 40}) {
-            for (double sd : {1.5, 2.0, 2.5}) {
-                add("bb(" + std::to_string(period) + "," + std::to_string(sd).substr(0, 3) + ")",
-                    {{"period", period}, {"std_devs", sd}});
-            }
-        }
-    } else if (type == "ma_slope_trend") {
-        for (int ma : {10, 20, 40}) {
-            for (int win : {5, 10, 20}) {
-                add("slope(" + std::to_string(ma) + "," + std::to_string(win) + ")",
-                    {{"ma_period", ma}, {"slope_window", win}});
-            }
-        }
-    } else if (type == "rsi") {
-        for (int period : {7, 14, 21}) {
-            for (double os : {25.0, 30.0, 35.0}) {
-                add("rsi(" + std::to_string(period) + "," + std::to_string(static_cast<int>(os)) + ")",
-                    {{"period", period}, {"oversold", os}, {"overbought", 100.0 - os}});
-            }
-        }
-    } else if (type == "macd") {
-        for (int fast : {8, 12, 16}) {
-            for (int slow : {21, 26, 34}) {
-                add("macd(" + std::to_string(fast) + "," + std::to_string(slow) + ")",
-                    {{"fast", fast}, {"slow", slow}, {"signal", 9}});
-            }
-        }
-    } else if (type == "sma_crossover") {
-        for (int shortW : {5, 10, 20}) {
-            for (int longW : {40, 60, 120}) {
-                add("sma(" + std::to_string(shortW) + "," + std::to_string(longW) + ")",
-                    {{"short_window", shortW}, {"long_window", longW}});
-            }
-        }
+    for (const auto& d : gridFor.empty() ? catalog.concrete() : catalog.gridFor(gridFor)) {
+        out.push_back({d.id, d.type, d.params});
     }
     return out;
-}
-
-/** The registered strategies at their documented defaults. */
-std::vector<Candidate> candidates() {
-    return {
-        {"sma_crossover", "sma_crossover", {{"short_window", 20}, {"long_window", 60}}},
-        {"rsi", "rsi", {{"period", 14}, {"oversold", 30.0}, {"overbought", 70.0}}},
-        {"macd", "macd", {{"fast", 12}, {"slow", 26}, {"signal", 9}}},
-        {"bollinger", "bollinger", {{"period", 20}, {"std_devs", 2.0}}},
-        {"stochastic_reversal", "stochastic_reversal", {{"k_period", 14}, {"d_period", 3}}},
-        {"williams_r", "williams_r", {{"period", 14}}},
-        {"cci_reversal", "cci_reversal", {{"period", 20}}},
-        {"mfi_reversal", "mfi_reversal", {{"period", 14}}},
-        {"adx_trend", "adx_trend", {{"period", 14}, {"threshold", 25.0}}},
-        {"supertrend", "supertrend", {{"period", 10}, {"multiplier", 3.0}}},
-        {"aroon_trend", "aroon_trend", {{"period", 25}}},
-        {"psar_trend", "psar_trend", {{"step", 0.02}, {"max_step", 0.2}}},
-        {"donchian_breakout", "donchian_breakout", {{"period", 20}}},
-        {"obv_trend", "obv_trend", {{"period", 20}}},
-        {"keltner_breakout", "keltner_breakout", {{"period", 20}, {"multiplier", 2.0}}},
-        {"ma_slope_trend", "ma_slope_trend", {{"ma_period", 20}, {"slope_window", 10}}},
-        {"regime_rsi",
-         "regime_rsi",
-         {{"regime_period", 120}, {"rsi_period", 14}, {"oversold", 35.0}, {"exit_level", 65.0}}},
-        {"volume_breakout", "volume_breakout", {{"period", 20}, {"volume_period", 20}, {"volume_ratio", 1.5}}},
-        {"squeeze_breakout",
-         "squeeze_breakout",
-         {{"period", 20}, {"std_devs", 2.0}, {"squeeze_lookback", 60}, {"squeeze_percent", 0.25}}},
-        {"ichimoku_trend", "ichimoku_trend", {{"conversion", 9}, {"base", 26}, {"span_b", 52}}},
-    };
 }
 
 double median(std::vector<double> v) {
@@ -253,8 +191,9 @@ void printUsage() {
               << "                a strategy that barely traded cannot be evaluated either way\n"
               << "  --fetch-start how far back to fetch and cache (default 2019-01-01). The test\n"
               << "                window is sliced from this, so widening it only costs one fetch\n"
-              << "  --strategy    sweep one strategy's parameter grid instead of all strategies\n"
-              << "                at defaults (bollinger, ma_slope_trend, rsi, macd, sma_crossover)\n"
+              << "  --strategy    sweep one strategy type's parameter grid from the catalog,\n"
+              << "                instead of every concrete strategy in it\n"
+              << "  --catalog     strategy definitions (default: config/strategies.json)\n"
               << "  --refetch     ignore the cached price data under cache/daily/\n";
 }
 
@@ -269,7 +208,8 @@ int main(int argc, char* argv[]) {
     double      positionPct  = 1.0;
     bool        refetch      = false;
     std::string fetchStart   = "2019-01-01";  // cached once; the test window is sliced from it
-    std::string gridFor;                      // when set, sweep this strategy's parameters instead
+    std::string gridFor;                      // when set, sweep this strategy type's parameter grid
+    std::string catalogPath;                  // empty resolves to config/strategies.json
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -289,6 +229,8 @@ int main(int argc, char* argv[]) {
             fetchStart = argv[++i];
         else if (arg == "--strategy" && i + 1 < argc)
             gridFor = argv[++i];
+        else if (arg == "--catalog" && i + 1 < argc)
+            catalogPath = argv[++i];
         else if (arg == "--refetch")
             refetch = true;
         else {
@@ -303,10 +245,17 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    const auto catalog = StrategyCatalog::loadFromFile(catalogPath);
+    if (!catalog.loaded()) {
+        std::cerr << "[-] No strategies loaded from " << catalog.path() << std::endl;
+        return 1;
+    }
+
     const int64_t splitTs = parseDate(splitDate);
-    const auto    cands   = gridFor.empty() ? candidates() : grid(gridFor);
+    const auto    cands   = candidatesFrom(catalog, gridFor);
     if (cands.empty()) {
-        std::cerr << "[-] No parameter grid defined for '" << gridFor << "'." << std::endl;
+        std::cerr << "[-] No " << (gridFor.empty() ? "strategies" : "grid for '" + gridFor + "'") << " in "
+                  << catalog.path() << std::endl;
         return 1;
     }
 

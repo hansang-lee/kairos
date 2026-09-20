@@ -5,6 +5,7 @@
 #include "common/util.hpp"
 #include "data/bar_recorder.hpp"
 #include "data/krx_calendar.hpp"
+#include "strategy/strategy_catalog.hpp"
 #include "strategy/strategy_factory.hpp"
 #include "test_framework.hpp"
 
@@ -389,4 +390,137 @@ TEST(config, valid_percentages_pass_through_untouched) {
     CHECK_NEAR(p->takeProfitPct, 12.0, 1e-9);
     CHECK_NEAR(p->trailingStopPct, 5.0, 1e-9);
     CHECK_EQ(p->cooldownMinutes, 30);
+}
+
+/* ---------------------------- StrategyCatalog ---------------------------- */
+
+TEST(catalog, concrete_strategies_load_with_their_parameters) {
+    const std::string path = tmp("catalog.json");
+    writeFile(path, R"({"strategies":[
+      {"id":"bb40","name":"Bollinger 40","type":"bollinger","category":"swing",
+       "params":{"period":40,"std_devs":2.0}},
+      {"id":"slope","type":"ma_slope_trend","params":{"ma_period":20,"slope_window":10}}
+    ]})");
+
+    const auto cat = StrategyCatalog::loadFromFile(path);
+    CHECK(cat.loaded());
+    CHECK_EQ(cat.concrete().size(), std::size_t{2});
+
+    const auto* bb = cat.find("bb40");
+    CHECK(bb != nullptr);
+    CHECK_EQ(bb->type, std::string("bollinger"));
+    CHECK_EQ(bb->category, std::string("swing"));
+    CHECK_EQ(bb->params.value("period", 0), 40);
+    CHECK(cat.find("nope") == nullptr);
+}
+
+TEST(catalog, a_grid_expands_to_every_combination) {
+    const std::string path = tmp("catalog_grid.json");
+    writeFile(path, R"({"grids":[
+      {"type":"bollinger","category":"swing","params":{"period":[14,20,40],"std_devs":[1.5,2.0]}}
+    ]})");
+
+    const auto cat  = StrategyCatalog::loadFromFile(path);
+    const auto grid = cat.gridFor("bollinger");
+    CHECK_EQ(grid.size(), std::size_t{6});  // 3 x 2
+    CHECK(cat.concrete().empty());          // a grid produces no concrete entries
+
+    // Ids must be stable, or the same combination is named differently next run and
+    // two sweep reports cannot be compared.
+    CHECK(cat.find("bollinger(14,1.5)") != nullptr);
+    CHECK(cat.find("bollinger(40,2.0)") != nullptr);
+    CHECK(cat.gridFor("rsi").empty());
+}
+
+TEST(catalog, entries_without_an_id_or_type_are_skipped) {
+    const std::string path = tmp("catalog_bad.json");
+    writeFile(path, R"({"strategies":[
+      {"name":"no id","type":"rsi"},
+      {"id":"no-type"},
+      {"id":"fine","type":"rsi"}
+    ]})");
+
+    const auto cat = StrategyCatalog::loadFromFile(path);
+    CHECK_EQ(cat.concrete().size(), std::size_t{1});
+    CHECK(cat.find("fine") != nullptr);
+}
+
+TEST(catalog, a_missing_file_loads_nothing_rather_than_failing) {
+    const auto cat = StrategyCatalog::loadFromFile(tmp("catalog_absent.json"));
+    CHECK(!cat.loaded());
+    CHECK(cat.all().empty());
+}
+
+/* ----------------------- live positions + catalog ----------------------- */
+
+TEST(config, a_position_resolves_its_strategy_from_the_catalog) {
+    const std::string cat = tmp("resolve_catalog.json");
+    writeFile(cat, R"({"strategies":[
+      {"id":"bb40","name":"Bollinger 40","type":"bollinger","category":"swing",
+       "params":{"period":40,"std_devs":2.5}}
+    ]})");
+
+    const std::string live = tmp("resolve_live.json");
+    writeFile(live, R"({"positions":[
+      {"id":30,"strategy":"bb40","ticker":"005930","position_pct":0.2,"stop_loss_pct":8.0}
+    ]})");
+
+    const auto  cfg = PortfolioConfig::loadFromFile(live, cat);
+    const auto* p   = cfg.findById(30);
+    CHECK(p != nullptr);
+    // The whole point: the trader uses the catalog's parameters, not its own copy.
+    CHECK_EQ(p->type, std::string("bollinger"));
+    CHECK_EQ(p->category, std::string("swing"));
+    CHECK_EQ(p->params.value("period", 0), 40);
+    CHECK_NEAR(p->params.value("std_devs", 0.0), 2.5, 1e-9);
+    CHECK_EQ(p->ticker, std::string("005930"));
+    CHECK(p->createStrategy() != nullptr);
+}
+
+TEST(config, an_unresolved_strategy_reference_is_refused_not_defaulted) {
+    // A mistyped id quietly falling back to some other strategy would only be
+    // noticed from the trades it produced.
+    const std::string cat = tmp("refuse_catalog.json");
+    writeFile(cat, R"({"strategies":[{"id":"bb40","type":"bollinger","params":{"period":40}}]})");
+
+    const std::string live = tmp("refuse_live.json");
+    writeFile(live, R"({"positions":[
+      {"id":30,"strategy":"bb4O","ticker":"005930"},
+      {"id":31,"strategy":"bb40","ticker":"000660"}
+    ]})");
+
+    const auto cfg = PortfolioConfig::loadFromFile(live, cat);
+    CHECK(cfg.findById(30) == nullptr);  // the typo does not trade
+    CHECK(cfg.findById(31) != nullptr);  // the valid one still does
+    CHECK_EQ(cfg.unresolvedStrategies().size(), std::size_t{1});
+    CHECK_EQ(cfg.unresolvedStrategies()[0], std::string("bb4O"));
+}
+
+TEST(config, an_inline_type_still_works_without_a_catalog) {
+    const std::string live = tmp("inline_live.json");
+    writeFile(live, R"({"positions":[
+      {"id":1,"ticker":"005930","type":"rsi","params":{"period":21}}
+    ]})");
+
+    const auto  cfg = PortfolioConfig::loadFromFile(live, tmp("no_such_catalog.json"));
+    const auto* p   = cfg.findById(1);
+    CHECK(p != nullptr);
+    CHECK_EQ(p->type, std::string("rsi"));
+    CHECK_EQ(p->params.value("period", 0), 21);
+}
+
+TEST(config, a_position_can_override_the_catalog_parameters) {
+    const std::string cat = tmp("override_catalog.json");
+    writeFile(cat, R"({"strategies":[{"id":"bb","type":"bollinger","params":{"period":20,"std_devs":2.0}}]})");
+
+    const std::string live = tmp("override_live.json");
+    writeFile(live, R"({"positions":[
+      {"id":1,"strategy":"bb","ticker":"005930","params":{"period":60,"std_devs":2.0}}
+    ]})");
+
+    const auto  cfg = PortfolioConfig::loadFromFile(live, cat);
+    const auto* p   = cfg.findById(1);
+    // One position can be adjusted without forking the shared definition.
+    CHECK_EQ(p->params.value("period", 0), 60);
+    CHECK_EQ(p->type, std::string("bollinger"));
 }

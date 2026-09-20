@@ -1,0 +1,308 @@
+{
+  "note": "Strategy definitions with no ticker attached. A backtest and the live trader both reference these by id, so the parameters they use cannot drift apart. config/live.json binds an id to a ticker; config/universe.json lists the tickers a sweep crosses them with.",
+  "strategies": [
+    {
+      "id": "sma_crossover",
+      "name": "sma_crossover",
+      "type": "sma_crossover",
+      "category": "trend",
+      "params": {
+        "short_window": 20,
+        "long_window": 60
+      }
+    },
+    {
+      "id": "rsi",
+      "name": "rsi",
+      "type": "rsi",
+      "category": "swing",
+      "params": {
+        "period": 14,
+        "oversold": 30.0,
+        "overbought": 70.0
+      }
+    },
+    {
+      "id": "macd",
+      "name": "macd",
+      "type": "macd",
+      "category": "trend",
+      "params": {
+        "fast": 12,
+        "slow": 26,
+        "signal": 9
+      }
+    },
+    {
+      "id": "bollinger",
+      "name": "bollinger",
+      "type": "bollinger",
+      "category": "swing",
+      "params": {
+        "period": 20,
+        "std_devs": 2.0
+      }
+    },
+    {
+      "id": "stochastic_reversal",
+      "name": "stochastic_reversal",
+      "type": "stochastic_reversal",
+      "category": "swing",
+      "params": {
+        "k_period": 14,
+        "d_period": 3
+      }
+    },
+    {
+      "id": "williams_r",
+      "name": "williams_r",
+      "type": "williams_r",
+      "category": "swing",
+      "params": {
+        "period": 14
+      }
+    },
+    {
+      "id": "cci_reversal",
+      "name": "cci_reversal",
+      "type": "cci_reversal",
+      "category": "swing",
+      "params": {
+        "period": 20
+      }
+    },
+    {
+      "id": "mfi_reversal",
+      "name": "mfi_reversal",
+      "type": "mfi_reversal",
+      "category": "swing",
+      "params": {
+        "period": 14
+      }
+    },
+    {
+      "id": "adx_trend",
+      "name": "adx_trend",
+      "type": "adx_trend",
+      "category": "trend",
+      "params": {
+        "period": 14,
+        "threshold": 25.0
+      }
+    },
+    {
+      "id": "supertrend",
+      "name": "supertrend",
+      "type": "supertrend",
+      "category": "trend",
+      "params": {
+        "period": 10,
+        "multiplier": 3.0
+      }
+    },
+    {
+      "id": "aroon_trend",
+      "name": "aroon_trend",
+      "type": "aroon_trend",
+      "category": "trend",
+      "params": {
+        "period": 25
+      }
+    },
+    {
+      "id": "psar_trend",
+      "name": "psar_trend",
+      "type": "psar_trend",
+      "category": "trend",
+      "params": {
+        "step": 0.02,
+        "max_step": 0.2
+      }
+    },
+    {
+      "id": "donchian_breakout",
+      "name": "donchian_breakout",
+      "type": "donchian_breakout",
+      "category": "position",
+      "params": {
+        "period": 20
+      }
+    },
+    {
+      "id": "obv_trend",
+      "name": "obv_trend",
+      "type": "obv_trend",
+      "category": "position",
+      "params": {
+        "period": 20
+      }
+    },
+    {
+      "id": "keltner_breakout",
+      "name": "keltner_breakout",
+      "type": "keltner_breakout",
+      "category": "position",
+      "params": {
+        "period": 20,
+        "multiplier": 2.0
+      }
+    },
+    {
+      "id": "ma_slope_trend",
+      "name": "ma_slope_trend",
+      "type": "ma_slope_trend",
+      "category": "trend",
+      "params": {
+        "ma_period": 20,
+        "slope_window": 10
+      }
+    },
+    {
+      "id": "regime_rsi",
+      "name": "regime_rsi",
+      "type": "regime_rsi",
+      "category": "swing",
+      "params": {
+        "regime_period": 120,
+        "rsi_period": 14,
+        "oversold": 35.0,
+        "exit_level": 65.0
+      }
+    },
+    {
+      "id": "volume_breakout",
+      "name": "volume_breakout",
+      "type": "volume_breakout",
+      "category": "position",
+      "params": {
+        "period": 20,
+        "volume_period": 20,
+        "volume_ratio": 1.5
+      }
+    },
+    {
+      "id": "squeeze_breakout",
+      "name": "squeeze_breakout",
+      "type": "squeeze_breakout",
+      "category": "position",
+      "params": {
+        "period": 20,
+        "std_devs": 2.0,
+        "squeeze_lookback": 60,
+        "squeeze_percent": 0.25
+      }
+    },
+    {
+      "id": "ichimoku_trend",
+      "name": "ichimoku_trend",
+      "type": "ichimoku_trend",
+      "category": "trend",
+      "params": {
+        "conversion": 9,
+        "base": 26,
+        "span_b": 52
+      }
+    },
+    {
+      "id": "bb40",
+      "name": "bb40",
+      "type": "bollinger",
+      "category": "swing",
+      "params": {
+        "period": 40,
+        "std_devs": 2.0
+      }
+    }
+  ],
+  "grids": [
+    {
+      "type": "bollinger",
+      "category": "swing",
+      "params": {
+        "period": [
+          14,
+          20,
+          30,
+          40
+        ],
+        "std_devs": [
+          1.5,
+          2.0,
+          2.5
+        ]
+      }
+    },
+    {
+      "type": "ma_slope_trend",
+      "category": "trend",
+      "params": {
+        "ma_period": [
+          10,
+          20,
+          40
+        ],
+        "slope_window": [
+          5,
+          10,
+          20
+        ]
+      }
+    },
+    {
+      "type": "rsi",
+      "category": "swing",
+      "params": {
+        "period": [
+          7,
+          14,
+          21
+        ],
+        "oversold": [
+          25.0,
+          30.0,
+          35.0
+        ],
+        "overbought": [
+          65.0,
+          70.0,
+          75.0
+        ]
+      }
+    },
+    {
+      "type": "macd",
+      "category": "trend",
+      "params": {
+        "fast": [
+          8,
+          12,
+          16
+        ],
+        "slow": [
+          21,
+          26,
+          34
+        ],
+        "signal": [
+          9
+        ]
+      }
+    },
+    {
+      "type": "sma_crossover",
+      "category": "trend",
+      "params": {
+        "short_window": [
+          5,
+          10,
+          20
+        ],
+        "long_window": [
+          40,
+          60,
+          120
+        ]
+      }
+    }
+  ]
+}

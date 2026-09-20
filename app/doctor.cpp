@@ -189,10 +189,16 @@ void checkStrategies(const PortfolioConfig& config) {
     section("Strategies");
 
     if (config.getProfiles().empty()) {
-        fail("No profiles loaded", "check config/portfolio.json");
+        fail("No profiles loaded", "check config/live.json");
         return;
     }
     ok("Profiles loaded", std::to_string(config.getProfiles().size()) + " total");
+
+    // A position naming a strategy that is not in the catalog is dropped at load.
+    // Silently trading four profiles when five were configured is not acceptable.
+    for (const auto& id : config.unresolvedStrategies()) {
+        fail("Unresolved strategy '" + id + "'", "no such id in the catalog; that position will not trade");
+    }
 
     int broken = 0;
     for (const auto& p : config.getProfiles()) {
@@ -277,7 +283,7 @@ void checkRisk(const PortfolioConfig& config) {
 
     const auto& limits = config.getRiskLimits();
     if (limits.dailyLossLimitPct <= 0.0) {
-        warn("No daily loss limit", "set risk.daily_loss_limit_pct in config/portfolio.json");
+        warn("No daily loss limit", "set risk.daily_loss_limit_pct in config/live.json");
     } else {
         ok("Daily loss limit", std::to_string(limits.dailyLossLimitPct) + "%");
     }
@@ -353,7 +359,7 @@ void checkAlerts() {
 }  // namespace
 
 int main(int argc, char* argv[]) {
-    std::string configPath  = "config/portfolio.json";
+    std::string configPath  = "config/live.json";
     bool        skipNetwork = false;
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];

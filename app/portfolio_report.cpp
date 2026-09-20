@@ -9,12 +9,12 @@
 
 /**
  * @brief Snapshot the live KIS paper-trading account (balance + holdings) as JSON,
- *        cross-referenced against config/portfolio.json for strategy attribution.
+ *        cross-referenced against config/live.json for strategy attribution.
  *
  * Usage: portfolio_report [config_path] > docs/portfolio.json
  */
 int main(int argc, char* argv[]) {
-    const std::string configPath = (argc > 1) ? argv[1] : "config/portfolio.json";
+    const std::string configPath = (argc > 1) ? argv[1] : "config/live.json";
     const auto        portfolio  = PortfolioConfig::loadFromFile(configPath);
 
     const auto balance = KisTrader::getBalance();

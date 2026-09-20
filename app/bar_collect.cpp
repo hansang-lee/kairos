@@ -30,7 +30,7 @@ void printUsage() {
 }  // namespace
 
 int main(int argc, char* argv[]) {
-    std::string configPath = "config/portfolio.json";
+    std::string configPath = "config/live.json";
     std::string interval   = "1m";
     std::string range      = "5d";
     std::string oneTicker;

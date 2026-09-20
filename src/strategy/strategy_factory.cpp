@@ -1,4 +1,6 @@
 #include "strategy/strategy_factory.hpp"
+
+#include "strategy/strategy_catalog.hpp"
 #include <algorithm>
 #include <filesystem>
 
@@ -204,14 +206,33 @@ bool PortfolioConfig::sourceChanged() const {
     return now != 0 && now != sourceMtime_;
 }
 
-PortfolioConfig PortfolioConfig::loadFromFile(const std::string& configPath) {
+PortfolioConfig PortfolioConfig::loadFromFile(const std::string& configPath, const std::string& catalogPath) {
     PortfolioConfig cfg;
     cfg.sourcePath_  = configPath;
     cfg.sourceMtime_ = fileMtime(configPath);
     const auto j     = util::loadJsonConfig(configPath);
-    if (!j || !j->contains("strategies") || !(*j)["strategies"].is_array()) {
+    if (!j) {
         return cfg;
     }
+
+    // "positions" is the current key; "strategies" is what the list was called when
+    // each entry carried its own strategy definition.
+    const char* listKey = j->contains("positions") ? "positions" : "strategies";
+    if (!j->contains(listKey) || !(*j)[listKey].is_array()) {
+        return cfg;
+    }
+
+    // Loaded lazily: a self-contained file with inline types needs no catalog, and
+    // reading one that is absent would print a misleading error.
+    bool            catalogLoaded = false;
+    StrategyCatalog catalog;
+    auto            resolve = [&](const std::string& id) -> const StrategyDef* {
+        if (!catalogLoaded) {
+            catalog       = StrategyCatalog::loadFromFile(catalogPath);
+            catalogLoaded = true;
+        }
+        return catalog.find(id);
+    };
 
     cfg.initialCapitalKrw_ = j->value("initial_capital_krw", 10000000.0);
 
@@ -221,14 +242,27 @@ PortfolioConfig PortfolioConfig::loadFromFile(const std::string& configPath) {
         cfg.riskLimits_.maxOrdersPerDay   = r.value("max_orders_per_day", 0);
     }
 
-    for (const auto& item : (*j)["strategies"]) {
+    for (const auto& item : (*j)[listKey]) {
         StrategyProfile p;
-        p.id       = item.value("id", 0);
-        p.name     = item.value("name", "");
-        p.ticker   = item.value("ticker", "");
-        p.market   = item.value("market", "KRX");
-        p.type     = item.value("type", "");
-        p.category = item.value("category", "");
+        p.id     = item.value("id", 0);
+        p.ticker = item.value("ticker", "");
+        p.market = item.value("market", "KRX");
+
+        // A position either references a catalog strategy or defines one inline.
+        const std::string  strategyRef = item.value("strategy", "");
+        const StrategyDef* def         = strategyRef.empty() ? nullptr : resolve(strategyRef);
+        if (!strategyRef.empty() && def == nullptr) {
+            // Not a default: a mistyped id quietly falling back to some other
+            // strategy would only be noticed from the trades it produced.
+            std::cerr << "PortfolioConfig: position #" << p.id << " references strategy '" << strategyRef
+                      << "', which is not in " << catalog.path() << ". It will not trade." << std::endl;
+            cfg.unresolved_.push_back(strategyRef);
+            continue;
+        }
+
+        p.type     = def ? def->type : item.value("type", "");
+        p.category = item.value("category", def ? def->category : "");
+        p.name     = item.value("name", def ? (def->name + " — " + p.ticker) : std::string());
         // Percentages are clamped at load rather than trusted. A negative stop loss
         // inverts its own comparison — price <= avg * (1 - (-5)/100) is
         // price <= avg * 1.05 — so the position sells the moment it is opened, and
@@ -258,6 +292,11 @@ PortfolioConfig PortfolioConfig::loadFromFile(const std::string& configPath) {
 
         if (item.contains("params") && item["params"].is_object()) {
             p.params = item["params"];
+        } else if (def) {
+            p.params = def->params;
+        }
+        if (p.description.empty() && def) {
+            p.description = def->description;
         }
         cfg.profiles_.push_back(p);
     }

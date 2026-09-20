@@ -38,7 +38,7 @@ void printUsage() {
 }  // namespace
 
 int main(int argc, char* argv[]) {
-    std::string configPath = "config/portfolio.json";
+    std::string configPath = "config/live.json";
     int         targetId   = -1;
     std::string startDate  = "2000-01-01";
     bool        gross      = false;
