@@ -155,7 +155,30 @@ Decision SignalExecutor::execute(Signal signal, double price, const AccountBalan
         // Each tranche is sized from the cash available right now, so a staged entry
         // lands slightly under position_pct rather than over it.
         const double allocCash = balance.cashBalance * profile_.positionPct / profile_.entryTranches;
-        d.quantity             = std::max<int64_t>(1, static_cast<int64_t>(allocCash / price));
+        d.quantity             = (price > 0.0) ? static_cast<int64_t>(allocCash / price) : 0;
+        if (d.quantity <= 0) {
+            // Rounding up to one share would either commit more than position_pct
+            // allows or be rejected for insufficient funds. Not buying is the only
+            // answer that respects the sizing that was configured.
+            d.acted   = false;
+            d.skipped = true;
+            d.side.clear();
+            d.blockedBy = "allocation below one share";
+            JournalEntry note;
+            note.event      = "skip";
+            note.mode       = mode_;
+            note.dryRun     = !live_;
+            note.strategyId = profile_.id;
+            note.strategy   = profile_.name;
+            note.category   = profile_.category;
+            note.ticker     = profile_.ticker;
+            note.side       = "BUY";
+            note.price      = price;
+            note.reason     = d.reason;
+            note.message    = d.blockedBy;
+            ctx_.journal->append(note);
+            return d;
+        }
     } else if (forcedExit || profile_.exitTranches <= 1) {
         d.quantity = heldQty;
     } else {

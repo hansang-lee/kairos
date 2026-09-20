@@ -429,3 +429,29 @@ TEST(risk, a_once_daily_process_is_still_protected_from_an_overnight_fall) {
     CHECK_MSG(!verdict.allowed, "a 5% fall since the previous session should block new buying, got allowed");
     CHECK(today.check(OrderSide::Sell, balance(9500000, 0, 0, 0)).allowed);
 }
+
+TEST(executor, a_buy_is_skipped_when_the_allocation_cannot_afford_one_share) {
+    // max(1, alloc / price) forced a quantity of 1 even when the allocation could
+    // not cover a single share, so the order either committed far more than
+    // position_pct or was rejected by the broker for insufficient funds.
+    auto p        = profile();
+    p.positionPct = 0.2;
+    trade::SignalExecutor ex(p, false, -1, freshContext({}, "exec_unaffordable"));
+
+    // 20% of 300,000 is 60,000 — less than one 260,000 share.
+    const auto d = ex.execute(Signal::BUY, 260000, balance(300000, 0, 0, 260000));
+    CHECK_MSG(!d.sent, "an unaffordable buy must not be sent");
+    CHECK_MSG(d.quantity == 0 || !d.acted, "expected no order, got quantity " + std::to_string(d.quantity));
+}
+
+TEST(executor, position_pct_is_respected_rather_than_rounded_up) {
+    auto p        = profile();
+    p.positionPct = 0.2;
+    trade::SignalExecutor ex(p, false, -1, freshContext({}, "exec_sizing"));
+
+    // 20% of 10,000,000 is 2,000,000 → 7 shares at 260,000, not 8.
+    const auto d = ex.execute(Signal::BUY, 260000, balance(10000000, 0, 0, 260000));
+    CHECK(d.acted);
+    CHECK_EQ(d.quantity, int64_t{7});
+    CHECK_MSG(static_cast<double>(d.quantity) * 260000 <= 10000000 * 0.2, "sizing exceeded position_pct");
+}
