@@ -151,7 +151,7 @@ Build output: `build/Release/` (or `build/Debug/`).
 ./build/Release/app/run_strategy --id 1 --start 2021-01-01 --end 2026-09-18
 
 # Custom config file
-./build/Release/app/run_strategy --config my_portfolio.json --all
+./build/Release/app/run_strategy --config my_live.json --all
 ```
 
 ### Macro analysis
@@ -418,17 +418,22 @@ if (type == "my_strategy") {
 }
 ```
 
-### 5. Add a profile to portfolio.json
+### 5. Define it in `config/strategies.json`
 
 ```json
-{
-  "id": 19,
-  "type": "my_strategy",
-  "ticker": "AAPL",
-  "category": "swing",
-  "params": { /* strategy-specific */ }
-}
+{ "id": "my_strat", "type": "my_strategy", "category": "swing",
+  "params": { /* strategy-specific */ } }
 ```
+
+It is now backtestable by the sweep. To trade it, bind it to a ticker in
+`config/live.json`:
+
+```json
+{ "id": 40, "strategy": "my_strat", "ticker": "005930", "market": "KRX",
+  "position_pct": 0.2, "stop_loss_pct": 8.0, "enabled": true }
+```
+
+Both reference the same definition, so what was backtested is what runs.
 
 ---
 
