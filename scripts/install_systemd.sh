@@ -15,7 +15,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 UNITS=(kairos-dashboard.service kairos-daily.service kairos-daily.timer kairos-scalp.service
-       kairos-collect.service kairos-collect.timer)
+       kairos-collector.service kairos-collector.timer)
 
 with_scalp=0
 uninstall=0
@@ -34,7 +34,11 @@ fi
 
 if [[ "$uninstall" == 1 ]]; then
     systemctl --user disable --now kairos-dashboard.service kairos-daily.timer \
-        kairos-scalp.service kairos-collect.timer 2>/dev/null || true
+        kairos-scalp.service kairos-collector.timer 2>/dev/null || true
+    # The collector was called kairos-collect before; clean it up so a rename does
+    # not leave an orphaned unit still firing on the old schedule.
+    systemctl --user disable --now kairos-collect.timer 2>/dev/null || true
+    rm -f "$UNIT_DIR/kairos-collect.service" "$UNIT_DIR/kairos-collect.timer"
     for unit in "${UNITS[@]}"; do rm -f "$UNIT_DIR/$unit"; done
     systemctl --user daemon-reload
     echo "Removed kairos user units."
@@ -55,6 +59,10 @@ if [[ ! -x "$ROOT/build/Release/app/daily_trade" ]]; then
     exit 1
 fi
 
+# Remove units from before the collector was renamed, or both would run.
+systemctl --user disable --now kairos-collect.timer 2>/dev/null || true
+rm -f "$UNIT_DIR/kairos-collect.service" "$UNIT_DIR/kairos-collect.timer"
+
 mkdir -p "$UNIT_DIR"
 for unit in "${UNITS[@]}"; do
     sed "s|__ROOT__|$ROOT|g" "$ROOT/deploy/systemd/$unit" > "$UNIT_DIR/$unit"
@@ -66,7 +74,7 @@ systemctl --user enable --now kairos-dashboard.service
 systemctl --user enable --now kairos-daily.timer
 # Collection places no orders and is independent of whether trading is live, so it
 # is enabled unconditionally — the data window closes whether or not you trade.
-systemctl --user enable --now kairos-collect.timer
+systemctl --user enable --now kairos-collector.timer
 if [[ "$with_scalp" == 1 ]]; then
     systemctl --user enable --now kairos-scalp.service
 fi
@@ -95,5 +103,5 @@ Status and logs:
   systemctl --user status kairos-daily.timer
   systemctl --user list-timers 'kairos*'
   journalctl --user -u kairos-scalp.service -f
-  journalctl --user -u kairos-collect.service
+  journalctl --user -u kairos-collector.service
 EOF

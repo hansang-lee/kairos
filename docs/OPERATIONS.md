@@ -143,7 +143,7 @@ Edit them with `systemctl --user edit --full <unit>`, not by hand in
 | `kairos-daily.service` | `daily_trade --all` | One-shot; reads `inactive (dead)` between runs — that is normal |
 | `kairos-daily.timer` | Fires the above at `Mon..Fri 15:15` | The thing you enable, not the service |
 | `kairos-dashboard.service` | `scripts/dashboard_server.py --port 8800` | Reads the account; places no orders |
-| `kairos-collect.timer` | `bar_collect --interval 5m --range 1mo`, Sundays | Public price data only; independent of trading |
+| `kairos-collector.timer` | `bar_collect --interval 5m --range 1mo`, Sundays | Public price data only; independent of trading |
 
 These live in the **unit**, not the config:
 
@@ -342,7 +342,7 @@ built up as you go, and it is the only route to ever backtesting a scalper.
 `scalp_trade` saves every poll's bars automatically, so the archive grows a day
 per session. Yahoo's measured limits: 1m ~5 days, 5m/15m/30m ~1 month, 1h ~1 year.
 
-`kairos-collect.timer` runs `bar_collect` weekly against a one-month window, so
+`kairos-collector.timer` runs `bar_collect` weekly against a one-month window, so
 roughly four weeks of overlap covers any missed run. It is `Persistent=true`,
 unlike the trading timer: a late collection is harmless, and the window closes
 for good. Storage is small — 10 tickers of 5-minute bars run about 2 MB a month.

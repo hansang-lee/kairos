@@ -10,7 +10,7 @@ OnCalendar=Sun 10:00
 # in collecting late, and the data window closes for good.
 Persistent=true
 RandomizedDelaySec=1800
-Unit=kairos-collect.service
+Unit=kairos-collector.service
 
 [Install]
 WantedBy=timers.target
