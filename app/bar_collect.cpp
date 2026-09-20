@@ -82,7 +82,7 @@ int main(int argc, char* argv[]) {
             std::cout << "  " << ticker << ": no data (Yahoo may not serve this range for " << interval << ")\n";
             continue;
         }
-        const int added = recorder.record(ticker, *data);
+        const int added = recorder.record(ticker, *data, interval);
         if (added < 0) {
             std::cerr << "  " << ticker << ": FAILED to write archive\n";
             continue;

@@ -29,10 +29,17 @@ class BarRecorder {
     explicit BarRecorder(const std::string& rootDir = "");
 
     /**
-     * @brief Merge bars into their day's file.
+     * @brief Merge bars into their day's file for one interval.
+     *
+     * The interval is part of the path, and must be: a 5-minute series shares
+     * timestamps with every fifth bar of a 1-minute series, so storing both in one
+     * file silently replaces those bars with 5-minute aggregates and leaves a
+     * mixed-resolution series that looks valid.
+     *
+     * @param interval Bar size, e.g. "1m", "5m", "1h". Becomes a directory.
      * @return Number of bars that were not already stored, or -1 on write failure.
      */
-    int record(const std::string& ticker, const StockInfo& bars);
+    int record(const std::string& ticker, const StockInfo& bars, const std::string& interval = "1m");
 
     /**
      * @brief Merge bars into a single named file instead of per-day files.
@@ -55,18 +62,21 @@ class BarRecorder {
      * @return Concatenated series, or nullptr when nothing is stored for the range.
      */
     [[nodiscard]] std::shared_ptr<StockInfo> load(const std::string& ticker, const std::string& startDate,
-                                                  const std::string& endDate) const;
+                                                  const std::string& endDate, const std::string& interval = "1m") const;
 
     /** @brief Dates that have per-day stored bars for a ticker, oldest first.
      *
      * Named series are excluded — only files whose name is a date are returned.
      */
-    [[nodiscard]] std::vector<std::string> storedDates(const std::string& ticker) const;
+    [[nodiscard]] std::vector<std::string> storedDates(const std::string& ticker,
+                                                       const std::string& interval = "1m") const;
 
     [[nodiscard]] const std::string& root() const { return root_; }
 
    private:
     [[nodiscard]] std::string pathFor(const std::string& ticker, const std::string& date) const;
+    [[nodiscard]] std::string pathFor(const std::string& ticker, const std::string& interval,
+                                      const std::string& date) const;
 
     std::string root_;
 };

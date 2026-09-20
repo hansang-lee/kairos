@@ -92,14 +92,19 @@ std::string BarRecorder::pathFor(const std::string& ticker, const std::string& d
     return root_ + "/" + ticker + "/" + date + ".csv";
 }
 
-int BarRecorder::record(const std::string& ticker, const StockInfo& bars) {
+std::string BarRecorder::pathFor(const std::string& ticker, const std::string& interval,
+                                 const std::string& date) const {
+    return root_ + "/" + ticker + "/" + interval + "/" + date + ".csv";
+}
+
+int BarRecorder::record(const std::string& ticker, const StockInfo& bars, const std::string& interval) {
     const std::size_t n = bars.close.size();
     if (n == 0 || bars.timestamps.size() != n) {
         return 0;
     }
 
     std::error_code ec;
-    std::filesystem::create_directories(root_ + "/" + ticker, ec);
+    std::filesystem::create_directories(root_ + "/" + ticker + "/" + interval, ec);
 
     // A poll can straddle midnight only in theory, but grouping by date costs
     // nothing and keeps each file to one session.
@@ -116,7 +121,7 @@ int BarRecorder::record(const std::string& ticker, const StockInfo& bars) {
 
     int added = 0;
     for (const auto& [date, incoming] : byDate) {
-        const std::string path     = pathFor(ticker, date);
+        const std::string path     = pathFor(ticker, interval, date);
         auto              existing = readFile(path);
         const std::size_t before   = existing.size();
         for (const auto& [ts, b] : incoming) {
@@ -185,10 +190,10 @@ std::shared_ptr<StockInfo> BarRecorder::loadSeries(const std::string& ticker, co
     return result;
 }
 
-std::vector<std::string> BarRecorder::storedDates(const std::string& ticker) const {
+std::vector<std::string> BarRecorder::storedDates(const std::string& ticker, const std::string& interval) const {
     std::vector<std::string> dates;
     std::error_code          ec;
-    const std::string        dir = root_ + "/" + ticker;
+    const std::string        dir = root_ + "/" + ticker + "/" + interval;
     if (!std::filesystem::exists(dir, ec)) {
         return dates;
     }
@@ -208,7 +213,7 @@ std::vector<std::string> BarRecorder::storedDates(const std::string& ticker) con
 }
 
 std::shared_ptr<StockInfo> BarRecorder::load(const std::string& ticker, const std::string& startDate,
-                                             const std::string& endDate) const {
+                                             const std::string& endDate, const std::string& interval) const {
     auto result      = std::make_shared<StockInfo>();
     result->ticker   = ticker;
     result->currency = "KRW";
@@ -216,11 +221,11 @@ std::shared_ptr<StockInfo> BarRecorder::load(const std::string& ticker, const st
     // Merging through one map removes any overlap between files and guarantees the
     // strictly increasing timestamps the backtest engine assumes.
     std::map<int64_t, Bar> all;
-    for (const auto& date : storedDates(ticker)) {
+    for (const auto& date : storedDates(ticker, interval)) {
         if (date < startDate || date > endDate) {
             continue;
         }
-        for (const auto& [ts, b] : readFile(pathFor(ticker, date))) {
+        for (const auto& [ts, b] : readFile(pathFor(ticker, interval, date))) {
             all[ts] = b;
         }
     }

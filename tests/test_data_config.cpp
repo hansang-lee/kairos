@@ -116,6 +116,36 @@ TEST(recorder, loaded_bars_are_sorted_and_unique) {
     }
 }
 
+TEST(recorder, intervals_do_not_share_storage) {
+    // A 5-minute series shares timestamps with every fifth 1-minute bar, so one
+    // shared file would silently replace those bars with 5-minute aggregates and
+    // leave a mixed-resolution series that still looks valid.
+    const std::string root = tmp("bars_intervals");
+    std::filesystem::remove_all(root);
+
+    data::BarRecorder r(root);
+    r.record("005930", bars(1789344000, 30), "1m");
+    // Same timestamps, different resolution.
+    r.record("005930", bars(1789344000, 6), "5m");
+
+    const auto oneMin  = r.load("005930", "2000-01-01", "2099-01-01", "1m");
+    const auto fiveMin = r.load("005930", "2000-01-01", "2099-01-01", "5m");
+    CHECK(oneMin != nullptr);
+    CHECK(fiveMin != nullptr);
+    CHECK_EQ(oneMin->close.size(), std::size_t{30});
+    CHECK_EQ(fiveMin->close.size(), std::size_t{6});
+}
+
+TEST(recorder, an_unseen_interval_reads_as_empty) {
+    const std::string root = tmp("bars_interval_absent");
+    std::filesystem::remove_all(root);
+
+    data::BarRecorder r(root);
+    r.record("005930", bars(1789344000, 10), "1m");
+    CHECK(r.load("005930", "2000-01-01", "2099-01-01", "1h") == nullptr);
+    CHECK(r.storedDates("005930", "1h").empty());
+}
+
 TEST(recorder, a_named_series_stays_in_one_file_and_merges) {
     // Daily bars are one per day; the per-date layout would make one file per row.
     const std::string root = tmp("bars_series");
