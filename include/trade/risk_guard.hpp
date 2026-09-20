@@ -8,8 +8,13 @@ namespace trade {
 
 /** Limits that stop a bad day from compounding. 0 / negative disables a limit. */
 struct RiskLimits {
-    double dailyLossLimitPct = 0.0;  ///< halt buying once equity is this far below the day's opening equity
-    int    maxOrdersPerDay   = 0;    ///< cap on orders sent per calendar day, across restarts
+    /**
+     * Halt buying once equity falls this far below its reference. The reference is
+     * the higher of the day's opening equity and the previous session's last known
+     * equity — see RiskGuard for why both are needed.
+     */
+    double dailyLossLimitPct = 0.0;
+    int    maxOrdersPerDay   = 0;  ///< cap on orders sent per calendar day, across restarts
 };
 
 struct RiskVerdict {
@@ -61,8 +66,21 @@ class RiskGuard {
 
     [[nodiscard]] const RiskLimits& limits() const { return limits_; }
 
-    /** @brief Day's opening equity, 0 before the first check(). */
+    /** @brief Day's opening equity, 0 before the first observation. */
     [[nodiscard]] double openingEquity() const { return openingEquity_; }
+
+    /** @brief Last equity seen on a previous day, 0 if none is recorded. */
+    [[nodiscard]] double previousEquity() const { return previousEquity_; }
+
+    /**
+     * @brief Equity the loss limit measures against.
+     *
+     * The higher of the day's open and the previous session's close. A loop that
+     * starts at 09:00 gets a meaningful intraday baseline from the former; a
+     * once-a-day process gets a meaningful one from the latter, without which it
+     * would be comparing its single balance against itself.
+     */
+    [[nodiscard]] double referenceEquity() const;
 
     /** @brief Orders sent today, including ones sent by earlier processes. */
     [[nodiscard]] int ordersToday() const { return ordersToday_; }
@@ -74,8 +92,10 @@ class RiskGuard {
     RiskLimits  limits_;
     std::string path_;
     std::string date_;  ///< KST date the loaded state belongs to
-    double      openingEquity_ = 0.0;
-    int         ordersToday_   = 0;
+    double      openingEquity_  = 0.0;
+    double      previousEquity_ = 0.0;  ///< last equity seen on an earlier day
+    double      lastEquity_     = 0.0;  ///< last equity seen at all, carried into tomorrow
+    int         ordersToday_    = 0;
 };
 
 }  // namespace trade

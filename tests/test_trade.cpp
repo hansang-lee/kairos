@@ -1,6 +1,8 @@
 #include <cstdio>
 #include <fstream>
 
+#include <nlohmann/json.hpp>
+
 #include "test_framework.hpp"
 #include "trade/position_store.hpp"
 #include "trade/risk_guard.hpp"
@@ -63,11 +65,11 @@ TEST(journal, append_writes_one_line_per_entry) {
 
     const trade::TradeJournal j(path);
     trade::JournalEntry       e;
-    e.mode = "paper";
-    e.ticker = "005930";
-    e.side = "BUY";
+    e.mode     = "paper";
+    e.ticker   = "005930";
+    e.side     = "BUY";
     e.quantity = 10;
-    e.price = 71500;
+    e.price    = 71500;
     CHECK(j.append(e));
     CHECK(j.append(e));
 
@@ -75,7 +77,8 @@ TEST(journal, append_writes_one_line_per_entry) {
     int           lines = 0;
     std::string   line;
     while (std::getline(in, line)) {
-        if (!line.empty()) ++lines;
+        if (!line.empty())
+            ++lines;
     }
     CHECK_EQ(lines, 2);
 }
@@ -86,14 +89,14 @@ TEST(journal, fill_keys_ignore_orders_and_survive_torn_lines) {
 
     const trade::TradeJournal j(path);
     trade::JournalEntry       order;
-    order.event   = "order";
-    order.orderNo = "A1";
+    order.event    = "order";
+    order.orderNo  = "A1";
     order.quantity = 5;
     j.append(order);
 
     trade::JournalEntry fill;
-    fill.event   = "fill";
-    fill.orderNo = "B2";
+    fill.event    = "fill";
+    fill.orderNo  = "B2";
     fill.quantity = 7;
     j.append(fill);
 
@@ -128,8 +131,8 @@ TEST(risk, daily_loss_limit_blocks_buys_but_never_sells) {
     removeFile(path);
     trade::RiskGuard g({3.0, 0}, path);
 
-    g.check(OrderSide::Buy, balance(10000000, 0, 0, 0));           // baseline
-    CHECK(g.check(OrderSide::Buy, balance(9710000, 0, 0, 0)).allowed);   // -2.9%, inside
+    g.check(OrderSide::Buy, balance(10000000, 0, 0, 0));                // baseline
+    CHECK(g.check(OrderSide::Buy, balance(9710000, 0, 0, 0)).allowed);  // -2.9%, inside
 
     const auto blocked = g.check(OrderSide::Buy, balance(9650000, 0, 0, 0));  // -3.5%
     CHECK(!blocked.allowed);
@@ -160,8 +163,7 @@ TEST(risk, order_cap_counts_across_restarts) {
 
 TEST(risk, stale_day_state_is_discarded) {
     const std::string path = tmp("risk_stale.json");
-    std::ofstream(path, std::ios::trunc)
-        << R"({"date":"2020-01-01","opening_equity":5000000.0,"orders":99})" << "\n";
+    std::ofstream(path, std::ios::trunc) << R"({"date":"2020-01-01","opening_equity":5000000.0,"orders":99})" << "\n";
 
     trade::RiskGuard g({3.0, 20}, path);
     CHECK_EQ(g.ordersToday(), 0);
@@ -204,7 +206,7 @@ TEST(positions, entry_tracks_the_peak_and_exit_records_the_time) {
     store.sync("005930", 10, 110000);  // a pullback must not lower the peak
     CHECK_NEAR(store.get("005930").peakPrice, 120000.0, 1e-6);
 
-    store.sync("005930", 0, 110000);   // position closed
+    store.sync("005930", 0, 110000);  // position closed
     CHECK(store.get("005930").lastExitTs > 0);
     CHECK_NEAR(store.get("005930").peakPrice, 0.0, 1e-6);
     CHECK_EQ(store.get("005930").entryTs, int64_t{0});
@@ -245,8 +247,8 @@ TEST(positions, a_position_closed_outside_the_system_is_noticed) {
     trade::PositionStore store(path);
 
     store.sync("005930", 10, 100000);
-    store.sync("005930", 10, 200000);   // peak climbs
-    store.sync("005930", 0, 200000);    // sold by hand at the broker
+    store.sync("005930", 10, 200000);  // peak climbs
+    store.sync("005930", 0, 200000);   // sold by hand at the broker
     // A stale peak here would fire a trailing stop the instant we re-entered.
     store.sync("005930", 10, 120000);
     CHECK_NEAR(store.get("005930").peakPrice, 120000.0, 1e-6);
@@ -255,8 +257,8 @@ TEST(positions, a_position_closed_outside_the_system_is_noticed) {
 /* ----------------------------- SignalExecutor ----------------------------- */
 
 TEST(executor, stop_loss_fires_and_sells_everything) {
-    auto p        = profile();
-    p.stopLossPct = 3.0;
+    auto p         = profile();
+    p.stopLossPct  = 3.0;
     p.exitTranches = 3;  // a forced exit must ignore staging
     trade::SignalExecutor ex(p, false, -1, freshContext({}, "exec_stop"));
 
@@ -288,7 +290,7 @@ TEST(executor, trailing_stop_uses_the_peak_not_the_entry) {
     CHECK(!up.acted);
     CHECK_NEAR(up.peakPrice, 110000.0, 1e-6);
 
-    CHECK(!ex.execute(Signal::HOLD, 108500, balance(0, 10, 100000, 108500)).acted);  // -1.4%
+    CHECK(!ex.execute(Signal::HOLD, 108500, balance(0, 10, 100000, 108500)).acted);     // -1.4%
     const auto out = ex.execute(Signal::HOLD, 107800, balance(0, 10, 100000, 107800));  // -2.0%
     CHECK(out.acted);
     CHECK(out.reason.find("TRAILING-STOP") != std::string::npos);
@@ -313,12 +315,12 @@ TEST(executor, entry_tranches_split_the_position) {
 }
 
 TEST(executor, cooldown_blocks_reentry_but_not_exits) {
-    auto p             = profile();
-    p.cooldownMinutes  = 30;
+    auto p            = profile();
+    p.cooldownMinutes = 30;
     trade::SignalExecutor ex(p, false, -1, freshContext({}, "exec_cooldown"));
 
-    ex.execute(Signal::HOLD, 1000, balance(0, 10, 1000, 1000));       // holding
-    ex.execute(Signal::HOLD, 1000, balance(100000, 0, 0, 1000));      // went flat
+    ex.execute(Signal::HOLD, 1000, balance(0, 10, 1000, 1000));   // holding
+    ex.execute(Signal::HOLD, 1000, balance(100000, 0, 0, 1000));  // went flat
 
     const auto blocked = ex.execute(Signal::BUY, 1000, balance(100000, 0, 0, 1000));
     CHECK(blocked.skipped);
@@ -341,7 +343,7 @@ TEST(executor, trade_window_blocks_entry_but_never_exit) {
 }
 
 TEST(executor, a_failed_balance_fetch_skips_the_round) {
-    auto p = profile();
+    auto                  p = profile();
     trade::SignalExecutor ex(p, false, -1, freshContext({}, "exec_nobalance"));
 
     AccountBalance failed;
@@ -351,7 +353,7 @@ TEST(executor, a_failed_balance_fetch_skips_the_round) {
 }
 
 TEST(executor, dry_run_decides_but_never_sends) {
-    auto p = profile();
+    auto                  p = profile();
     trade::SignalExecutor ex(p, false, -1, freshContext({}, "exec_dryrun"));
 
     const auto d = ex.execute(Signal::BUY, 1000, balance(100000, 0, 0, 1000));
@@ -361,8 +363,8 @@ TEST(executor, dry_run_decides_but_never_sends) {
 }
 
 TEST(executor, risk_limits_reach_the_decision) {
-    auto p   = profile();
-    auto ctx = freshContext({3.0, 0}, "exec_risk");
+    auto                  p   = profile();
+    auto                  ctx = freshContext({3.0, 0}, "exec_risk");
     trade::SignalExecutor ex(p, false, -1, ctx);
 
     // A HOLD round still records the day's opening equity, which is the point:
@@ -374,22 +376,22 @@ TEST(executor, risk_limits_reach_the_decision) {
 }
 
 TEST(executor, no_signal_and_no_position_does_nothing) {
-    auto p = profile();
+    auto                  p = profile();
     trade::SignalExecutor ex(p, false, -1, freshContext({}, "exec_idle"));
-    const auto d = ex.execute(Signal::HOLD, 1000, balance(100000, 0, 0, 1000));
+    const auto            d = ex.execute(Signal::HOLD, 1000, balance(100000, 0, 0, 1000));
     CHECK(!d.acted);
     CHECK(!d.skipped);
 }
 
 TEST(executor, sell_signal_with_no_position_does_nothing) {
-    auto p = profile();
+    auto                  p = profile();
     trade::SignalExecutor ex(p, false, -1, freshContext({}, "exec_sell_flat"));
-    const auto d = ex.execute(Signal::SELL, 1000, balance(100000, 0, 0, 1000));
+    const auto            d = ex.execute(Signal::SELL, 1000, balance(100000, 0, 0, 1000));
     CHECK(!d.acted);
 }
 
 TEST(executor, buy_signal_while_fully_entered_does_nothing) {
-    auto p = profile();  // entryTranches defaults to 1
+    auto                  p = profile();  // entryTranches defaults to 1
     trade::SignalExecutor ex(p, false, -1, freshContext({}, "exec_buy_held"));
 
     ex.execute(Signal::BUY, 1000, balance(100000, 0, 0, 1000));
@@ -397,4 +399,33 @@ TEST(executor, buy_signal_while_fully_entered_does_nothing) {
     // once the plan is filled. Simulate the filled plan by holding.
     const auto d = ex.execute(Signal::HOLD, 1000, balance(0, 100, 1000, 1000));
     CHECK(!d.acted);
+}
+
+TEST(risk, a_once_daily_process_is_still_protected_from_an_overnight_fall) {
+    // daily_trade runs once, at 15:15. If the only baseline is the first balance
+    // that run sees, the limit compares that balance against itself and can never
+    // fire — the account-level safety net would be inert for the very process
+    // meant to run unattended. The previous session's equity has to carry over.
+    const std::string path = tmp("risk_overnight.json");
+    removeFile(path);
+
+    {
+        trade::RiskGuard yesterday({3.0, 0}, path);
+        yesterday.observe(balance(10000000, 0, 0, 0));
+    }
+
+    // Simulate the next day by rewriting the stored date, leaving the equity.
+    {
+        std::ifstream  in(path);
+        nlohmann::json j;
+        in >> j;
+        j["date"] = "2000-01-01";  // any prior date
+        std::ofstream(path, std::ios::trunc) << j.dump(2) << "\n";
+    }
+
+    trade::RiskGuard today({3.0, 0}, path);
+    // The account opens 5% below where it was last seen.
+    const auto verdict = today.check(OrderSide::Buy, balance(9500000, 0, 0, 0));
+    CHECK_MSG(!verdict.allowed, "a 5% fall since the previous session should block new buying, got allowed");
+    CHECK(today.check(OrderSide::Sell, balance(9500000, 0, 0, 0)).allowed);
 }

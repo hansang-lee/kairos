@@ -5,6 +5,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "common/process_lock.hpp"
 #include "data/bar_recorder.hpp"
 #include "strategy/strategy_factory.hpp"
 #include "test_framework.hpp"
@@ -27,7 +28,7 @@ std::string dir(const std::string& name) {
 
 /** A scenario's own state files, so scenarios cannot contaminate each other. */
 struct Sandbox {
-    std::string           root;
+    std::string             root;
     trade::ExecutionContext ctx;
 
     explicit Sandbox(const std::string& name, const trade::RiskLimits& limits = {})
@@ -51,7 +52,8 @@ struct Sandbox {
         std::ifstream               in(root + "/trades.jsonl");
         std::string                 line;
         while (std::getline(in, line)) {
-            if (line.empty()) continue;
+            if (line.empty())
+                continue;
             try {
                 out.push_back(nlohmann::json::parse(line));
             } catch (const std::exception&) {
@@ -68,9 +70,9 @@ AccountBalance balance(double cash, int64_t qty, double avg, double cur, const s
     b.totalEvalAmount = cash + static_cast<double>(qty) * cur;
     if (qty > 0) {
         StockHolding h;
-        h.ticker = ticker;
-        h.quantity = qty;
-        h.avgPrice = avg;
+        h.ticker       = ticker;
+        h.quantity     = qty;
+        h.avgPrice     = avg;
         h.currentPrice = cur;
         b.holdings.push_back(h);
     }
@@ -95,8 +97,8 @@ StrategyProfile profile(int id, const std::string& ticker) {
 TEST(integration, a_decision_reaches_the_journal_with_its_strategy_attached) {
     // The journal is the only place an order is tied back to the strategy that
     // produced it — KIS has no concept of our strategies.
-    Sandbox sb("attribution");
-    auto    p = profile(7, "005930");
+    Sandbox               sb("attribution");
+    auto                  p = profile(7, "005930");
     trade::SignalExecutor ex(p, false, -1, sb.ctx);
 
     const auto d = ex.execute(Signal::BUY, 71500, balance(10000000, 0, 0, 71500));
@@ -114,9 +116,9 @@ TEST(integration, a_decision_reaches_the_journal_with_its_strategy_attached) {
 
 TEST(integration, a_full_position_lifecycle_entry_peak_trailing_exit_cooldown) {
     Sandbox sb("lifecycle");
-    auto    p            = profile(1, "005930");
-    p.trailingStopPct    = 5.0;
-    p.cooldownMinutes    = 60;
+    auto    p         = profile(1, "005930");
+    p.trailingStopPct = 5.0;
+    p.cooldownMinutes = 60;
     trade::SignalExecutor ex(p, false, -1, sb.ctx);
 
     // 1. flat, BUY fires
@@ -145,7 +147,7 @@ TEST(integration, a_full_position_lifecycle_entry_peak_trailing_exit_cooldown) {
     CHECK(blocked.blockedBy.find("cooldown") != std::string::npos);
 
     const auto entries = sb.journalEntries();
-    CHECK_EQ(entries.size(), std::size_t{3});           // entry, trailing exit, blocked re-entry
+    CHECK_EQ(entries.size(), std::size_t{3});  // entry, trailing exit, blocked re-entry
     CHECK_EQ(entries[2].value("event", ""), std::string("skip"));
 }
 
@@ -216,8 +218,8 @@ TEST(integration, two_profiles_on_different_tickers_keep_separate_positions) {
 }
 
 TEST(integration, the_loss_limit_halts_buying_for_the_day_but_never_selling) {
-    Sandbox sb("halt", {3.0, 0});
-    auto    p = profile(1, "005930");
+    Sandbox               sb("halt", {3.0, 0});
+    auto                  p = profile(1, "005930");
     trade::SignalExecutor ex(p, false, -1, sb.ctx);
 
     // The day opens at 10,000,000 — recorded from an ordinary HOLD cycle.
@@ -246,9 +248,8 @@ TEST(integration, a_strategy_drives_the_executor_over_a_price_series) {
     // Down, then up, then down. The initial decline matters: a series that only
     // rises has its golden cross before the warmup window, so the crossover
     // strategy sees nothing to act on and the scenario tests nothing.
-    const std::vector<double> path = {120, 116, 112, 108, 104, 100, 96,  93,  90,  88,
-                                      87,  88,  91,  96,  103, 112, 122, 133, 144, 152,
-                                      156, 155, 150, 142, 132, 121, 110, 100, 92,  86};
+    const std::vector<double> path = {120, 116, 112, 108, 104, 100, 96,  93,  90,  88,  87,  88,  91,  96, 103,
+                                      112, 122, 133, 144, 152, 156, 155, 150, 142, 132, 121, 110, 100, 92, 86};
     for (std::size_t i = 0; i < path.size(); ++i) {
         bars.timestamps.push_back(static_cast<int64_t>(1600000000 + i * 86400));
         bars.open.push_back(path[i]);
@@ -348,4 +349,38 @@ TEST(integration, recorded_bars_can_be_backtested) {
         }
     }
     CHECK_MSG(signals > 0, "a strategy over recorded bars produced no signals at all");
+}
+
+TEST(integration, a_second_process_cannot_take_the_trading_lock) {
+    // The trading apps share mutable state on disk. Two of them each load it, act,
+    // and write back, so the second save erases the first's — orders disappear from
+    // the day's count and the cap stops holding.
+    const std::string dirPath = dir("lock");
+    std::filesystem::remove_all(dirPath);
+    std::filesystem::create_directories(dirPath);
+
+    const util::ProcessLock first("trading", dirPath);
+    CHECK(first.held());
+
+    const util::ProcessLock second("trading", dirPath);
+    CHECK_MSG(!second.held(), "a second lock on the same name was granted");
+
+    // A different name is a different resource and must not be excluded.
+    const util::ProcessLock other("collecting", dirPath);
+    CHECK(other.held());
+}
+
+TEST(integration, the_lock_is_released_when_its_holder_goes_away) {
+    // flock is released by the kernel, so a killed process cannot wedge the next
+    // run behind a stale lock file.
+    const std::string dirPath = dir("lock_release");
+    std::filesystem::remove_all(dirPath);
+    std::filesystem::create_directories(dirPath);
+
+    {
+        const util::ProcessLock held("trading", dirPath);
+        CHECK(held.held());
+    }
+    const util::ProcessLock afterwards("trading", dirPath);
+    CHECK(afterwards.held());
 }

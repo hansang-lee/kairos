@@ -1,5 +1,6 @@
 #include "trade/risk_guard.hpp"
 
+#include <algorithm>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
@@ -42,13 +43,17 @@ void RiskGuard::load() {
     try {
         nlohmann::json j;
         in >> j;
-        // Yesterday's state is discarded rather than carried forward: the limits are
-        // per-day, so a new day must start with a clean count and a fresh baseline.
+        // The counts and the intraday baseline are per-day and must not carry over;
+        // the last equity must, or a once-a-day process has nothing to measure against.
+        // Whatever the stored day was, its last equity becomes tomorrow's reference.
+        previousEquity_ = j.value("last_equity", 0.0);
+        lastEquity_     = previousEquity_;
         if (j.value("date", "") != date_) {
-            return;
+            return;  // a prior day: keep only the carried-over equity
         }
-        openingEquity_ = j.value("opening_equity", 0.0);
-        ordersToday_   = j.value("orders", 0);
+        openingEquity_  = j.value("opening_equity", 0.0);
+        ordersToday_    = j.value("orders", 0);
+        previousEquity_ = j.value("previous_equity", 0.0);
     } catch (const std::exception&) {
         // A corrupt state file must not be read as "no limits" — but it also must not
         // abort trading, so the day simply re-baselines from the next balance.
@@ -57,9 +62,11 @@ void RiskGuard::load() {
 
 void RiskGuard::save() const {
     nlohmann::json j;
-    j["date"]           = date_;
-    j["opening_equity"] = openingEquity_;
-    j["orders"]         = ordersToday_;
+    j["date"]            = date_;
+    j["opening_equity"]  = openingEquity_;
+    j["previous_equity"] = previousEquity_;
+    j["last_equity"]     = lastEquity_;
+    j["orders"]          = ordersToday_;
 
     std::ofstream out(path_, std::ios::trunc);
     if (out.is_open()) {
@@ -67,16 +74,35 @@ void RiskGuard::save() const {
     }
 }
 
+double RiskGuard::referenceEquity() const {
+    return std::max(openingEquity_, previousEquity_);
+}
+
 void RiskGuard::observe(const AccountBalance& balance) {
-    // A day boundary crossed while the process was running still rolls over.
+    bool dirty = false;
+
+    // A day boundary crossed while the process was running still rolls over, and
+    // today's last equity becomes tomorrow's reference.
     if (const std::string today = kstToday(); today != date_) {
-        date_          = today;
-        openingEquity_ = 0.0;
-        ordersToday_   = 0;
+        date_           = today;
+        previousEquity_ = lastEquity_;
+        openingEquity_  = 0.0;
+        ordersToday_    = 0;
+        dirty           = true;
     }
 
-    if (balance.success && openingEquity_ <= 0.0 && balance.totalEvalAmount > 0.0) {
-        openingEquity_ = balance.totalEvalAmount;
+    if (balance.success && balance.totalEvalAmount > 0.0) {
+        if (openingEquity_ <= 0.0) {
+            openingEquity_ = balance.totalEvalAmount;
+            dirty          = true;
+        }
+        if (lastEquity_ != balance.totalEvalAmount) {
+            lastEquity_ = balance.totalEvalAmount;
+            dirty       = true;
+        }
+    }
+
+    if (dirty) {
         save();
     }
 }
@@ -95,8 +121,9 @@ RiskVerdict RiskGuard::check(OrderSide side, const AccountBalance& balance) {
         return {false, oss.str()};
     }
 
-    if (limits_.dailyLossLimitPct > 0.0 && openingEquity_ > 0.0 && balance.success) {
-        const double lossPct = (openingEquity_ - balance.totalEvalAmount) / openingEquity_ * 100.0;
+    const double reference = referenceEquity();
+    if (limits_.dailyLossLimitPct > 0.0 && reference > 0.0 && balance.success) {
+        const double lossPct = (reference - balance.totalEvalAmount) / reference * 100.0;
         if (lossPct >= limits_.dailyLossLimitPct) {
             std::ostringstream oss;
             oss << std::fixed << std::setprecision(2) << "daily loss limit hit (-" << lossPct << "% vs limit -"
