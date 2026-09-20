@@ -165,9 +165,9 @@ MacroBacktestResult MacroBacktester::run(const nlohmann::json&                  
     return result;
 }
 
-MacroBacktestResult MacroBacktester::computeBenchmark(const std::vector<double>&      monthlyReturns,
-                                                      const std::vector<std::string>& dates, const std::string& ticker,
-                                                      double initialCapital) {
+MacroBacktestResult MacroBacktester::computeBenchmark(const std::vector<double>& monthlyReturns,
+                                                      const std::vector<std::string>& /* dates */,
+                                                      const std::string& /* ticker */, double initialCapital) {
     MacroBacktestResult result;
     result.frequency      = "b&h";
     result.initialCapital = initialCapital;

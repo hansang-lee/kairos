@@ -132,7 +132,7 @@ TEST(risk, daily_loss_limit_blocks_buys_but_never_sells) {
     removeFile(path);
     trade::RiskGuard g({3.0, 0}, path);
 
-    g.check(OrderSide::Buy, balance(10000000, 0, 0, 0));                // baseline
+    (void)g.check(OrderSide::Buy, balance(10000000, 0, 0, 0));          // baseline
     CHECK(g.check(OrderSide::Buy, balance(9710000, 0, 0, 0)).allowed);  // -2.9%, inside
 
     const auto blocked = g.check(OrderSide::Buy, balance(9650000, 0, 0, 0));  // -3.5%
@@ -148,7 +148,7 @@ TEST(risk, order_cap_counts_across_restarts) {
     removeFile(path);
     {
         trade::RiskGuard g({0.0, 3}, path);
-        g.check(OrderSide::Buy, balance(10000000, 0, 0, 0));
+        (void)g.check(OrderSide::Buy, balance(10000000, 0, 0, 0));
         g.recordOrder();
         g.recordOrder();
         CHECK(g.check(OrderSide::Buy, balance(10000000, 0, 0, 0)).allowed);
@@ -177,7 +177,7 @@ TEST(risk, corrupt_state_does_not_disable_the_limits) {
     std::ofstream(path, std::ios::trunc) << "{not json" << "\n";
 
     trade::RiskGuard g({3.0, 20}, path);
-    g.check(OrderSide::Buy, balance(10000000, 0, 0, 0));
+    (void)g.check(OrderSide::Buy, balance(10000000, 0, 0, 0));
     CHECK(!g.check(OrderSide::Buy, balance(9000000, 0, 0, 0)).allowed);
 }
 
@@ -185,7 +185,7 @@ TEST(risk, a_failed_balance_fetch_is_not_read_as_a_breach) {
     const std::string path = tmp("risk_nobalance.json");
     removeFile(path);
     trade::RiskGuard g({3.0, 20}, path);
-    g.check(OrderSide::Buy, balance(10000000, 0, 0, 0));
+    (void)g.check(OrderSide::Buy, balance(10000000, 0, 0, 0));
 
     AccountBalance failed;  // success == false
     CHECK(g.check(OrderSide::Buy, failed).allowed);

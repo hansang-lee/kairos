@@ -14,8 +14,25 @@
  * Usage: portfolio_report [config_path] > docs/portfolio.json
  */
 int main(int argc, char* argv[]) {
-    const std::string configPath = (argc > 1) ? argv[1] : "config/live.json";
-    const auto        portfolio  = PortfolioConfig::loadFromFile(configPath);
+    // argv[1] was taken as a path unconditionally, so `--help` became a filename and
+    // the report still ran — and still hit the live account to do it.
+    std::string configPath = "config/live.json";
+    if (argc > 1) {
+        const std::string arg = argv[1];
+        if (arg == "--help" || arg == "-h") {
+            std::cout << "Usage:\n"
+                      << "  portfolio_report [<live-config path>]\n\n"
+                      << "  Prints the paper account as JSON: return against principal, cash, and\n"
+                      << "  holdings with the strategy each is attributed to.\n";
+            return 0;
+        }
+        if (!arg.empty() && arg[0] == '-') {
+            std::cerr << "Unknown option: " << arg << "\n";
+            return 1;
+        }
+        configPath = arg;
+    }
+    const auto portfolio = PortfolioConfig::loadFromFile(configPath);
 
     const auto balance = KisTrader::getBalance();
 

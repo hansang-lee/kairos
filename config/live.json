@@ -55,6 +55,56 @@
       "stop_loss_pct": 8.0,
       "enabled": true,
       "description": "인터넷 섹터. 볼린저 40일/2.0σ 하단 반등 매수 / 상단 반락 매도. 30종목 스윕에서 2022 하락장 +5.47%(단순보유 -16.67%, 92.6%가 우위), 2025~26 상승장 +16.52%. MDD가 두 국면 모두 -18% 수준으로 가장 안정적"
+    },
+    {
+      "id": 40,
+      "strategy": "slope_balanced",
+      "ticker": "005930",
+      "market": "KRX",
+      "position_pct": 0.2,
+      "stop_loss_pct": 8.0,
+      "enabled": false,
+      "description": "기울기 추세 전략 (MA20 기울기 10봉 회귀 + ADX). 비교 검토용 — 현재 비활성"
+    },
+    {
+      "id": 41,
+      "strategy": "slope_balanced",
+      "ticker": "005380",
+      "market": "KRX",
+      "position_pct": 0.2,
+      "stop_loss_pct": 8.0,
+      "enabled": false,
+      "description": "기울기 추세 전략 (MA20 기울기 10봉 회귀 + ADX). 비교 검토용 — 현재 비활성"
+    },
+    {
+      "id": 42,
+      "strategy": "slope_balanced",
+      "ticker": "105560",
+      "market": "KRX",
+      "position_pct": 0.2,
+      "stop_loss_pct": 8.0,
+      "enabled": false,
+      "description": "기울기 추세 전략 (MA20 기울기 10봉 회귀 + ADX). 비교 검토용 — 현재 비활성"
+    },
+    {
+      "id": 43,
+      "strategy": "slope_balanced",
+      "ticker": "015760",
+      "market": "KRX",
+      "position_pct": 0.2,
+      "stop_loss_pct": 8.0,
+      "enabled": false,
+      "description": "기울기 추세 전략 (MA20 기울기 10봉 회귀 + ADX). 비교 검토용 — 현재 비활성"
+    },
+    {
+      "id": 44,
+      "strategy": "slope_balanced",
+      "ticker": "035420",
+      "market": "KRX",
+      "position_pct": 0.2,
+      "stop_loss_pct": 8.0,
+      "enabled": false,
+      "description": "기울기 추세 전략 (MA20 기울기 10봉 회귀 + ADX). 비교 검토용 — 현재 비활성"
     }
   ]
 }

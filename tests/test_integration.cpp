@@ -187,7 +187,7 @@ TEST(integration, the_daily_order_cap_is_shared_across_profiles_and_restarts) {
     trade::SignalExecutor exA(a, false, -1, sb.ctx);
     trade::SignalExecutor exB(b, false, -1, sb.ctx);
 
-    sb.ctx.risk->check(OrderSide::Buy, balance(10000000, 0, 0, 1000));
+    (void)sb.ctx.risk->check(OrderSide::Buy, balance(10000000, 0, 0, 1000));
     sb.ctx.risk->recordOrder();
     sb.ctx.risk->recordOrder();
     sb.ctx.risk->recordOrder();

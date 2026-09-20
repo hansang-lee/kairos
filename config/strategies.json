@@ -212,6 +212,36 @@
         "period": 40,
         "std_devs": 2.0
       }
+    },
+    {
+      "id": "slope_balanced",
+      "name": "slope_balanced",
+      "type": "ma_slope_trend",
+      "category": "trend",
+      "params": {
+        "ma_period": 20,
+        "slope_window": 10
+      }
+    },
+    {
+      "id": "slope_defensive",
+      "name": "slope_defensive",
+      "type": "ma_slope_trend",
+      "category": "trend",
+      "params": {
+        "ma_period": 10,
+        "slope_window": 10
+      }
+    },
+    {
+      "id": "slope_aggressive",
+      "name": "slope_aggressive",
+      "type": "ma_slope_trend",
+      "category": "trend",
+      "params": {
+        "ma_period": 20,
+        "slope_window": 20
+      }
     }
   ],
   "grids": [
