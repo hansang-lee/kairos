@@ -13,7 +13,7 @@ first real order, see [FIRST_LIVE_ORDER.md](FIRST_LIVE_ORDER.md).
 
 ## The short version
 
-Almost everything you will want to change lives in **`config/portfolio.json`**,
+Almost everything you will want to change lives in **`config/live.json`**,
 and both trading apps pick up an edit without a restart — the scalper re-reads
 the file when it changes on disk, and `trader` starts fresh every run.
 
@@ -33,7 +33,9 @@ before enabling `--live`.
 
 | File | Holds | How often |
 |---|---|---|
-| `config/portfolio.json` | Strategy profiles and account-wide risk limits | Often |
+| `config/live.json` | Which strategy trades which ticker, and risk limits | Often |
+| `config/strategies.json` | Strategy definitions and parameter grids, with no ticker | Sometimes |
+| `config/universe.json` | Tickers the sweep crosses strategies with | Rarely |
 | systemd units | Which profile scalps, poll interval, `--live` | Rarely |
 | `config/krx_holidays.json` | KRX closures | Once a year |
 | `.env` | KIS credentials, Telegram token | Almost never |
@@ -42,43 +44,61 @@ before enabling `--live`.
 `config/strategies/` belong to the macro analysis and sweep tools. They have no
 effect on automated trading.
 
-### `config/portfolio.json`
+### The three config files
+
+A strategy definition and the ticker it trades are separate decisions, so they
+live in separate files. A backtest and the trader then reference **one**
+definition instead of each carrying a copy that can drift apart.
+
+**`config/strategies.json`** — definitions, no tickers:
+
+```json
+{
+  "strategies": [
+    { "id": "bb40", "type": "bollinger", "category": "swing",
+      "params": { "period": 40, "std_devs": 2.0 } }
+  ],
+  "grids": [
+    { "type": "bollinger", "params": { "period": [14,20,30,40], "std_devs": [1.5,2.0,2.5] } }
+  ]
+}
+```
+
+A `grid` expands to one definition per combination, with a stable generated id
+(`bollinger(40,2.0)`), so widening a sweep is a config edit rather than a code
+change. Stable ids matter: two sweep reports cannot be compared if the same
+combination is named differently each run.
+
+**`config/live.json`** — which definition trades which ticker:
 
 ```json
 {
   "initial_capital_krw": 10000000,
-  "risk": {
-    "daily_loss_limit_pct": 3.0,
-    "max_orders_per_day": 20
-  },
-  "strategies": [
-    {
-      "id": 18,
-      "name": "Samsung Electronics Scalp SMA",
-      "ticker": "005930",
-      "market": "KRX",
-      "type": "sma_crossover",
-      "category": "scalp",
-      "params": { "short_window": 3, "long_window": 8 },
-      "position_pct": 0.2,
-      "stop_loss_pct": 1.0
-    }
+  "risk": { "daily_loss_limit_pct": 3.0, "max_orders_per_day": 20 },
+  "positions": [
+    { "id": 30, "strategy": "bb40", "ticker": "005930", "market": "KRX",
+      "position_pct": 0.2, "stop_loss_pct": 8.0, "enabled": true }
   ]
 }
 ```
 
 | Field | Effect |
 |---|---|
-| `ticker` | 6-digit KRX code. Only `market: "KRX"` can trade — US profiles are backtest-only, since overseas order placement is not implemented. |
-| `type` | Which strategy class runs. Must be one of the registered types below. |
-| `params` | Strategy parameters. Keys depend on `type`. |
+| `strategy` | Id from the catalog. **An id that does not resolve drops that position and is reported** — it never falls back to something else. |
+| `ticker` | 6-digit KRX code. Only `market: "KRX"` can trade; US positions are backtest-only. |
 | `position_pct` | Fraction of **cash balance** committed per buy. `0.2` = 20%. |
-| `stop_loss_pct` | Forced exit when price falls this far below the holding's average price. `0` disables. |
-| `take_profit_pct` | Forced exit when price rises this far above average price. |
+| `stop_loss_pct` | Forced exit this far below the holding's average price. `0` disables. |
+| `take_profit_pct` | Forced exit this far above average price. |
 | `trailing_stop_pct` | Forced exit this far below the **peak since entry**. Protects a gain already made. |
-| `cooldown_minutes` | Refuse to re-enter this ticker for this long after an exit. Stops chop-driven churn. |
+| `cooldown_minutes` | Refuse to re-enter this ticker for this long after an exit. |
 | `entry_tranches` / `exit_tranches` | Split the position over N orders. `1` = all at once. |
 | `trade_window` | `{"start":"0930","end":"1520"}` — entries only inside this KST window. |
+| `enabled` | `false` keeps a position out of live trading while leaving it backtestable. |
+| `category` | `scalp` makes the trader poll it every interval; anything else runs once a day. |
+| `params` | Optional. Overrides the catalog's, so one position can be adjusted without forking the shared definition. |
+
+A position may also carry `type` and `params` inline instead of a `strategy`
+reference, which keeps a self-contained file usable.
 
 **Exit priority**: stop-loss → trailing stop → take-profit → strategy SELL. The
 first three are *forced exits* and always sell the whole position, since scaling
@@ -89,27 +109,10 @@ blocked — refusing to close a position is the one thing these rules must not d
 
 Entry tranches are sized from the cash available at the time of each one, so a
 staged entry lands slightly *under* `position_pct` rather than over it.
-| `category` | `swing` / `trend` / `position` / `scalp`. **`scalp` makes the trader poll this profile every interval**; anything else is evaluated once a day. |
 
-Registered `type` values:
-
-```
-sma_crossover  rsi  macd  bollinger  stochastic_reversal  williams_r
-cci_reversal   mfi_reversal  adx_trend  supertrend  aroon_trend
-psar_trend     donchian_breakout  obv_trend  keltner_breakout  ma_slope_trend
-regime_rsi     volume_breakout  squeeze_breakout  ichimoku_trend
-```
-
-The last four pair an entry with a filter (trend regime, volume confirmation,
-volatility squeeze, cloud position). On the data tested so far they cut drawdown
-roughly in half but **underperform the plain versions on return** — see the
-commit that added them. Treat them as available, not recommended.
-
-Short aliases also work: `sma`, `adx`, `aroon`, `cci`, `mfi`, `obv`, `psar`,
-`donchian`, `keltner`, `stochastic`, `slope_trend`.
-
-Anything outside this list needs C++ — a new strategy class plus a branch in
-`src/strategy/strategy_factory.cpp`.
+**`config/universe.json`** — the tickers a sweep crosses strategies with. It says
+in the file that every listing is a currently-listed company, so results from it
+are an upper bound.
 
 ### Risk limits
 
@@ -259,7 +262,8 @@ session same-day results can still be incomplete.
 ## Common tasks
 
 **Change a strategy's parameters**
-1. Edit `params` in `config/portfolio.json`
+1. Edit the strategy's `params` in `config/strategies.json`, or override them for
+   one position in `config/live.json`
 2. `systemctl --user restart kairos-trader` — only if the scalper uses that profile
 3. Daily profiles need nothing; the next 15:15 run reads the file
 

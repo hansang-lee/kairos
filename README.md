@@ -18,7 +18,7 @@ kairos is a C++17 automated trading system: strategies are backtested, then exec
 - **Backtest engine** — models commission, slippage and stop-loss; reports a 0–100 composite score
 - **Macro analysis** — 12 FRED series + CNN Fear & Greed, mapped onto a 4-regime model
 - **KIS OpenAPI integration** — KRX market data plus paper/live order placement and balance inquiry
-- **Config-driven strategies** — portfolio profiles in JSON, so tickers and parameters change without touching code
+- **Config-driven strategies** — strategy definitions, the ticker universe and live positions are three separate JSON files, so a backtest and the trader reference one definition rather than two copies that drift
 - **Dashboards** — a daily macro report via GitHub Actions, and a local real-time paper-trading dashboard
 
 ---
@@ -57,7 +57,9 @@ kairos/
 ├── app/                         # CLI executables (16)
 ├── scripts/                     # dashboard_server.py (local dashboard)
 ├── config/                      # JSON configuration
-│   ├── portfolio.json           # Strategy profiles (loaded at runtime)
+│   ├── strategies.json          # Strategy definitions and parameter grids (no tickers)
+│   ├── live.json                # Which strategy trades which ticker, plus risk limits
+│   ├── universe.json            # Tickers the sweep crosses strategies with
 │   ├── macro_allocation.json    # Macro allocation settings
 │   └── strategies/              # Macro strategy profiles (aggressive/balanced/defensive)
 │
@@ -178,7 +180,7 @@ Copy `.env.example` to `.env` and fill in real keys.
 cp .env.example .env
 ```
 
-### `config/portfolio.json` — strategy profiles
+### `config/live.json` — strategy profiles
 
 Strategies are defined in JSON, so tickers and parameters can be added or changed without code edits:
 
@@ -218,7 +220,7 @@ Strategies are defined in JSON, so tickers and parameters can be added or change
 | **position** | weeks to months | volatility breakout / volume confirmation | donchian_breakout, obv_trend, keltner_breakout | `trader`, once a day |
 | **scalp** | minutes | minute-bar polling, intraday live trading | sma_crossover (short parameters) | `trader`, each interval |
 
-Every profile in `config/portfolio.json` carries a `category` field, visible directly in `run_strategy --list`.
+Every profile in `config/live.json` carries a `category` field, visible directly in `run_strategy --list`.
 
 ### Running the trader
 
@@ -248,7 +250,7 @@ KIS's `inquire-time-itemchartprice` (TR_ID `FHKST03010200`) serves **today's min
 
 ### Risk limits
 
-`config/portfolio.json` carries an account-wide `risk` block, enforced by the trader:
+`config/live.json` carries an account-wide `risk` block, enforced by the trader:
 
 ```json
 "risk": {
