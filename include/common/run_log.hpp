@@ -1,6 +1,12 @@
 #pragma once
 
+#include <fcntl.h>
+#include <unistd.h>
+
+#include <csignal>
+#include <cstdlib>
 #include <ctime>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -54,6 +60,8 @@ class RunLog {
         errTee_ = std::make_unique<TeeBuf>(std::cerr.rdbuf(), file_.rdbuf());
         oldOut_ = std::cout.rdbuf(outTee_.get());
         oldErr_ = std::cerr.rdbuf(errTee_.get());
+
+        installCrashHandlers();
     }
 
     ~RunLog() {
@@ -72,6 +80,65 @@ class RunLog {
     [[nodiscard]] const std::string& path() const { return path_; }
 
    private:
+    /**
+     * @brief Record the reason for an abnormal exit, which the tee cannot see.
+     *
+     * An uncaught exception and a fatal signal are both reported by the runtime
+     * straight to C stderr, bypassing std::cerr and therefore the tee. The log
+     * would end mid-sentence with no explanation — precisely when the explanation
+     * matters most. These write the cause to the file before letting the process
+     * die as it otherwise would.
+     */
+    void installCrashHandlers() {
+        logPath() = path_;
+
+        std::set_terminate([] {
+            std::string reason = "terminate called";
+            if (auto ex = std::current_exception()) {
+                try {
+                    std::rethrow_exception(ex);
+                } catch (const std::exception& e) {
+                    reason += std::string(": ") + e.what();
+                } catch (...) {
+                    reason += ": unknown exception";
+                }
+            }
+            appendCrashLine(reason);
+            std::abort();
+        });
+
+        for (const int sig : {SIGSEGV, SIGABRT, SIGFPE, SIGILL, SIGBUS}) {
+            std::signal(sig, [](int s) {
+                appendCrashLine("fatal signal " + std::to_string(s));
+                // Restore the default and re-raise, so the exit status and any core
+                // dump are what they would have been without this handler.
+                std::signal(s, SIG_DFL);
+                std::raise(s);
+            });
+        }
+    }
+
+    /** Path of the active log, for handlers that cannot capture state. */
+    static std::string& logPath() {
+        static std::string path;
+        return path;
+    }
+
+    /** Append one line by fd, the only safe way to write from a signal handler. */
+    static void appendCrashLine(const std::string& reason) {
+        if (logPath().empty()) {
+            return;
+        }
+        const int fd = ::open(logPath().c_str(), O_WRONLY | O_APPEND | O_CREAT, 0644);
+        if (fd < 0) {
+            return;
+        }
+        const std::string line = "[!] ABNORMAL EXIT — " + reason + "\n";
+        const ssize_t     n    = ::write(fd, line.c_str(), line.size());
+        (void)n;
+        ::close(fd);
+    }
+
     /** Writes each character to two buffers. */
     class TeeBuf: public std::streambuf {
        public:

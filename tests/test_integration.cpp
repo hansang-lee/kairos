@@ -5,7 +5,10 @@
 
 #include <nlohmann/json.hpp>
 
+#include <sys/wait.h>
+
 #include "common/process_lock.hpp"
+#include "common/run_log.hpp"
 #include "data/bar_recorder.hpp"
 #include "strategy/strategy_factory.hpp"
 #include "test_framework.hpp"
@@ -383,4 +386,36 @@ TEST(integration, the_lock_is_released_when_its_holder_goes_away) {
     }
     const util::ProcessLock afterwards("trading", dirPath);
     CHECK(afterwards.held());
+}
+
+TEST(integration, an_abnormal_exit_records_its_cause) {
+    // An uncaught exception and a fatal signal are reported by the runtime straight
+    // to C stderr, bypassing std::cerr and therefore the tee. Without this the log
+    // would simply stop mid-run, with nothing saying why — the one moment the
+    // explanation is worth most.
+    const std::string dirPath = dir("crash");
+    std::filesystem::remove_all(dirPath);
+    std::filesystem::create_directories(dirPath);
+
+    const pid_t pid = ::fork();
+    CHECK(pid >= 0);
+    if (pid == 0) {
+        const util::RunLog log("crashing", dirPath);
+        std::cout << "before the crash\n" << std::flush;
+        std::abort();  // as a fatal bug would
+    }
+    int status = 0;
+    ::waitpid(pid, &status, 0);
+
+    std::string contents;
+    for (const auto& entry : std::filesystem::directory_iterator(dirPath)) {
+        std::ifstream      in(entry.path());
+        std::ostringstream oss;
+        oss << in.rdbuf();
+        contents += oss.str();
+    }
+
+    CHECK_MSG(contents.find("before the crash") != std::string::npos, "pre-crash output was lost");
+    CHECK_MSG(contents.find("ABNORMAL EXIT") != std::string::npos,
+              "the crash left no explanation in the log:\n" + contents);
 }
