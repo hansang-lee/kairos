@@ -14,6 +14,16 @@ struct OrderResult {
     std::string orderNo;    ///< KIS order number (ODNO)
     std::string orderTime;  ///< Order accepted time, HHMMSS (ORD_TMD)
     std::string message;    ///< Server message (msg1) or local error description
+
+    /**
+     * @brief The request did not complete, so whether the order was placed is unknown.
+     *
+     * A timeout or dropped connection after the request was sent leaves the order
+     * possibly accepted by KIS with the response lost. That is not the same as a
+     * rejection, and retrying it blindly could double the position — so it is
+     * distinguished, and the fill history is the only thing that can settle it.
+     */
+    bool indeterminate = false;
 };
 
 struct StockHolding {

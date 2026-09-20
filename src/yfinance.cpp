@@ -356,6 +356,11 @@ std::string yFinance::fetch(const std::string& url, bool is_cnn) {
     curl = curl_easy_init();
     if (curl) {
         curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        // Without these a hung connection blocks the process indefinitely: the
+        // scalping loop would stop polling and stop answering SIGTERM, and a
+        // one-shot run would be killed by systemd part-way through.
+        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &buffer);
         curl_easy_setopt(curl, CURLOPT_USERAGENT,

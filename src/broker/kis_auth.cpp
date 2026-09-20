@@ -164,6 +164,11 @@ std::string KisAuth::requestNewToken() {
     headers                    = curl_slist_append(headers, "Content-Type: application/json");
 
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    // Without these a hung connection blocks the process indefinitely: the
+    // scalping loop would stop polling and stop answering SIGTERM, and a
+    // one-shot run would be killed by systemd part-way through.
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
     curl_easy_setopt(curl, CURLOPT_POST, 1L);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, bodyStr.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);

@@ -1131,6 +1131,10 @@
                     if (t.event === 'skip') {
                         status = '차단됨';
                         cls = 'trade-skip';
+                    } else if (t.event === 'order_unknown') {
+                        /* Sent, outcome never received. It may exist at the broker. */
+                        status = '결과불명';
+                        cls = 'trade-fail';
                     } else if (t.event === 'fill') {
                         status = '체결';
                         cls = 'trade-fill';

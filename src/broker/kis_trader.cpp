@@ -95,6 +95,11 @@ OrderResult KisTrader::placeOrder(OrderSide side, const std::string& ticker, int
     headers                    = curl_slist_append(headers, "custtype: P");
 
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    // Without these a hung connection blocks the process indefinitely: the
+    // scalping loop would stop polling and stop answering SIGTERM, and a
+    // one-shot run would be killed by systemd part-way through.
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
     curl_easy_setopt(curl, CURLOPT_POST, 1L);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, bodyStr.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
@@ -106,7 +111,11 @@ OrderResult KisTrader::placeOrder(OrderSide side, const std::string& ticker, int
     curl_easy_cleanup(curl);
 
     if (res != CURLE_OK) {
-        result.message = std::string("Order request failed: ") + curl_easy_strerror(res);
+        // The request left this process. Whether KIS accepted it is unknowable from
+        // here, so this must not be reported as a rejection — see OrderResult.
+        result.indeterminate = true;
+        result.message       = std::string("Order request did not complete: ") + curl_easy_strerror(res)
+                       + " — the order may or may not have been placed; check `kis_order fills`";
         return result;
     }
 
@@ -172,6 +181,11 @@ AccountBalance KisTrader::getBalance() {
     headers                    = curl_slist_append(headers, "custtype: P");
 
     curl_easy_setopt(curl, CURLOPT_URL, urlStr.c_str());
+    // Without these a hung connection blocks the process indefinitely: the
+    // scalping loop would stop polling and stop answering SIGTERM, and a
+    // one-shot run would be killed by systemd part-way through.
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
@@ -284,6 +298,11 @@ FillHistory KisTrader::getDailyFills(const std::string& startYmd, const std::str
         headers                    = curl_slist_append(headers, page == 0 ? "tr_cont: " : "tr_cont: N");
 
         curl_easy_setopt(curl, CURLOPT_URL, urlStr.c_str());
+        // Without these a hung connection blocks the process indefinitely: the
+        // scalping loop would stop polling and stop answering SIGTERM, and a
+        // one-shot run would be killed by systemd part-way through.
+        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
         curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);

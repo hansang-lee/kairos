@@ -89,6 +89,11 @@ std::string fetchOnce(const std::string& ticker, const std::string& startYmd, co
     headers                    = curl_slist_append(headers, "custtype: P");
 
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    // Without these a hung connection blocks the process indefinitely: the
+    // scalping loop would stop polling and stop answering SIGTERM, and a
+    // one-shot run would be killed by systemd part-way through.
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
@@ -198,6 +203,11 @@ std::string fetchIntradayOnce(const std::string& ticker, const std::string& hour
     headers                    = curl_slist_append(headers, "custtype: P");
 
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    // Without these a hung connection blocks the process indefinitely: the
+    // scalping loop would stop polling and stop answering SIGTERM, and a
+    // one-shot run would be killed by systemd part-way through.
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);

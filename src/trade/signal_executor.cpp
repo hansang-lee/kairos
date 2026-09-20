@@ -236,6 +236,11 @@ Decision SignalExecutor::execute(Signal signal, double price, const AccountBalan
         entry.orderNo = d.order.orderNo;
         entry.success = d.order.success;
         entry.message = d.order.message;
+        if (d.order.indeterminate) {
+            // Recorded distinctly so a later reconciliation can find it: the journal
+            // is the only record that an order might exist without a number.
+            entry.event = "order_unknown";
+        }
     }
 
     ctx_.journal->append(entry);

@@ -14,9 +14,11 @@ namespace trade {
  * produced it, so it must be written at decision time, including for dry runs.
  */
 struct JournalEntry {
-    std::string event = "order";  ///< "order" (sent/dry-run), "skip" (suppressed), "fill" (confirmed by KIS)
-    std::string mode;             ///< "paper" or "live" (KIS account mode)
-    bool        dryRun = false;   ///< true when no order was actually sent
+    ///< "order" (sent/dry-run), "skip" (suppressed), "fill" (confirmed by KIS),
+    ///< "order_unknown" (sent, outcome never received — may or may not exist at the broker)
+    std::string event = "order";
+    std::string mode;            ///< "paper" or "live" (KIS account mode)
+    bool        dryRun = false;  ///< true when no order was actually sent
 
     int         strategyId = -1;  ///< portfolio.json profile id
     std::string strategy;         ///< profile name
