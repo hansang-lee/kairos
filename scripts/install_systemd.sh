@@ -13,7 +13,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
-UNITS=(kairos-dashboard.service kairos-trader.service
+UNITS=(kairos-dashboard.service kairos-trader.service kairos-trader.timer
        kairos-collector.service kairos-collector.timer)
 
 # Units from earlier layouts. Left behind they would keep firing alongside their
@@ -35,8 +35,8 @@ if ! command -v systemctl >/dev/null 2>&1; then
 fi
 
 if [[ "$uninstall" == 1 ]]; then
-    systemctl --user disable --now kairos-dashboard.service kairos-trader.service \
-        kairos-collector.timer 2>/dev/null || true
+    systemctl --user disable --now kairos-dashboard.service kairos-trader.timer \
+        kairos-trader.service kairos-collector.timer 2>/dev/null || true
     for unit in "${LEGACY_UNITS[@]}"; do
         systemctl --user disable --now "$unit" 2>/dev/null || true
     done
@@ -75,7 +75,7 @@ done
 
 systemctl --user daemon-reload
 systemctl --user enable --now kairos-dashboard.service
-systemctl --user enable --now kairos-trader.service
+systemctl --user enable --now kairos-trader.timer
 # Collection places no orders and is independent of whether trading is live, so it
 # is enabled unconditionally — the data window closes whether or not you trade.
 systemctl --user enable --now kairos-collector.timer
@@ -93,7 +93,12 @@ Installed in DRY-RUN mode — no orders will be placed.
 
 To trade for real on the paper account, add --live to the one ExecStart line:
   systemctl --user edit --full kairos-trader.service
-then: systemctl --user daemon-reload && systemctl --user restart kairos-trader
+then: systemctl --user daemon-reload
+
+The trader runs once a day under a timer, which suits once-a-day strategies. To
+run a minute-bar ('scalp') profile it must become a loop instead: set Type=simple,
+drop --once, add Restart=on-failure, and enable the .service rather than the
+.timer. The binary supports both.
 
 Collection runs weekly regardless of trading: Yahoo keeps about a month of
 5-minute bars, and that history cannot be bought back later.

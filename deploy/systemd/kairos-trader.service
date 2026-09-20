@@ -1,23 +1,21 @@
 [Unit]
-Description=kairos trader
+Description=kairos trader (one run)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=simple
+Type=oneshot
 WorkingDirectory=__ROOT__
 # Dry-run by default: this places no orders. Append --live once a real order has
-# been confirmed end to end, since the service then trades unattended.
+# been confirmed end to end, since the timer then trades unattended.
 #
-# One service for every strategy. Whether a profile trades on minute bars or
-# daily ones is a property of the profile, not a reason for a second service —
-# and only one trading process may run, since they share state on disk.
+# --once runs a single cycle and exits, which is the right shape while only
+# once-a-day profiles are enabled: there is no reason to keep a process asleep
+# for 23 hours, and systemd handles clock changes and resume better than a loop
+# would. It still honours market hours and holidays, so a firing on a closed day
+# does nothing.
 #
-# The loop gates itself on KRX hours and holidays, so running it continuously is
-# correct; outside the session it only logs and sleeps.
-ExecStart=__ROOT__/build/Release/app/trader --interval 60 --daily-at 1515
-Restart=on-failure
-RestartSec=60
-
-[Install]
-WantedBy=default.target
+# To run minute-bar ('scalp') profiles, this must become a continuous loop
+# instead — change Type to simple, drop --once, and add Restart=on-failure. The
+# binary supports both; only the unit changes.
+ExecStart=__ROOT__/build/Release/app/trader --once --daily-at 1515

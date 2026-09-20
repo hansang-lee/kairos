@@ -28,9 +28,13 @@
  *
  * Whether a strategy trades on minute bars or daily ones is a property of the
  * strategy, not a reason to run a second service — so there is one trader, and
- * the config decides what it trades. Running as a daemon rather than a timer
- * also means a profile that is due is evaluated whenever the process next looks,
- * instead of being skipped because the machine was busy at one exact minute.
+ * the config decides what it trades.
+ *
+ * It runs in either shape, chosen by the unit file rather than the code: --once
+ * for a systemd timer, which is right while only once-a-day profiles are enabled,
+ * and no flag for a continuous loop, which minute-bar polling requires. Either
+ * way a profile is evaluated when the process next looks rather than at one exact
+ * minute, because the schedule is recorded rather than assumed.
  *
  * Only one of these may run at a time: they share the risk guard, position store
  * and journal, and a second instance would erase the first's writes.
@@ -137,7 +141,7 @@ std::vector<Runner> buildRunners(const PortfolioConfig& config, bool live, int m
 void printUsage() {
     std::cout << "Usage:\n"
               << "  trader [--live] [--interval <seconds>] [--daily-at <HHMM>] [--max-trades <n>]\n"
-              << "         [--config <path>] [--quiet] [--once]\n\n"
+              << "         [--config <path>] [--quiet] [--once] [--force]\n\n"
               << "  Runs every enabled KRX profile in config/portfolio.json. Minute-bar profiles\n"
               << "  (category 'scalp') are evaluated each --interval; the rest run once a day at\n"
               << "  or after --daily-at, whenever the loop next looks.\n\n"
@@ -145,7 +149,9 @@ void printUsage() {
               << "  --interval    seconds between cycles (default 60)\n"
               << "  --daily-at    earliest KST time for once-a-day profiles (default 1515)\n"
               << "  --max-trades  per-profile cap on orders sent this session (default 10)\n"
-              << "  --once        run one cycle and exit, ignoring market hours (for inspection)\n"
+              << "  --once        run one cycle and exit, still honouring market hours and the\n"
+              << "                once-a-day schedule. This is what a systemd timer runs.\n"
+              << "  --force       ignore market hours and the schedule, for inspection. Implies --once\n"
               << "  --quiet       suppress the Telegram summary\n";
 }
 
@@ -161,6 +167,7 @@ int main(int argc, char* argv[]) {
     bool        live         = false;
     bool        quiet        = false;
     bool        once         = false;
+    bool        force        = false;
     int         lookbackDays = 400;
 
     for (int i = 1; i < argc; ++i) {
@@ -181,6 +188,9 @@ int main(int argc, char* argv[]) {
             quiet = true;
         } else if (arg == "--once") {
             once = true;
+        } else if (arg == "--force") {
+            force = true;
+            once  = true;  // inspecting is inherently a single pass
         } else {
             printUsage();
             return (arg == "--help" || arg == "-h") ? 0 : 1;
@@ -263,9 +273,16 @@ int main(int argc, char* argv[]) {
             }
         }
 
+        // --once still honours market hours: a timer firing at 15:15 on a holiday must
+        // do nothing, not act on stale prices. Only --force overrides that.
         const std::string closed = krxClosedReason(calendar);
-        if (!closed.empty() && !once) {
-            std::cout << "[" << nowLabel() << "] Market closed (" << closed << "). Waiting...\n";
+        if (!closed.empty() && !force) {
+            std::cout << "[" << nowLabel() << "] Market closed (" << closed << ").";
+            if (once) {
+                std::cout << " Nothing to do.\n";
+                return 0;
+            }
+            std::cout << " Waiting...\n";
             interruptibleSleep(intervalSec);
             continue;
         }
@@ -291,7 +308,7 @@ int main(int argc, char* argv[]) {
         for (auto& r : runners) {
             const auto& p = *r.profile;
 
-            const bool due = r.isIntraday() || once
+            const bool due = r.isIntraday() || force
                           || trade::isDailyProfileDue(schedule.lastEvaluated(p.id), today, nowHhmm, dailyAtHhmm);
             if (!due) {
                 continue;
@@ -368,7 +385,9 @@ int main(int argc, char* argv[]) {
                 notable.push_back(tag + decision.side + " 주문 실패 — " + decision.order.message);
             }
 
-            if (!r.isIntraday() && !once) {
+            if (!r.isIntraday() && !force) {
+                // Recorded even under --once, so a timer firing twice, or a retry after
+                // a restart, does not evaluate the same profile again today.
                 schedule.markEvaluated(p.id, today);
                 ranDaily = true;
             }

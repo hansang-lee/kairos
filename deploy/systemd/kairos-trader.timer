@@ -1,0 +1,17 @@
+[Unit]
+Description=Run the kairos trader before the KRX close
+
+[Timer]
+# 15:15 KST on weekdays: inside the session so orders can still fill, and late
+# enough that the day's bar is essentially final. OnCalendar is wall-clock, so
+# the host must be on Asia/Seoul for this to mean what it says.
+OnCalendar=Mon..Fri 15:15
+# A run missed because the machine was busy or asleep is made up rather than
+# skipped. Acting late is bounded by the trader's own guards — it refuses outside
+# market hours, and records that a profile already ran today, so a catch-up
+# cannot double-trade or place the day's orders at midnight.
+Persistent=true
+Unit=kairos-trader.service
+
+[Install]
+WantedBy=timers.target

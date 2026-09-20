@@ -140,7 +140,8 @@ There are three, and only one of them can move money.
 
 | Unit | Runs | Nature |
 |---|---|---|
-| **`kairos-trader.service`** | `trader --interval 60 --daily-at 1515` | **The only process that places orders.** Long-running; should read `active (running)` |
+| **`kairos-trader.timer`** | Fires `trader --once` at `Mon..Fri 15:15` | **The only thing that places orders.** Enable the timer, not the service |
+| `kairos-trader.service` | `trader --once --daily-at 1515` | One-shot; reads `inactive (dead)` between runs — that is normal |
 | `kairos-dashboard.service` | `scripts/dashboard_server.py --port 8800` | Reads the account; places no orders |
 | `kairos-collector.timer` | `bar_collect --interval 5m --range 1mo`, Sundays | Public price data only; independent of trading |
 
@@ -167,8 +168,22 @@ One line, in one unit:
 ```bash
 systemctl --user edit --full kairos-trader.service    # append --live to ExecStart
 systemctl --user daemon-reload
-systemctl --user restart kairos-trader
 ```
+
+### Timer or loop
+
+The trader runs in either shape, chosen by the unit rather than the code.
+
+**Timer (`--once`, current).** Right while only once-a-day profiles are enabled:
+no process sleeps for 23 hours, and systemd handles clock changes and resume
+better than a loop would. `Persistent=true` makes up a run missed because the
+machine was busy — bounded by the trader's own guards, which refuse outside
+market hours and record that a profile already ran today, so a catch-up cannot
+double-trade.
+
+**Loop (no `--once`).** Required for minute-bar (`scalp`) profiles, which must be
+polled. Set `Type=simple`, drop `--once`, add `Restart=on-failure`, then enable
+the `.service` instead of the `.timer`.
 
 A once-a-day profile records the KST date it last evaluated, in
 `data/schedule.json`. It therefore runs once per day and not again, but **is
