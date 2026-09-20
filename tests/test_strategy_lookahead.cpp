@@ -75,6 +75,9 @@ std::vector<std::pair<std::string, nlohmann::json>> allStrategies() {
         {"volume_breakout", {{"period", 20}, {"volume_period", 20}, {"volume_ratio", 1.2}}},
         {"squeeze_breakout", {{"period", 20}, {"std_devs", 2.0}, {"squeeze_lookback", 40}, {"squeeze_percent", 0.4}}},
         {"ichimoku_trend", {{"conversion", 9}, {"base", 26}, {"span_b", 52}}},
+        {"ma_timing", {{"period", 60}, {"buffer_pct", 1.0}}},
+        {"absolute_momentum", {{"lookback", 60}, {"threshold", 0.0}}},
+        {"dual_momentum", {{"ma_period", 60}, {"lookback", 60}, {"threshold", 0.0}}},
     };
 }
 

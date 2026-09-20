@@ -52,6 +52,9 @@ add_library(${PROJECT_NAME} SHARED
   lib/volume_breakout/volume_breakout.cpp
   lib/squeeze_breakout/squeeze_breakout.cpp
   lib/ichimoku_trend/ichimoku_trend.cpp
+  lib/ma_timing/ma_timing.cpp
+  lib/absolute_momentum/absolute_momentum.cpp
+  lib/dual_momentum/dual_momentum.cpp
   src/strategy/strategy_factory.cpp
   src/strategy/strategy_catalog.cpp
 )
@@ -81,6 +84,9 @@ target_include_directories(${PROJECT_NAME}
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/volume_breakout
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/squeeze_breakout
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/ichimoku_trend
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/ma_timing
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/absolute_momentum
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/dual_momentum
 )
 
 target_link_libraries(${PROJECT_NAME}

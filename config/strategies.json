@@ -242,6 +242,57 @@
         "ma_period": 20,
         "slope_window": 20
       }
+    },
+    {
+      "id": "ma_timing_200",
+      "name": "ma_timing_200",
+      "type": "ma_timing",
+      "category": "trend",
+      "params": {
+        "period": 200,
+        "buffer_pct": 1.0
+      }
+    },
+    {
+      "id": "ma_timing_100",
+      "name": "ma_timing_100",
+      "type": "ma_timing",
+      "category": "trend",
+      "params": {
+        "period": 100,
+        "buffer_pct": 1.0
+      }
+    },
+    {
+      "id": "abs_momentum_12m",
+      "name": "abs_momentum_12m",
+      "type": "absolute_momentum",
+      "category": "trend",
+      "params": {
+        "lookback": 252,
+        "threshold": 0.0
+      }
+    },
+    {
+      "id": "abs_momentum_6m",
+      "name": "abs_momentum_6m",
+      "type": "absolute_momentum",
+      "category": "trend",
+      "params": {
+        "lookback": 126,
+        "threshold": 0.0
+      }
+    },
+    {
+      "id": "dual_momentum",
+      "name": "dual_momentum",
+      "type": "dual_momentum",
+      "category": "trend",
+      "params": {
+        "ma_period": 200,
+        "lookback": 252,
+        "threshold": 0.0
+      }
     }
   ],
   "grids": [
@@ -331,6 +382,40 @@
           40,
           60,
           120
+        ]
+      }
+    },
+    {
+      "type": "ma_timing",
+      "category": "trend",
+      "params": {
+        "period": [
+          60,
+          100,
+          150,
+          200,
+          250
+        ],
+        "buffer_pct": [
+          0.0,
+          1.0,
+          2.0
+        ]
+      }
+    },
+    {
+      "type": "absolute_momentum",
+      "category": "trend",
+      "params": {
+        "lookback": [
+          63,
+          126,
+          189,
+          252
+        ],
+        "threshold": [
+          0.0,
+          3.0
         ]
       }
     }

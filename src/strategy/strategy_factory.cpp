@@ -6,15 +6,18 @@
 
 #include <iostream>
 
+#include "absolute_momentum.hpp"
 #include "adx_trend.hpp"
 #include "aroon_trend.hpp"
 #include "bollinger_strategy.hpp"
 #include "cci_reversal.hpp"
 #include "common/util.hpp"
 #include "donchian_breakout.hpp"
+#include "dual_momentum.hpp"
 #include "ichimoku_trend.hpp"
 #include "keltner_breakout.hpp"
 #include "ma_slope_trend.hpp"
+#include "ma_timing.hpp"
 #include "macd_strategy.hpp"
 #include "mfi_reversal.hpp"
 #include "obv_trend.hpp"
@@ -178,6 +181,28 @@ std::unique_ptr<IStrategy> StrategyProfile::createStrategy() const {
         const std::size_t base       = params.value("base", 26);
         const std::size_t spanB      = params.value("span_b", 52);
         return std::make_unique<IchimokuTrend>(conversion, base, spanB);
+    }
+
+    if (type == "ma_timing") {
+        const std::size_t period    = params.value("period", 200);
+        const double      bufferPct = params.value("buffer_pct", 0.0);
+        warnUnknownParams(params, type, {"period", "buffer_pct"});
+        return std::make_unique<MaTiming>(period, bufferPct);
+    }
+
+    if (type == "absolute_momentum") {
+        const std::size_t lookback  = params.value("lookback", 252);
+        const double      threshold = params.value("threshold", 0.0);
+        warnUnknownParams(params, type, {"lookback", "threshold"});
+        return std::make_unique<AbsoluteMomentum>(lookback, threshold);
+    }
+
+    if (type == "dual_momentum") {
+        const std::size_t maPeriod  = params.value("ma_period", 200);
+        const std::size_t lookback  = params.value("lookback", 252);
+        const double      threshold = params.value("threshold", 0.0);
+        warnUnknownParams(params, type, {"ma_period", "lookback", "threshold"});
+        return std::make_unique<DualMomentum>(maPeriod, lookback, threshold);
     }
 
     std::cerr << "StrategyProfile: Unknown strategy type '" << type << "'" << std::endl;

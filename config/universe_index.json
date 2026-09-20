@@ -1,0 +1,16 @@
+{
+  "note": "Index and asset-class ETFs listed on KRX. Trend and timing rules are designed for broad indices, not single names: on 30 individual KRX stocks they cut no drawdown at all, because the noise in one company whipsaws a moving average. This universe is where those rules should be judged.",
+  "survivorship_warning": "Every ETF here still trades. Funds that closed are absent, so results are an upper bound — though far less so than for single stocks, since index ETFs rarely delist.",
+  "leverage_warning": "122630 is a 2x daily-reset leveraged ETF. Daily reset means it decays in choppy markets and does not deliver 2x the period return. Any result involving it must be read with that in mind, not as a proxy for borrowing.",
+  "tickers": [
+    { "code": "069500", "name": "KODEX 200 (코스피200)" },
+    { "code": "102110", "name": "TIGER 200 (코스피200)" },
+    { "code": "229200", "name": "KODEX 코스닥150" },
+    { "code": "133690", "name": "TIGER 미국나스닥100" },
+    { "code": "143850", "name": "TIGER 미국S&P500선물" },
+    { "code": "091160", "name": "KODEX 반도체" },
+    { "code": "132030", "name": "KODEX 골드선물" },
+    { "code": "148070", "name": "KOSEF 국고채10년" },
+    { "code": "122630", "name": "KODEX 레버리지 (2x, 일일리셋)" }
+  ]
+}

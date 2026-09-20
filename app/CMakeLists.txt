@@ -32,6 +32,9 @@ macro(BUILD_APP "NAME")
       ${CMAKE_SOURCE_DIR}/lib/volume_breakout
       ${CMAKE_SOURCE_DIR}/lib/squeeze_breakout
       ${CMAKE_SOURCE_DIR}/lib/ichimoku_trend
+      ${CMAKE_SOURCE_DIR}/lib/ma_timing
+      ${CMAKE_SOURCE_DIR}/lib/absolute_momentum
+      ${CMAKE_SOURCE_DIR}/lib/dual_momentum
   )
   set_target_properties(
     ${APP} PROPERTIES
