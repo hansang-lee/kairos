@@ -124,7 +124,7 @@ tail -3 data/trades.jsonl
 ## 6단계 — 전략 판단만 관찰 (주문 없음)
 
 ```bash
-./build/Release/app/daily_trade --all
+./build/Release/app/trader --once
 ```
 
 실전 프로필 5개를 실제 장중 가격에 돌려 **무엇을 하려 했는지만** 출력합니다.
@@ -144,7 +144,7 @@ tail -3 data/trades.jsonl
 1~6단계가 **전부 설명대로 동작한 뒤에만** 진행하세요.
 
 ```bash
-./build/Release/app/daily_trade --id 30 --live
+./build/Release/app/trader --live --once
 ```
 
 신호가 HOLD면 아무것도 나가지 않고 검증할 것도 없습니다. **어느 날이든 그럴 가능성이
@@ -166,11 +166,11 @@ sudo loginctl enable-linger $USER     # 안 하면 로그아웃 시 중단
 그리고 **별도로, 의식적으로** 유닛에 `--live`를 붙입니다:
 
 ```bash
-systemctl --user edit --full kairos-daily.service   # ExecStart 끝에 --live 추가
+systemctl --user edit --full kairos-trader.service   # ExecStart 끝에 --live 추가
 systemctl --user daemon-reload
 ```
 
-`kairos-scalp`은 건드리지 마세요. **초단타는 보류 상태입니다** — 실제 1분봉 5일치로
+`kairos-trader`은 건드리지 마세요. **초단타는 보류 상태입니다** — 실제 1분봉 5일치로
 측정했을 때 gross -0.97%, net -10.67%였습니다. 손실의 거의 전부가 거래비용이었고,
 전략에는 그걸 감당할 엣지가 없었습니다.
 
@@ -180,7 +180,7 @@ systemctl --user daemon-reload
 
 ```bash
 ./build/Release/app/doctor                       # 여기서부터
-journalctl --user -u kairos-daily --since today  # systemd로 돌릴 때
+journalctl --user -u kairos-trader --since today  # systemd로 돌릴 때
 tail -20 data/trades.jsonl                       # 무엇을, 왜 결정했는지
 cat data/risk_state.json                         # 그날 한도가 막고 있는 건 아닌지
 ```

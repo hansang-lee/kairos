@@ -13,7 +13,7 @@ kairos is a C++17 automated trading system: strategies are backtested, then exec
 **Core features:**
 - **25 technical indicators** — trend (SMA/EMA/WMA/ADX/Parabolic SAR/SuperTrend/Aroon), momentum (RSI/MACD/ROC/CCI/Williams %R/TRIX/Stochastic/MA slope), volume (VWAP/OBV/MFI/CMF/A-D Line), volatility (Bollinger/ATR/StdDev/Keltner/Donchian)
 - **16 trading strategies** — grouped by category (swing / trend / position / scalp); see [Strategy categories](#-strategy-categories)
-- **Live order execution** — `daily_trade` (daily bars, one run per day) and `scalp_trade` (minute-bar polling) place paper-trading orders on KRX
+- **Live order execution** — one `trader` process runs every enabled profile, on minute bars or daily ones as each profile requires
 - **Trade journal** — every decision, including dry runs, is appended to `data/trades.jsonl` with the strategy that produced it
 - **Backtest engine** — models commission, slippage and stop-loss; reports a 0–100 composite score
 - **Macro analysis** — 12 FRED series + CNN Fear & Greed, mapped onto a 4-regime model
@@ -209,50 +209,46 @@ Strategies are defined in JSON, so tickers and parameters can be added or change
 
 ## 🗂️ Strategy categories
 
-`IStrategy` operates on a `StockInfo` (an OHLCV time series) and never assumes daily bars — feeding it minute bars produces signals just the same. Backtesting (historical validation) runs through `run_strategy`; live execution goes through `daily_trade` (daily bars) or `scalp_trade` (minute bars), which share one `SignalExecutor` so sizing and stop-loss rules cannot drift apart.
+`IStrategy` operates on a `StockInfo` (an OHLCV time series) and never assumes daily bars — feeding it minute bars produces signals just the same. Backtesting runs through `run_strategy`; live execution goes through `trader`, which reads each profile's `category` to decide whether to poll it on minute bars or evaluate it once a day.
 
 | Category | Holding period | Character | Strategies | Runner |
 |---|---|---|---|---|
-| **swing** | days to 1–2 weeks | mean reversion (overbought/oversold) | rsi, bollinger, stochastic_reversal, williams_r, cci_reversal, mfi_reversal | `daily_trade` (daily) |
-| **trend** | 1 week to several weeks | trend following | sma_crossover, macd, adx_trend, supertrend, aroon_trend, psar_trend, ma_slope_trend | `daily_trade` (daily) |
-| **position** | weeks to months | volatility breakout / volume confirmation | donchian_breakout, obv_trend, keltner_breakout | `daily_trade` (daily) |
-| **scalp** | minutes | minute-bar polling, intraday live trading | sma_crossover (short parameters) | `scalp_trade` (intraday) |
+| **swing** | days to 1–2 weeks | mean reversion (overbought/oversold) | rsi, bollinger, stochastic_reversal, williams_r, cci_reversal, mfi_reversal | `trader`, once a day |
+| **trend** | 1 week to several weeks | trend following | sma_crossover, macd, adx_trend, supertrend, aroon_trend, psar_trend, ma_slope_trend | `trader`, once a day |
+| **position** | weeks to months | volatility breakout / volume confirmation | donchian_breakout, obv_trend, keltner_breakout | `trader`, once a day |
+| **scalp** | minutes | minute-bar polling, intraday live trading | sma_crossover (short parameters) | `trader`, each interval |
 
 Every profile in `config/portfolio.json` carries a `category` field, visible directly in `run_strategy --list`.
 
-### Running the daily strategies live
+### Running the trader
 
 ```bash
 # Requires KIS_PAPER_* credentials in .env. Dry-run by default (no real orders).
-./build/Release/app/daily_trade --id 3                  # one profile
-./build/Release/app/daily_trade --all                   # every KRX profile except 'scalp'
+./build/Release/app/trader
 
 # Add --live to actually place orders on the paper account
-./build/Release/app/daily_trade --all --live
+./build/Release/app/trader --live
 
-# --force evaluates outside KRX hours (dry-run inspection; live orders would be rejected)
-./build/Release/app/daily_trade --id 3 --force
+# One cycle and exit, ignoring market hours — for inspection
+./build/Release/app/trader --once
 ```
 
-`daily_trade` runs **once and exits**, placing at most one order per profile — the shape a cron job near the close wants (e.g. `15:15 KST`). It is the live counterpart to `run_strategy`, which only ever backtests.
+There is one trader, and it runs **every enabled KRX profile** in the config. A profile's bar size is a property of the profile, not a reason for a second service:
+
+- `category: "scalp"` → evaluated every `--interval` (default 60s) during market hours
+- everything else → evaluated **once a day**, at or after `--daily-at` (default 1515)
+
+Only one may run at a time — they share the risk guard, position store and journal — so the trader takes an `flock` and refuses to start if another holds it.
+
+A once-a-day profile records the KST date it last evaluated in `data/schedule.json`, so it runs once and not again, but is **still run if the process was busy or restarting at `--daily-at`**. Being late beats skipping the day, which is what a wall-clock timer would have done.
 
 The index it evaluates is the bar the order would fill at: today's bar once KIS publishes it, otherwise the one past the last. This is the same convention the backtest uses, so a live signal matches what the backtest would have produced on that bar.
 
-### Running the scalper
-
-```bash
-# Requires KIS_PAPER_* credentials in .env. Dry-run by default (no real orders).
-./build/Release/app/scalp_trade --id 18 --interval 60
-
-# Add --live to actually place orders on the paper account
-./build/Release/app/scalp_trade --id 18 --interval 60 --live --max-trades 10
-```
-
-KIS's `inquire-time-itemchartprice` (TR_ID `FHKST03010200`) serves **today's minute bars only, ~30 per call**. `scalp_trade` polls only during KRX hours (09:00–15:30 KST, weekdays) and re-reads holdings and average price from `KisTrader::getBalance()` on every cycle, treating KIS as the source of truth rather than keeping local position state. Overseas (US) order placement is not implemented, so only KRX tickers are supported.
+KIS's `inquire-time-itemchartprice` (TR_ID `FHKST03010200`) serves **today's minute bars only, ~30 per call**, and those are archived as they arrive. Holdings and average price are re-read from `KisTrader::getBalance()` every cycle, treating KIS as the source of truth rather than keeping local position state. Overseas (US) order placement is not implemented, so only KRX tickers are supported.
 
 ### Risk limits
 
-`config/portfolio.json` carries an account-wide `risk` block, enforced by both trading apps:
+`config/portfolio.json` carries an account-wide `risk` block, enforced by the trader:
 
 ```json
 "risk": {
@@ -277,9 +273,9 @@ Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `.env` to get a push when a *
 ./build/Release/app/notify_test "hello from kairos"
 ```
 
-`daily_trade` also sends **one summary per run, whether or not anything happened**. Without it, silence means both "held, correctly" and "never ran" — which need opposite reactions from someone not watching the terminal. `--quiet` suppresses it for interactive runs.
+`trader` also sends **one summary per run, whether or not anything happened**. Without it, silence means both "held, correctly" and "never ran" — which need opposite reactions from someone not watching the terminal. `--quiet` suppresses it for interactive runs.
 
-Every run also tees its output to `logs/<app>-<KST date>.log`, and `daily_trade` archives the bars each decision used to `data/bars/<ticker>/daily.csv`, so a past decision can be reconstructed after KIS has re-served its history.
+Every run also tees its output to `logs/<app>-<KST date>.log`, and `trader` archives the bars each decision used to `data/bars/<ticker>/daily.csv`, so a past decision can be reconstructed after KIS has re-served its history.
 
 ### Trade journal
 
@@ -308,15 +304,15 @@ systemd **user** units (no root, nothing installed system-wide):
 | Unit | What it does |
 |----|------|
 | `kairos-dashboard.service` | Serves the dashboard on :8800, refreshing every 60s |
-| `kairos-daily.timer` | Fires `daily_trade --all` at 15:15 on weekdays |
-| `kairos-scalp.service` | Runs the scalping loop continuously (it gates itself on market hours) |
+| `kairos-trader` | Fires `trader --all` at 15:15 on weekdays |
+| `kairos-trader.service` | Runs the scalping loop continuously (it gates itself on market hours) |
 | `kairos-collector.timer` | Collects 5-minute bars weekly — places no orders, runs regardless of trading |
 
 They install in **dry-run**: no orders are placed until `--live` is added to the `ExecStart` line. The installer warns if the system timezone is not `Asia/Seoul`, since `OnCalendar` is wall-clock — `15:15` on a UTC host is not 15:15 KST. User services stop at logout unless lingering is enabled (`sudo loginctl enable-linger $USER`), which the installer also checks.
 
 ```bash
 systemctl --user list-timers 'kairos*'
-journalctl --user -u kairos-scalp.service -f
+journalctl --user -u kairos-trader.service -f
 ```
 
 What to edit, what needs a restart, and what to check when something looks wrong: [docs/OPERATIONS.md](docs/OPERATIONS.md).
@@ -477,8 +473,8 @@ macro report.
 | `qld_dca_backtest` | QLD dollar-cost-averaging backtest |
 | `strategy_sweep` | Multi-strategy × multi-ticker sweep |
 | `run_strategy` | Portfolio-driven **backtests** (daily bars; `--start`/`--end` for the window) |
-| `daily_trade` | **Live** daily-bar execution, one run per day (KRX, dry-run by default) |
-| `scalp_trade` | Intraday scalping via minute-bar polling (KRX, dry-run by default) |
+| `trader` | **Live** daily-bar execution, one run per day (KRX, dry-run by default) |
+| `trader` | Intraday scalping via minute-bar polling (KRX, dry-run by default) |
 | `portfolio_report` | Paper-account snapshot as JSON (return vs principal + holdings) |
 | `notify_test` | Sends one Telegram message to verify alert setup |
 | `doctor` | Health check: credentials, account, market data, config, local state |
@@ -499,7 +495,7 @@ macro report.
 | **1-D** | Korean market data collection (KIS API) | ✅ done |
 | **2-A** | Broker abstraction (IBroker) | 🔲 not started |
 | **2-B** | Order management (OrderManager, RiskManager) | 🔲 not started |
-| **2-C** | Automated trading daemon | 🟡 partial — `daily_trade` + `scalp_trade` cover KRX; scheduling and risk limits pending |
+| **2-C** | Automated trading daemon | 🟡 partial — `trader` + `trader` cover KRX; scheduling and risk limits pending |
 | **3** | Dashboard & alerts | 🟡 partial — local dashboard done; Go server, Telegram, external access pending |
 | **4** | AI / adaptive strategies (Python ML) | 🔲 not started |
 | **5** | Multi-tenant productization | 🔲 not started |
@@ -519,7 +515,7 @@ FRED API ──────┤                    ┌─── BacktestEngine �
 CNN F&G ───────┼→ StockInfo/Macro  ─┤
 KIS OpenAPI ───┘                    └─── StrategyFactory ──→ run_strategy (backtest)
                                                                   │
-                                                    SignalExecutor ─┴──→ daily_trade / scalp_trade
+                                                    SignalExecutor ─┴──→ trader / trader
                                                           │
                                      KisTrader ───────────┴──→ paper account
                                      TradeJournal ────────┴──→ data/trades.jsonl

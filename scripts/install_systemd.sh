@@ -3,8 +3,7 @@
 # Installs the kairos systemd *user* units, so nothing here needs root and
 # nothing runs as a system service.
 #
-#   ./scripts/install_systemd.sh            # install + enable dashboard and daily timer
-#   ./scripts/install_systemd.sh --scalp    # also enable the intraday scalping loop
+#   ./scripts/install_systemd.sh            # install + enable trader, collector, dashboard
 #   ./scripts/install_systemd.sh --uninstall
 #
 # The units run in dry-run mode: they place no orders until --live is added to
@@ -14,14 +13,17 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
-UNITS=(kairos-dashboard.service kairos-daily.service kairos-daily.timer kairos-scalp.service
+UNITS=(kairos-dashboard.service kairos-trader.service
        kairos-collector.service kairos-collector.timer)
 
-with_scalp=0
+# Units from earlier layouts. Left behind they would keep firing alongside their
+# replacements, which neither unit file would reveal.
+LEGACY_UNITS=(kairos-daily.service kairos-daily.timer kairos-scalp.service
+              kairos-collect.service kairos-collect.timer)
+
 uninstall=0
 for arg in "$@"; do
     case "$arg" in
-        --scalp) with_scalp=1 ;;
         --uninstall) uninstall=1 ;;
         *) echo "Unknown option: $arg" >&2; exit 1 ;;
     esac
@@ -33,35 +35,37 @@ if ! command -v systemctl >/dev/null 2>&1; then
 fi
 
 if [[ "$uninstall" == 1 ]]; then
-    systemctl --user disable --now kairos-dashboard.service kairos-daily.timer \
-        kairos-scalp.service kairos-collector.timer 2>/dev/null || true
-    # The collector was called kairos-collect before; clean it up so a rename does
-    # not leave an orphaned unit still firing on the old schedule.
-    systemctl --user disable --now kairos-collect.timer 2>/dev/null || true
-    rm -f "$UNIT_DIR/kairos-collect.service" "$UNIT_DIR/kairos-collect.timer"
-    for unit in "${UNITS[@]}"; do rm -f "$UNIT_DIR/$unit"; done
+    systemctl --user disable --now kairos-dashboard.service kairos-trader.service \
+        kairos-collector.timer 2>/dev/null || true
+    for unit in "${LEGACY_UNITS[@]}"; do
+        systemctl --user disable --now "$unit" 2>/dev/null || true
+    done
+    for unit in "${UNITS[@]}" "${LEGACY_UNITS[@]}"; do rm -f "$UNIT_DIR/$unit"; done
     systemctl --user daemon-reload
     echo "Removed kairos user units."
     exit 0
 fi
 
-# The timer fires on wall-clock time, so a host on the wrong timezone would trade
-# at the wrong hour — worth failing loudly rather than discovering it at 15:15.
+# Market hours and the once-a-day time are read as wall-clock, so a host on the
+# wrong timezone would trade at the wrong hour — worth saying loudly rather than
+# discovering it at 15:15.
 tz="$(timedatectl show -p Timezone --value 2>/dev/null || echo unknown)"
 if [[ "$tz" != "Asia/Seoul" ]]; then
     echo "WARNING: system timezone is '$tz', not Asia/Seoul."
-    echo "         The daily timer's 15:15 would not be 15:15 KST. Fix the timezone or"
-    echo "         edit OnCalendar in kairos-daily.timer before enabling it."
+    echo "         --daily-at 1515 would not mean 15:15 KST, and the market-hours gate"
+    echo "         would be wrong too. Fix the timezone before enabling the trader."
 fi
 
-if [[ ! -x "$ROOT/build/Release/app/daily_trade" ]]; then
+if [[ ! -x "$ROOT/build/Release/app/trader" ]]; then
     echo "Build first: cmake -S . -B build/Release -G Ninja && cmake --build build/Release" >&2
     exit 1
 fi
 
-# Remove units from before the collector was renamed, or both would run.
-systemctl --user disable --now kairos-collect.timer 2>/dev/null || true
-rm -f "$UNIT_DIR/kairos-collect.service" "$UNIT_DIR/kairos-collect.timer"
+# Drop superseded units before writing the new ones, or both would run.
+for unit in "${LEGACY_UNITS[@]}"; do
+    systemctl --user disable --now "$unit" 2>/dev/null || true
+    rm -f "$UNIT_DIR/$unit"
+done
 
 mkdir -p "$UNIT_DIR"
 for unit in "${UNITS[@]}"; do
@@ -71,16 +75,12 @@ done
 
 systemctl --user daemon-reload
 systemctl --user enable --now kairos-dashboard.service
-systemctl --user enable --now kairos-daily.timer
+systemctl --user enable --now kairos-trader.service
 # Collection places no orders and is independent of whether trading is live, so it
 # is enabled unconditionally — the data window closes whether or not you trade.
 systemctl --user enable --now kairos-collector.timer
-if [[ "$with_scalp" == 1 ]]; then
-    systemctl --user enable --now kairos-scalp.service
-fi
-
-# Without lingering, user services stop at logout — the daily timer would then
-# only fire while someone is logged in, which is not what "runs by itself" means.
+# Without lingering, user services stop at logout — the trader would then only run
+# while someone is logged in, which is not what "runs by itself" means.
 if ! loginctl show-user "$USER" -p Linger --value 2>/dev/null | grep -q yes; then
     echo
     echo "NOTE: lingering is off, so these stop when you log out. Enable it with:"
@@ -91,17 +91,16 @@ cat <<'EOF'
 
 Installed in DRY-RUN mode — no orders will be placed.
 
-To trade for real on the paper account, add --live to the ExecStart line:
-  systemctl --user edit --full kairos-daily.service
-  systemctl --user edit --full kairos-scalp.service
-then: systemctl --user daemon-reload && systemctl --user restart kairos-scalp.service
+To trade for real on the paper account, add --live to the one ExecStart line:
+  systemctl --user edit --full kairos-trader.service
+then: systemctl --user daemon-reload && systemctl --user restart kairos-trader
 
 Collection runs weekly regardless of trading: Yahoo keeps about a month of
 5-minute bars, and that history cannot be bought back later.
 
 Status and logs:
-  systemctl --user status kairos-daily.timer
+  systemctl --user status kairos-trader
   systemctl --user list-timers 'kairos*'
-  journalctl --user -u kairos-scalp.service -f
-  journalctl --user -u kairos-collector.service
+  journalctl --user -u kairos-trader -f
+  journalctl --user -u kairos-collector
 EOF

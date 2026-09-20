@@ -13,8 +13,8 @@
 >   indicators; KIS daily data with pagination past the ~100-bar-per-call cap.
 > - **Phase 2 — partially done, but not as designed.** There is no `IBroker` abstraction
 >   yet. Instead `KisTrader` (`include/broker/kis_trader.hpp`) talks to KIS directly for
->   cash orders and balance inquiry. Two executables drive it: `daily_trade` (daily bars,
->   one run per day) and `scalp_trade` (minute-bar loop), both going through
+>   cash orders and balance inquiry. Two executables drive it: `trader` (daily bars,
+>   one run per day) and `trader` (minute-bar loop), both going through
 >   `trade::SignalExecutor` for sizing, stop-loss and journaling.
 >   `OrderManager` / `PositionSizer` / `RiskManager` do not exist; position state is read
 >   back from KIS on every cycle instead of being tracked locally. Every decision is
@@ -625,8 +625,8 @@ struct PositionSizer {
 
 > [!NOTE]
 > What actually shipped for this sub-phase is the same loop shape (market-hours gate →
-> data → signal → order), split across two executables: `app/scalp_trade.cpp` (intraday
-> minute bars, continuous loop) and `app/daily_trade.cpp` (daily bars, one shot per run,
+> data → signal → order), split across two executables: `app/trader.cpp` (intraday
+> minute bars, continuous loop) and `app/trader.cpp` (daily bars, one shot per run,
 > meant for cron near the close). Both are KRX only, dry-run by default with `--live`
 > opt-in, and share `trade::SignalExecutor` so position sizing and the stop-loss rule
 > exist in exactly one place. There is no `OrderManager`/`RiskManager`/`PositionSizer`

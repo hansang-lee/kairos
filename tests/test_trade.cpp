@@ -6,6 +6,7 @@
 #include "test_framework.hpp"
 #include "trade/position_store.hpp"
 #include "trade/risk_guard.hpp"
+#include "trade/schedule_state.hpp"
 #include "trade/signal_executor.hpp"
 #include "trade/trade_journal.hpp"
 
@@ -454,4 +455,65 @@ TEST(executor, position_pct_is_respected_rather_than_rounded_up) {
     CHECK(d.acted);
     CHECK_EQ(d.quantity, int64_t{7});
     CHECK_MSG(static_cast<double>(d.quantity) * 260000 <= 10000000 * 0.2, "sizing exceeded position_pct");
+}
+
+/* ----------------------------- ScheduleState ----------------------------- */
+
+TEST(schedule, a_daily_profile_runs_once_and_not_again_that_day) {
+    CHECK(trade::isDailyProfileDue("", "2026-09-21", 1515, 1515));
+    CHECK(!trade::isDailyProfileDue("2026-09-21", "2026-09-21", 1520, 1515));
+    // A new day makes it due again.
+    CHECK(trade::isDailyProfileDue("2026-09-21", "2026-09-22", 1515, 1515));
+}
+
+TEST(schedule, a_daily_profile_is_not_due_before_its_time) {
+    CHECK(!trade::isDailyProfileDue("", "2026-09-21", 1000, 1515));
+    CHECK(!trade::isDailyProfileDue("", "2026-09-21", 1514, 1515));
+    CHECK(trade::isDailyProfileDue("", "2026-09-21", 1515, 1515));
+}
+
+TEST(schedule, being_late_still_counts_as_due) {
+    // The reason this is a daemon and not a wall-clock timer: a process that was
+    // busy or restarting at 15:15 must still act, not skip the day silently.
+    CHECK(trade::isDailyProfileDue("", "2026-09-21", 1529, 1515));
+}
+
+TEST(schedule, evaluation_dates_survive_a_restart) {
+    const std::string path = tmp("schedule.json");
+    removeFile(path);
+    {
+        trade::ScheduleState s(path);
+        CHECK_EQ(s.lastEvaluated(30), std::string(""));
+        s.markEvaluated(30, "2026-09-21");
+        s.markEvaluated(31, "2026-09-21");
+    }
+    {
+        trade::ScheduleState reopened(path);
+        // Without this a restart would re-evaluate and could re-enter a position
+        // the process had just exited.
+        CHECK_EQ(reopened.lastEvaluated(30), std::string("2026-09-21"));
+        CHECK_EQ(reopened.lastEvaluated(31), std::string("2026-09-21"));
+        CHECK_EQ(reopened.lastEvaluated(99), std::string(""));
+    }
+}
+
+TEST(schedule, a_corrupt_state_file_does_not_stop_the_process) {
+    const std::string path = tmp("schedule_corrupt.json");
+    std::ofstream(path, std::ios::trunc) << "{not json";
+
+    trade::ScheduleState s(path);
+    CHECK_EQ(s.lastEvaluated(30), std::string(""));  // costs one duplicate evaluation, no more
+    s.markEvaluated(30, "2026-09-21");
+    CHECK_EQ(s.lastEvaluated(30), std::string("2026-09-21"));
+}
+
+TEST(schedule, profiles_are_tracked_independently) {
+    const std::string path = tmp("schedule_multi.json");
+    removeFile(path);
+    trade::ScheduleState s(path);
+
+    s.markEvaluated(30, "2026-09-21");
+    CHECK(!trade::isDailyProfileDue(s.lastEvaluated(30), "2026-09-21", 1600, 1515));
+    // #31 has not run; it must still be due.
+    CHECK(trade::isDailyProfileDue(s.lastEvaluated(31), "2026-09-21", 1600, 1515));
 }

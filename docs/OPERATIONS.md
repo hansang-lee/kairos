@@ -15,7 +15,7 @@ first real order, see [FIRST_LIVE_ORDER.md](FIRST_LIVE_ORDER.md).
 
 Almost everything you will want to change lives in **`config/portfolio.json`**,
 and both trading apps pick up an edit without a restart — the scalper re-reads
-the file when it changes on disk, and `daily_trade` starts fresh every run.
+the file when it changes on disk, and `trader` starts fresh every run.
 
 When something is not behaving, start here:
 
@@ -89,7 +89,7 @@ blocked — refusing to close a position is the one thing these rules must not d
 
 Entry tranches are sized from the cash available at the time of each one, so a
 staged entry lands slightly *under* `position_pct` rather than over it.
-| `category` | `swing` / `trend` / `position` / `scalp`. **`scalp` excludes a profile from `daily_trade --all`**, so the two loops never fight over one position. |
+| `category` | `swing` / `trend` / `position` / `scalp`. **`scalp` excludes a profile from `trader --all`**, so the two loops never fight over one position. |
 
 Registered `type` values:
 
@@ -136,41 +136,45 @@ that stopped it in `message`, so nothing disappears silently.
 Edit them with `systemctl --user edit --full <unit>`, not by hand in
 `deploy/systemd/` — that directory holds the templates the installer copies from.
 
+There are three, and only one of them can move money.
+
 | Unit | Runs | Nature |
 |---|---|---|
-| `kairos-scalp.service` | `scalp_trade --id 18 --interval 60` | Long-running loop; should read `active (running)` |
-| | `--id` takes a list (`--id 18,19`) or `--all-scalp` for every `scalp` profile | One process, never two — see below |
-| `kairos-daily.service` | `daily_trade --all` | One-shot; reads `inactive (dead)` between runs — that is normal |
-| `kairos-daily.timer` | Fires the above at `Mon..Fri 15:15` | The thing you enable, not the service |
+| **`kairos-trader.service`** | `trader --interval 60 --daily-at 1515` | **The only process that places orders.** Long-running; should read `active (running)` |
 | `kairos-dashboard.service` | `scripts/dashboard_server.py --port 8800` | Reads the account; places no orders |
 | `kairos-collector.timer` | `bar_collect --interval 5m --range 1mo`, Sundays | Public price data only; independent of trading |
 
+There is one trader because a strategy's bar size is a property of the strategy,
+not a reason for a second service — and because two trading processes would
+share the risk guard, position store and journal and erase each other's writes.
+The trader takes an `flock` and refuses to start if one is already running.
+
+Which profiles it runs is entirely in the config: every `enabled` KRX profile.
+A profile with `category: "scalp"` is polled every `--interval`; every other
+profile is evaluated **once a day**, at or after `--daily-at`.
+
 These live in the **unit**, not the config:
 
-- **which profile the scalper trades** (`--id`)
 - **poll interval** (`--interval`, default 60s)
-- **per-session order cap** (`--max-trades`, default 10)
+- **time of day for once-a-day profiles** (`--daily-at`, default 1515)
+- **per-profile session order cap** (`--max-trades`, default 10)
 - **`--live`** — without it, nothing is ever ordered
-
-`daily_trade --all` picks up any KRX profile that is not `category: "scalp"`, so
-adding a profile to the JSON joins the daily run automatically. The scalper is
-pinned to one `--id` and does not.
 
 ### Going live
 
-`--live` must be added to **both** trading units, or the other half stays in
-dry-run:
+One line, in one unit:
 
 ```bash
-systemctl --user edit --full kairos-scalp.service    # append --live to ExecStart
-systemctl --user edit --full kairos-daily.service
+systemctl --user edit --full kairos-trader.service    # append --live to ExecStart
 systemctl --user daemon-reload
-systemctl --user restart kairos-scalp
+systemctl --user restart kairos-trader
 ```
 
-The timer fires on wall-clock time and `Persistent=false`, so a run missed
-because the machine was asleep at 15:15 is **skipped, not run late** — placing
-the day's orders at 18:00 would be worse than placing none.
+A once-a-day profile records the KST date it last evaluated, in
+`data/schedule.json`. It therefore runs once per day and not again, but **is
+still run if the process was busy or restarting at `--daily-at`** — being late
+is better than skipping the day, which is what a wall-clock timer would have
+done.
 
 ---
 
@@ -181,8 +185,8 @@ the day's orders at 18:00 would be worse than placing none.
 | Return vs principal, holdings | <http://localhost:8800> |
 | Every decision, with strategy attribution | `data/trades.jsonl` |
 | What KIS itself recorded | `./build/Release/app/kis_order fills` |
-| Live logs | `journalctl --user -u kairos-scalp -f` |
-| Durable run logs | `logs/daily_trade-YYYY-MM-DD.log`, `logs/scalp_trade-…` |
+| Live logs | `journalctl --user -u kairos-trader -f` |
+| Durable run logs | `logs/trader-YYYY-MM-DD.log`, `logs/trader-…` |
 | Prices a decision used | `data/bars/<ticker>/daily.csv` |
 | Next timer fire | `systemctl --user list-timers 'kairos*'` |
 
@@ -194,7 +198,7 @@ a `=====` header per run. This is separate from journald and survives its
 rotation. The file is flushed per line, so a loop stopped by a signal does not
 lose its tail.
 
-`daily_trade` also archives the bars each decision was made on to
+`trader` also archives the bars each decision was made on to
 `data/bars/<ticker>/daily.csv`. KIS revises and re-serves history, so without
 this the inputs to a past decision cannot be recovered.
 
@@ -241,13 +245,13 @@ session same-day results can still be incomplete.
 
 **Change a strategy's parameters**
 1. Edit `params` in `config/portfolio.json`
-2. `systemctl --user restart kairos-scalp` — only if the scalper uses that profile
+2. `systemctl --user restart kairos-trader` — only if the scalper uses that profile
 3. Daily profiles need nothing; the next 15:15 run reads the file
 
 **Scalp a different strategy**
 ```bash
-systemctl --user edit --full kairos-scalp.service   # change --id
-systemctl --user daemon-reload && systemctl --user restart kairos-scalp
+systemctl --user edit --full kairos-trader.service   # change --id
+systemctl --user daemon-reload && systemctl --user restart kairos-trader
 ```
 
 **Add a profile to the daily run** — append it to `strategies` with
@@ -255,7 +259,7 @@ systemctl --user daemon-reload && systemctl --user restart kairos-scalp
 
 **Stop everything immediately**
 ```bash
-systemctl --user stop kairos-scalp kairos-daily.timer
+systemctl --user stop kairos-trader kairos-trader
 ```
 This stops new orders. It does **not** close open positions — sell those through
 the broker or with `kis_order sell <ticker> <qty>`.
@@ -283,13 +287,14 @@ timedatectl show -p Timezone --value
 **Config edits seem ignored.** The scalper re-reads the file when its mtime
 changes, usually within one `--interval`. If it did not, the log says why
 ("reloaded empty", "no runnable profiles") and it kept the previous config.
-`daily_trade` always reads fresh.
+`trader` always reads fresh.
 
 **Never run two trading processes against one account.** Each keeps its own risk
 guard and position store while writing the same files, so the day's order count
 and other tickers' peaks are lost on every save, and each sizes orders from the
-full cash balance — committing twice what you intended. To trade several
-tickers, give one `scalp_trade` several ids.
+full cash balance — committing twice what you intended. This is why there is one
+trader service and why it takes a lock; to trade several tickers, enable several
+profiles.
 
 **"Market closed" on a day the market is open.** Check
 `config/krx_holidays.json` — a wrong entry there would skip a real trading day.
@@ -306,7 +311,7 @@ which also discards the loss limit's reference point; do it knowingly.
 
 The loss limit measures against the **higher of the day's opening equity and the
 previous session's last known equity**. Both are needed: a loop starting at 09:00
-has a meaningful intraday baseline, but `daily_trade` sees exactly one balance
+has a meaningful intraday baseline, but `trader` sees exactly one balance
 per day and would otherwise be comparing it against itself.
 
 **"Another kairos trading process is already running."** Exactly what it says —
@@ -339,7 +344,7 @@ built up as you go, and it is the only route to ever backtesting a scalper.
 ./build/Release/app/scalp_backtest --id 18 --gross         # costs zeroed
 ```
 
-`scalp_trade` saves every poll's bars automatically, so the archive grows a day
+`trader` saves every poll's bars automatically, so the archive grows a day
 per session. Yahoo's measured limits: 1m ~5 days, 5m/15m/30m ~1 month, 1h ~1 year.
 
 `kairos-collector.timer` runs `bar_collect` weekly against a one-month window, so
@@ -425,16 +430,16 @@ them did. A strategy picked from one window alone is picked for that window.
 ./build/Release/app/kis_order buy  005930 1        # market order
 ./build/Release/app/kis_order sell 005930 1 75000  # limit order
 
-# evaluate without the timer (dry-run; --force works outside market hours)
-./build/Release/app/daily_trade --all --force
-./build/Release/app/scalp_trade --id 18 --interval 60
+# one cycle in dry-run, ignoring market hours
+./build/Release/app/trader --once
+./build/Release/app/trader --once     # one cycle, ignores market hours
 
 # backtest instead of trade
 ./build/Release/app/run_strategy --list
 ./build/Release/app/run_strategy --id 18 --start 2021-01-01 --end 2026-09-18
 ```
 
-`run_strategy` never places orders — it is the backtest path. `daily_trade` is
+`run_strategy` never places orders — it is the backtest path. `trader` is
 its live counterpart.
 
 ---
@@ -443,7 +448,7 @@ its live counterpart.
 
 ```bash
 cmake --build build/Release
-systemctl --user restart kairos-scalp kairos-dashboard
+systemctl --user restart kairos-trader kairos-dashboard
 ```
 
 The daily timer needs no restart; it launches a fresh binary each run.

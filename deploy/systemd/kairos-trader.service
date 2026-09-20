@@ -1,0 +1,23 @@
+[Unit]
+Description=kairos trader
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=__ROOT__
+# Dry-run by default: this places no orders. Append --live once a real order has
+# been confirmed end to end, since the service then trades unattended.
+#
+# One service for every strategy. Whether a profile trades on minute bars or
+# daily ones is a property of the profile, not a reason for a second service —
+# and only one trading process may run, since they share state on disk.
+#
+# The loop gates itself on KRX hours and holidays, so running it continuously is
+# correct; outside the session it only logs and sleeps.
+ExecStart=__ROOT__/build/Release/app/trader --interval 60 --daily-at 1515
+Restart=on-failure
+RestartSec=60
+
+[Install]
+WantedBy=default.target
