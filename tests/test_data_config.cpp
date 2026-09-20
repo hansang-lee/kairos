@@ -349,3 +349,44 @@ TEST(util, load_json_config_reports_missing_and_malformed_files) {
     writeFile(bad, "{ this is not json");
     CHECK(!util::loadJsonConfig(bad).has_value());
 }
+
+TEST(config, dangerous_percentages_are_clamped_at_load) {
+    // A negative stop loss inverts its own comparison: price <= avg * (1 - (-5)/100)
+    // is price <= avg * 1.05, so the position sells the moment it opens — and
+    // nothing downstream would report that as anything but a working stop.
+    const std::string path = tmp("portfolio_dangerous.json");
+    writeFile(path, R"({"strategies":[{
+      "id":1,"ticker":"005930","type":"bollinger",
+      "position_pct": 5.0,
+      "stop_loss_pct": -5.0,
+      "take_profit_pct": -1.0,
+      "trailing_stop_pct": -2.0,
+      "cooldown_minutes": -30
+    }]})");
+
+    const auto  cfg = PortfolioConfig::loadFromFile(path);
+    const auto* p   = cfg.findById(1);
+    CHECK(p != nullptr);
+    CHECK_NEAR(p->positionPct, 1.0, 1e-9);  // 500% of cash is not a position
+    CHECK_NEAR(p->stopLossPct, 0.0, 1e-9);  // disabled beats inverted
+    CHECK_NEAR(p->takeProfitPct, 0.0, 1e-9);
+    CHECK_NEAR(p->trailingStopPct, 0.0, 1e-9);
+    CHECK_EQ(p->cooldownMinutes, 0);
+}
+
+TEST(config, valid_percentages_pass_through_untouched) {
+    const std::string path = tmp("portfolio_valid.json");
+    writeFile(path, R"({"strategies":[{
+      "id":1,"ticker":"005930","type":"bollinger",
+      "position_pct": 0.2, "stop_loss_pct": 8.0,
+      "take_profit_pct": 12.0, "trailing_stop_pct": 5.0, "cooldown_minutes": 30
+    }]})");
+
+    const auto  cfg = PortfolioConfig::loadFromFile(path);
+    const auto* p   = cfg.findById(1);
+    CHECK_NEAR(p->positionPct, 0.2, 1e-9);
+    CHECK_NEAR(p->stopLossPct, 8.0, 1e-9);
+    CHECK_NEAR(p->takeProfitPct, 12.0, 1e-9);
+    CHECK_NEAR(p->trailingStopPct, 5.0, 1e-9);
+    CHECK_EQ(p->cooldownMinutes, 30);
+}

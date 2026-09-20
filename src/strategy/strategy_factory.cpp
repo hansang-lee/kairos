@@ -223,17 +223,30 @@ PortfolioConfig PortfolioConfig::loadFromFile(const std::string& configPath) {
 
     for (const auto& item : (*j)["strategies"]) {
         StrategyProfile p;
-        p.id              = item.value("id", 0);
-        p.name            = item.value("name", "");
-        p.ticker          = item.value("ticker", "");
-        p.market          = item.value("market", "KRX");
-        p.type            = item.value("type", "");
-        p.category        = item.value("category", "");
-        p.positionPct     = item.value("position_pct", 1.0);
-        p.stopLossPct     = item.value("stop_loss_pct", 0.0);
-        p.takeProfitPct   = item.value("take_profit_pct", 0.0);
-        p.trailingStopPct = item.value("trailing_stop_pct", 0.0);
-        p.cooldownMinutes = item.value("cooldown_minutes", 0);
+        p.id       = item.value("id", 0);
+        p.name     = item.value("name", "");
+        p.ticker   = item.value("ticker", "");
+        p.market   = item.value("market", "KRX");
+        p.type     = item.value("type", "");
+        p.category = item.value("category", "");
+        // Percentages are clamped at load rather than trusted. A negative stop loss
+        // inverts its own comparison — price <= avg * (1 - (-5)/100) is
+        // price <= avg * 1.05 — so the position sells the moment it is opened, and
+        // nothing downstream would report that as anything but a working stop.
+        auto clampPct = [&](const char* key, double fallback, double lo, double hi) {
+            const double raw = item.value(key, fallback);
+            if (raw < lo || raw > hi) {
+                std::cerr << "StrategyProfile #" << p.id << ": " << key << "=" << raw << " is outside [" << lo << ", "
+                          << hi << "]; clamped." << std::endl;
+            }
+            return std::min(hi, std::max(lo, raw));
+        };
+
+        p.positionPct     = clampPct("position_pct", 1.0, 0.0, 1.0);
+        p.stopLossPct     = clampPct("stop_loss_pct", 0.0, 0.0, 100.0);
+        p.takeProfitPct   = clampPct("take_profit_pct", 0.0, 0.0, 1000.0);
+        p.trailingStopPct = clampPct("trailing_stop_pct", 0.0, 0.0, 100.0);
+        p.cooldownMinutes = std::max(0, item.value("cooldown_minutes", 0));
         p.entryTranches   = std::max(1, item.value("entry_tranches", 1));
         p.exitTranches    = std::max(1, item.value("exit_tranches", 1));
         if (item.contains("trade_window") && item["trade_window"].is_object()) {

@@ -247,13 +247,27 @@ void checkStrategies(const PortfolioConfig& config) {
         }
     }
 
-    // Sizing mistakes are silent until they spend the whole account at once.
+    // Sizing and exit mistakes are silent until they spend the account or sell at
+    // the wrong moment. Out-of-range percentages are already clamped when the config
+    // loads; what remains here is what is in range and still unwise.
     for (const auto& p : config.getProfiles()) {
-        if (p.positionPct > 1.0 || p.positionPct <= 0.0) {
-            warn("#" + std::to_string(p.id) + " position_pct=" + std::to_string(p.positionPct), "expected 0 < x <= 1");
+        const std::string label = "#" + std::to_string(p.id) + " " + p.name;
+        if (p.positionPct <= 0.0) {
+            fail(label + " position_pct=" + std::to_string(p.positionPct), "nothing would ever be bought");
+        }
+        if (!p.enabled) {
+            continue;  // a disabled profile's settings cannot do harm
         }
         if (p.stopLossPct == 0.0 && p.trailingStopPct == 0.0 && p.market == "KRX") {
-            warn("#" + std::to_string(p.id) + " " + p.name, "no stop-loss and no trailing stop");
+            warn(label, "no stop-loss and no trailing stop");
+        }
+        // A take-profit below the round trip loses money on every win it takes.
+        if (p.takeProfitPct > 0.0 && p.takeProfitPct < 0.5) {
+            warn(label + " take_profit_pct=" + std::to_string(p.takeProfitPct),
+                 "below the ~0.34% KRX round trip — each win would net a loss");
+        }
+        if (p.takeProfitPct > 0.0 && p.stopLossPct > 0.0 && p.takeProfitPct < p.stopLossPct / 3.0) {
+            warn(label, "take-profit is far tighter than the stop; losses would dwarf wins");
         }
     }
 }
