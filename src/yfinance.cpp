@@ -6,6 +6,62 @@
 
 #include "yfinance.hpp"
 
+namespace {
+
+/**
+ * @brief Fill OHLCV from a Yahoo "quote" object, dropping bars with no data.
+ *
+ * Yahoo returns null for a bucket in which nothing traded, which is routine in
+ * intraday series. Reading the arrays wholesale throws a type_error on those, and
+ * a bar with no prices has nothing to contribute anyway — so such indices are
+ * dropped. The timestamp is dropped with them: keeping it would leave the series
+ * misaligned by one from that point on, which no later code could detect.
+ *
+ * @return Number of bars dropped.
+ */
+std::size_t fillQuotes(const nlohmann::json& quote, const nlohmann::json& timestamps,
+                       const std::shared_ptr<StockInfo>& data) {
+    auto at = [](const nlohmann::json& arr, std::size_t i) -> const nlohmann::json* {
+        return (arr.is_array() && i < arr.size()) ? &arr[i] : nullptr;
+    };
+
+    const auto& open   = quote.contains("open") ? quote["open"] : nlohmann::json::array();
+    const auto& high   = quote.contains("high") ? quote["high"] : nlohmann::json::array();
+    const auto& low    = quote.contains("low") ? quote["low"] : nlohmann::json::array();
+    const auto& close  = quote.contains("close") ? quote["close"] : nlohmann::json::array();
+    const auto& volume = quote.contains("volume") ? quote["volume"] : nlohmann::json::array();
+
+    const std::size_t n       = timestamps.is_array() ? timestamps.size() : 0;
+    std::size_t       dropped = 0;
+
+    for (std::size_t i = 0; i < n; ++i) {
+        const auto* c = at(close, i);
+        if (c == nullptr || c->is_null()) {
+            ++dropped;  // no trade in this bucket
+            continue;
+        }
+
+        const auto* o = at(open, i);
+        const auto* h = at(high, i);
+        const auto* l = at(low, i);
+        const auto* v = at(volume, i);
+
+        const double closeVal = c->get<double>();
+        data->timestamps.push_back(timestamps[i].get<int64_t>());
+        data->close.push_back(closeVal);
+        // A missing open/high/low on a bar that did trade falls back to the close
+        // rather than dropping the bar, which would lose a real price.
+        data->open.push_back((o && !o->is_null()) ? o->get<double>() : closeVal);
+        data->high.push_back((h && !h->is_null()) ? h->get<double>() : closeVal);
+        data->low.push_back((l && !l->is_null()) ? l->get<double>() : closeVal);
+        data->volume.push_back((v && !v->is_null()) ? v->get<int64_t>() : 0);
+    }
+
+    return dropped;
+}
+
+}  // namespace
+
 void yFinance::init() {
     curl_global_init(CURL_GLOBAL_DEFAULT);
 }
@@ -78,30 +134,14 @@ std::shared_ptr<StockInfo> yFinance::getStockInfo(const std::string& ticker, con
             data->timezone = meta["timezone"];
         }
 
-        if (result.contains("timestamp")) {
+        if (result.contains("timestamp") && result.contains("indicators") && result["indicators"].contains("quote")
+            && !result["indicators"]["quote"].empty()) {
+            fillQuotes(result["indicators"]["quote"][0], result["timestamp"], data);
+        } else if (result.contains("timestamp")) {
             data->timestamps = result["timestamp"].get<std::vector<int64_t>>();
         }
-
-        if (result.contains("indicators") && result["indicators"].contains("quote")) {
-            const auto& quote = result["indicators"]["quote"][0];
-            if (quote.contains("open")) {
-                data->open = quote["open"].get<std::vector<double>>();
-            }
-            if (quote.contains("high")) {
-                data->high = quote["high"].get<std::vector<double>>();
-            }
-            if (quote.contains("low")) {
-                data->low = quote["low"].get<std::vector<double>>();
-            }
-            if (quote.contains("close")) {
-                data->close = quote["close"].get<std::vector<double>>();
-            }
-            if (quote.contains("volume")) {
-                data->volume = quote["volume"].get<std::vector<int64_t>>();
-            }
-        }
-    } catch (const nlohmann::json::parse_error& e) {
-        std::cerr << "JSON parse error: " << e.what() << std::endl;
+    } catch (const nlohmann::json::exception& e) {
+        std::cerr << "JSON error: " << e.what() << std::endl;
     }
 
     return data;
@@ -174,30 +214,14 @@ std::shared_ptr<StockInfo> yFinance::getStockInfo(const std::string& ticker, con
             data->timezone = meta["timezone"];
         }
 
-        if (result.contains("timestamp")) {
+        if (result.contains("timestamp") && result.contains("indicators") && result["indicators"].contains("quote")
+            && !result["indicators"]["quote"].empty()) {
+            fillQuotes(result["indicators"]["quote"][0], result["timestamp"], data);
+        } else if (result.contains("timestamp")) {
             data->timestamps = result["timestamp"].get<std::vector<int64_t>>();
         }
-
-        if (result.contains("indicators") && result["indicators"].contains("quote")) {
-            const auto& quote = result["indicators"]["quote"][0];
-            if (quote.contains("open")) {
-                data->open = quote["open"].get<std::vector<double>>();
-            }
-            if (quote.contains("high")) {
-                data->high = quote["high"].get<std::vector<double>>();
-            }
-            if (quote.contains("low")) {
-                data->low = quote["low"].get<std::vector<double>>();
-            }
-            if (quote.contains("close")) {
-                data->close = quote["close"].get<std::vector<double>>();
-            }
-            if (quote.contains("volume")) {
-                data->volume = quote["volume"].get<std::vector<int64_t>>();
-            }
-        }
-    } catch (const nlohmann::json::parse_error& e) {
-        std::cerr << "JSON parse error: " << e.what() << std::endl;
+    } catch (const nlohmann::json::exception& e) {
+        std::cerr << "JSON error: " << e.what() << std::endl;
     }
 
     return data;
@@ -237,8 +261,8 @@ std::shared_ptr<FearAndGreedInfo> yFinance::getFearAndGreedIndex() {
                 data->ratings.push_back(item.value("rating", ""));
             }
         }
-    } catch (const nlohmann::json::parse_error& e) {
-        std::cerr << "JSON parse error: " << e.what() << std::endl;
+    } catch (const nlohmann::json::exception& e) {
+        std::cerr << "JSON error: " << e.what() << std::endl;
         return nullptr;
     }
 
@@ -312,8 +336,8 @@ std::shared_ptr<FredSeriesInfo> yFinance::getFredSeries(const std::string& serie
             data->dates.push_back(dateStr);
             data->values.push_back(std::stod(valueStr));
         }
-    } catch (const nlohmann::json::parse_error& e) {
-        std::cerr << "JSON parse error: " << e.what() << std::endl;
+    } catch (const nlohmann::json::exception& e) {
+        std::cerr << "JSON error: " << e.what() << std::endl;
         return nullptr;
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;
