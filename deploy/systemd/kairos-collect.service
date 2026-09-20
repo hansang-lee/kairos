@@ -1,0 +1,11 @@
+[Unit]
+Description=kairos intraday bar collection (one shot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=__ROOT__
+# Places no orders and touches no account state — this only fetches public price
+# data and appends it to data/bars/. Safe to run whether or not trading is live.
+ExecStart=__ROOT__/build/Release/app/bar_collect --interval 5m --range 1mo

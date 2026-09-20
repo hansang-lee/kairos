@@ -1,0 +1,16 @@
+[Unit]
+Description=Collect intraday bars weekly, while they are still available
+
+[Timer]
+# Yahoo keeps roughly a month of 5-minute bars, so a weekly run overlaps by about
+# four weeks. Nothing is lost if a week is missed, and the archive is the only way
+# this history will ever exist — it cannot be bought back later.
+OnCalendar=Sun 10:00
+# Unlike the trading timer, a missed run here SHOULD be made up: there is no harm
+# in collecting late, and the data window closes for good.
+Persistent=true
+RandomizedDelaySec=1800
+Unit=kairos-collect.service
+
+[Install]
+WantedBy=timers.target

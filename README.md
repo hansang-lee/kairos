@@ -310,6 +310,7 @@ systemd **user** units (no root, nothing installed system-wide):
 | `kairos-dashboard.service` | Serves the dashboard on :8800, refreshing every 60s |
 | `kairos-daily.timer` | Fires `daily_trade --all` at 15:15 on weekdays |
 | `kairos-scalp.service` | Runs the scalping loop continuously (it gates itself on market hours) |
+| `kairos-collect.timer` | Collects 5-minute bars weekly — places no orders, runs regardless of trading |
 
 They install in **dry-run**: no orders are placed until `--live` is added to the `ExecStart` line. The installer warns if the system timezone is not `Asia/Seoul`, since `OnCalendar` is wall-clock — `15:15` on a UTC host is not 15:15 KST. User services stop at logout unless lingering is enabled (`sudo loginctl enable-linger $USER`), which the installer also checks.
 
