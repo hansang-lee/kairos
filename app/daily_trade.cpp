@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "common/process_lock.hpp"
 #include "common/run_log.hpp"
 #include "data/bar_recorder.hpp"
 #include "data/kis_provider.hpp"
@@ -214,6 +215,17 @@ int main(int argc, char* argv[]) {
     }
 
     // Constructed before anything is printed, so the whole run lands in the file.
+    // Both trading apps mutate the same files. A timer firing while the same
+    // command runs by hand would have each overwrite the other's state.
+    const util::ProcessLock lock("trading");
+    if (!lock.held()) {
+        std::cerr << "[-] Another kairos trading process is already running.\n"
+                  << "    They share the risk guard, position store and journal, so running both\n"
+                  << "    would lose orders from the day's count and could commit the cash twice.\n"
+                  << "    Lock: " << lock.path() << std::endl;
+        return 1;
+    }
+
     const util::RunLog runLog("daily_trade");
 
     const auto config = PortfolioConfig::loadFromFile(configPath);

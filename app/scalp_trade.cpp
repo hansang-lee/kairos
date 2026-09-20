@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "broker/kis_trader.hpp"
+#include "common/process_lock.hpp"
 #include "common/run_log.hpp"
 #include "data/bar_recorder.hpp"
 #include "data/kis_provider.hpp"
@@ -26,6 +27,21 @@ volatile std::sig_atomic_t g_stop = 0;
 
 void onStop(int) {
     g_stop = 1;
+}
+
+/**
+ * @brief Sleep that wakes on a stop signal.
+ *
+ * A plain sleep_for(interval) makes SIGTERM take up to a full interval to have
+ * any effect, because the signal only sets a flag the loop reads after waking.
+ * systemd waits TimeoutStopSec (90s by default) and then sends SIGKILL, which
+ * skips the shutdown summary and any unflushed log output — and, before this,
+ * left the process holding the trading lock long after it was asked to stop.
+ */
+void interruptibleSleep(int seconds) {
+    for (int elapsed = 0; elapsed < seconds && !g_stop; ++elapsed) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
 }
 
 /**
@@ -193,6 +209,17 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // Both trading apps mutate the same files. A timer firing while the same
+    // command runs by hand would have each overwrite the other's state.
+    const util::ProcessLock lock("trading");
+    if (!lock.held()) {
+        std::cerr << "[-] Another kairos trading process is already running.\n"
+                  << "    They share the risk guard, position store and journal, so running both\n"
+                  << "    would lose orders from the day's count and could commit the cash twice.\n"
+                  << "    Lock: " << lock.path() << std::endl;
+        return 1;
+    }
+
     const util::RunLog runLog("scalp_trade");
 
     auto config  = PortfolioConfig::loadFromFile(configPath);
@@ -266,7 +293,7 @@ int main(int argc, char* argv[]) {
 
         if (const std::string closed = krxClosedReason(calendar); !closed.empty()) {
             std::cout << "[" << nowLabel() << "] Market closed (" << closed << "). Waiting...\n";
-            std::this_thread::sleep_for(std::chrono::seconds(intervalSec));
+            interruptibleSleep(intervalSec);
             continue;
         }
 
@@ -276,7 +303,7 @@ int main(int argc, char* argv[]) {
         const auto balance = KisTrader::getBalance();
         if (!balance.success) {
             std::cout << "[" << nowLabel() << "] Balance fetch failed: " << balance.message << ". Waiting...\n";
-            std::this_thread::sleep_for(std::chrono::seconds(intervalSec));
+            interruptibleSleep(intervalSec);
             continue;
         }
 
@@ -333,7 +360,7 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        std::this_thread::sleep_for(std::chrono::seconds(intervalSec));
+        interruptibleSleep(intervalSec);
     }
 
     int total = 0;
