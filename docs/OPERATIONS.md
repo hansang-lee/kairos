@@ -89,7 +89,7 @@ blocked — refusing to close a position is the one thing these rules must not d
 
 Entry tranches are sized from the cash available at the time of each one, so a
 staged entry lands slightly *under* `position_pct` rather than over it.
-| `category` | `swing` / `trend` / `position` / `scalp`. **`scalp` excludes a profile from `trader --all`**, so the two loops never fight over one position. |
+| `category` | `swing` / `trend` / `position` / `scalp`. **`scalp` makes the trader poll this profile every interval**; anything else is evaluated once a day. |
 
 Registered `type` values:
 

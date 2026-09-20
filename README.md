@@ -304,7 +304,7 @@ systemd **user** units (no root, nothing installed system-wide):
 | Unit | What it does |
 |----|------|
 | `kairos-dashboard.service` | Serves the dashboard on :8800, refreshing every 60s |
-| `kairos-trader` | Fires `trader --all` at 15:15 on weekdays |
+| `kairos-trader.service` | Runs every enabled profile — the only unit that places orders |
 | `kairos-trader.service` | Runs the scalping loop continuously (it gates itself on market hours) |
 | `kairos-collector.timer` | Collects 5-minute bars weekly — places no orders, runs regardless of trading |
 
