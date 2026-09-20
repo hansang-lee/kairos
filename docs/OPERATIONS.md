@@ -215,6 +215,12 @@ is the point: a dry run leaves no other trace.
 | `order` | A decision was made. `dry_run` says whether it was actually sent. |
 | `skip` | Suppressed by a risk limit or the session cap; `message` says which. |
 | `fill` | Confirmed by KIS, with the real average price. Written by `kis_order fills`. |
+| `order_unknown` | **Sent, outcome never received.** It may or may not exist at the broker. |
+
+An `order_unknown` is the one entry that needs a human. The request left the
+process and never came back, so KIS may have accepted it with only the response
+lost. Do not re-send it — run `kis_order fills` and let the broker's own record
+settle whether it exists.
 
 ```bash
 # today's decisions
@@ -297,6 +303,21 @@ bars only, so early in the session it prints `Only N bars so far`.
 in the journal — it names the limit. Inspect `data/risk_state.json` to see the
 day's opening equity and order count. Deleting that file re-baselines the day,
 which also discards the loss limit's reference point; do it knowingly.
+
+The loss limit measures against the **higher of the day's opening equity and the
+previous session's last known equity**. Both are needed: a loop starting at 09:00
+has a meaningful intraday baseline, but `daily_trade` sees exactly one balance
+per day and would otherwise be comparing it against itself.
+
+**"Another kairos trading process is already running."** Exactly what it says —
+the apps share the risk guard, position store and journal, so a second one would
+erase the first's writes. Usually a systemd timer firing while the same command
+is run by hand. The lock is an `flock` on `data/trading.lock`, released by the
+kernel, so it cannot go stale.
+
+**A buy was skipped with "allocation below one share".** `position_pct` of the
+available cash did not cover a single share. Not an error — buying one anyway
+would have committed far more than the configured fraction.
 
 **Alerts never arrive.** Both apps print `alerts=on/off` at startup. If off,
 `TELEGRAM_BOT_TOKEN` or `TELEGRAM_CHAT_ID` is empty. Verify with:
