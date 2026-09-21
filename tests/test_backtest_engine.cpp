@@ -262,20 +262,60 @@ TEST(backtest, averaging_down_adds_and_lowers_the_average_price) {
 }
 
 TEST(backtest, adds_are_bounded_by_max_adds) {
-    // A relentless decline: without a bound this would keep buying all the way down.
-    const auto       bars = makeBars({100, 100, 80, 64, 51, 41, 33, 26, 21, 17});
-    ScriptedStrategy strat({Signal::HOLD, Signal::BUY});
+    // A relentless decline. Planned tranches fill regardless — that is what scaling
+    // in means — so the cap is measured against runs with fewer adds, not against an
+    // absolute loss.
+    const auto bars = makeBars({100, 100, 80, 64, 51, 41, 33, 26, 21, 17});
 
-    auto cfg             = frictionless();
-    cfg.entryTranches    = 5;
-    cfg.addOnDrawdownPct = 15.0;
-    cfg.maxAdds          = 1;
+    auto base             = frictionless();
+    base.entryTranches    = 1;  // isolate the adds from the planned entry
+    base.addOnDrawdownPct = 15.0;
+    base.positionPct      = 1.0;
+
+    ScriptedStrategy none({Signal::HOLD, Signal::BUY});
+    ScriptedStrategy capped({Signal::HOLD, Signal::BUY});
+    ScriptedStrategy many({Signal::HOLD, Signal::BUY});
+
+    auto noAdds      = base;
+    noAdds.maxAdds   = 0;
+    auto oneAdd      = base;
+    oneAdd.maxAdds   = 1;
+    auto fourAdds    = base;
+    fourAdds.maxAdds = 4;
 
     BacktestEngine engine(10000.0);
-    const auto     r = engine.run(strat, bars, cfg);
+    const auto     r0 = engine.run(none, bars, noAdds);
+    const auto     r1 = engine.run(capped, bars, oneAdd);
+    const auto     r4 = engine.run(many, bars, fourAdds);
 
-    // 1 planned entry + at most 1 add = 2/5 of the target committed, so most of the
-    // account must survive a 83% fall in the instrument.
-    CHECK_MSG(r.totalReturnPct > -50.0,
-              "loss of " + std::to_string(r.totalReturnPct) + "% suggests the add cap did not hold");
+    // Adds share the position budget, so more adds means the same total cash spread
+    // over more, lower entries — a better average price on a falling series, and
+    // never a larger position. What must hold is that the cap is respected: with
+    // maxAdds 1 the result has to differ from maxAdds 4.
+    CHECK_MSG(r1.totalReturnPct != r0.totalReturnPct, "one add should differ from none");
+    CHECK_MSG(r4.totalReturnPct != r1.totalReturnPct, "four adds should differ from one");
+    CHECK_MSG(r4.totalReturnPct > r1.totalReturnPct,
+              "spreading the same budget over more entries should improve the average price");
+}
+
+TEST(backtest, planned_tranches_fill_without_a_repeated_buy_signal) {
+    // A crossover strategy signals BUY once, on the transition. Waiting for a second
+    // BUY to place the second tranche left the position permanently at a fraction of
+    // its intended size — which read as tranching reducing risk when it was simply
+    // under-investing.
+    const auto       bars = makeBars({100, 100, 100, 100, 100, 110});
+    ScriptedStrategy one({Signal::HOLD, Signal::BUY});
+    ScriptedStrategy three({Signal::HOLD, Signal::BUY});
+
+    auto single            = frictionless();
+    auto tranched          = frictionless();
+    tranched.entryTranches = 3;
+
+    BacktestEngine engine(10000.0);
+    const auto     r1 = engine.run(one, bars, single);
+    const auto     r3 = engine.run(three, bars, tranched);
+
+    // Flat, then the same rise: a filled 3-tranche entry ends up where a single
+    // entry does, not at a third of it.
+    CHECK_NEAR(r3.totalReturnPct, r1.totalReturnPct, 0.5);
 }

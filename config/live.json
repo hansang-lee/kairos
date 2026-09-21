@@ -13,7 +13,7 @@
       "market": "KRX",
       "position_pct": 0.2,
       "stop_loss_pct": 8.0,
-      "enabled": true,
+      "enabled": false,
       "description": "반도체 섹터. 볼린저 40일/2.0σ 하단 반등 매수 / 상단 반락 매도. 30종목 스윕에서 2022 하락장 +5.47%(단순보유 -16.67%, 92.6%가 우위), 2025~26 상승장 +16.52%. MDD가 두 국면 모두 -18% 수준으로 가장 안정적"
     },
     {
@@ -23,7 +23,7 @@
       "market": "KRX",
       "position_pct": 0.2,
       "stop_loss_pct": 8.0,
-      "enabled": true,
+      "enabled": false,
       "description": "자동차 섹터. 볼린저 40일/2.0σ 하단 반등 매수 / 상단 반락 매도. 30종목 스윕에서 2022 하락장 +5.47%(단순보유 -16.67%, 92.6%가 우위), 2025~26 상승장 +16.52%. MDD가 두 국면 모두 -18% 수준으로 가장 안정적"
     },
     {
@@ -33,7 +33,7 @@
       "market": "KRX",
       "position_pct": 0.2,
       "stop_loss_pct": 8.0,
-      "enabled": true,
+      "enabled": false,
       "description": "금융 섹터. 볼린저 40일/2.0σ 하단 반등 매수 / 상단 반락 매도. 30종목 스윕에서 2022 하락장 +5.47%(단순보유 -16.67%, 92.6%가 우위), 2025~26 상승장 +16.52%. MDD가 두 국면 모두 -18% 수준으로 가장 안정적"
     },
     {
@@ -43,7 +43,7 @@
       "market": "KRX",
       "position_pct": 0.2,
       "stop_loss_pct": 8.0,
-      "enabled": true,
+      "enabled": false,
       "description": "유틸리티 섹터. 볼린저 40일/2.0σ 하단 반등 매수 / 상단 반락 매도. 30종목 스윕에서 2022 하락장 +5.47%(단순보유 -16.67%, 92.6%가 우위), 2025~26 상승장 +16.52%. MDD가 두 국면 모두 -18% 수준으로 가장 안정적"
     },
     {
@@ -53,7 +53,7 @@
       "market": "KRX",
       "position_pct": 0.2,
       "stop_loss_pct": 8.0,
-      "enabled": true,
+      "enabled": false,
       "description": "인터넷 섹터. 볼린저 40일/2.0σ 하단 반등 매수 / 상단 반락 매도. 30종목 스윕에서 2022 하락장 +5.47%(단순보유 -16.67%, 92.6%가 우위), 2025~26 상승장 +16.52%. MDD가 두 국면 모두 -18% 수준으로 가장 안정적"
     },
     {
@@ -105,6 +105,36 @@
       "stop_loss_pct": 8.0,
       "enabled": false,
       "description": "기울기 추세 전략 (MA20 기울기 10봉 회귀 + ADX). 비교 검토용 — 현재 비활성"
+    },
+    {
+      "id": 50,
+      "strategy": "aroon25",
+      "ticker": "133690",
+      "market": "KRX",
+      "position_pct": 0.33,
+      "stop_loss_pct": 0.0,
+      "enabled": true,
+      "description": "TIGER 미국나스닥100 — 미국 기술주. 3종목 균등 분산. 손절 없음: 34개 ETF 검증에서 고정 손절이 추세 전략의 최악 손실을 오히려 키웠고, Aroon 자체가 추세 이탈 시 현금으로 빠지므로 청산 규칙이 이미 있음"
+    },
+    {
+      "id": 51,
+      "strategy": "aroon25",
+      "ticker": "069500",
+      "market": "KRX",
+      "position_pct": 0.33,
+      "stop_loss_pct": 0.0,
+      "enabled": true,
+      "description": "KODEX 200 — 한국 대형주. 3종목 균등 분산. 손절 없음: 34개 ETF 검증에서 고정 손절이 추세 전략의 최악 손실을 오히려 키웠고, Aroon 자체가 추세 이탈 시 현금으로 빠지므로 청산 규칙이 이미 있음"
+    },
+    {
+      "id": 52,
+      "strategy": "aroon25",
+      "ticker": "132030",
+      "market": "KRX",
+      "position_pct": 0.33,
+      "stop_loss_pct": 0.0,
+      "enabled": true,
+      "description": "KODEX 골드선물 — 원자재 — 주식과 낮은 상관. 3종목 균등 분산. 손절 없음: 34개 ETF 검증에서 고정 손절이 추세 전략의 최악 손실을 오히려 키웠고, Aroon 자체가 추세 이탈 시 현금으로 빠지므로 청산 규칙이 이미 있음"
     }
   ]
 }

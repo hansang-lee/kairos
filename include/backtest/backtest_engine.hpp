@@ -38,14 +38,19 @@ struct BacktestConfig {
     int exitTranches  = 1;  ///< sell it over this many, except on a forced exit
 
     /**
-     * @brief Buy another tranche once the position is this far underwater.
+     * @brief Buy another slice once the position is this far below the last buy.
      *
-     * Averaging down. It raises the win rate — most dips do recover — and pays
-     * for that with the ones that do not, by adding exposure precisely when the
-     * reason for the trade is being disproved. maxAdds bounds how far that can
-     * go; without a bound a single position can absorb the account.
+     * Averaging down, with the dangerous part removed: the adds come out of the
+     * same budget as the planned entry, not on top of it. position_pct is split
+     * across (entryTranches + maxAdds) slices, so a position that keeps falling
+     * buys more often but never ends up larger than it was allowed to be.
      *
-     * 0 disables it, which is the default.
+     * The unbounded version — adding beyond the planned size because the trade is
+     * losing — raises the win rate, since most dips recover, and pays for it on
+     * the ones that do not. That is the version that empties accounts, and this
+     * engine will not model it by accident.
+     *
+     * 0 disables adds, which is the default.
      */
     double addOnDrawdownPct = 0.0;
     int    maxAdds          = 0;  ///< cap on adds per position; 0 means none are allowed
@@ -91,6 +96,16 @@ struct BacktestResult {
 
     /* ----- Trade History ----- */
     std::vector<Trade> trades;
+
+    /**
+     * @brief Account value at every bar, aligned with the input series.
+     *
+     * Needed to combine runs. Two strategies each with a 30% drawdown do not make
+     * a portfolio with a 30% drawdown — that depends entirely on whether they fell
+     * at the same time, which only the curves can answer. Summary numbers cannot
+     * be added.
+     */
+    std::vector<double> equityCurve;
 };
 
 /**

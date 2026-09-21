@@ -337,6 +337,17 @@
         "lookback": 126,
         "margin_pct": 0.0
       }
+    },
+    {
+      "id": "aroon25",
+      "name": "Aroon Trend 25/70",
+      "type": "aroon_trend",
+      "category": "trend",
+      "params": {
+        "period": 25,
+        "strength_threshold": 70.0
+      },
+      "description": "25일 Aroon Up/Down 교차 + 강도 70 이상. 신고가 갱신이 멈추면 현금으로 빠짐"
     }
   ],
   "grids": [

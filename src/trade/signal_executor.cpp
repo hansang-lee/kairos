@@ -152,9 +152,17 @@ Decision SignalExecutor::execute(Signal signal, double price, const AccountBalan
     // Size the order before deciding whether to send it, so the journal records
     // what a dry run or a blocked round would have done.
     if (isBuy) {
-        // Each tranche is sized from the cash available right now, so a staged entry
-        // lands slightly under position_pct rather than over it.
-        const double allocCash = balance.cashBalance * profile_.positionPct / profile_.entryTranches;
+        // position_pct is a share of the whole account, not of whatever cash happens
+        // to be left. Sizing from remaining cash makes the weights depend on the
+        // order the profiles ran in — three profiles at 0.33 would take 33%, 22% and
+        // 15% — and a backtest of them as equal sleeves would describe something
+        // else entirely.
+        const double equity   = balance.totalEvalAmount > 0.0 ? balance.totalEvalAmount : balance.cashBalance;
+        const double target   = equity * profile_.positionPct;
+        const double held     = static_cast<double>(heldQty) * price;
+        const double roomLeft = std::max(0.0, target - held);
+        // Never more than the cash on hand, whatever the target says.
+        const double allocCash = std::min(roomLeft / profile_.entryTranches, balance.cashBalance);
         d.quantity             = (price > 0.0) ? static_cast<int64_t>(allocCash / price) : 0;
         if (d.quantity <= 0) {
             // Rounding up to one share would either commit more than position_pct

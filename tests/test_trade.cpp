@@ -445,6 +445,54 @@ TEST(executor, a_buy_is_skipped_when_the_allocation_cannot_afford_one_share) {
     CHECK_MSG(d.quantity == 0 || !d.acted, "expected no order, got quantity " + std::to_string(d.quantity));
 }
 
+TEST(executor, sizing_is_a_share_of_equity_not_of_leftover_cash) {
+    // Three profiles at 0.33 must each aim for a third of the account. Sizing from
+    // remaining cash gave 33%, 22% and 15% depending on the order they ran in, which
+    // is not what a backtest of three equal sleeves measured.
+    auto p        = profile();
+    p.positionPct = 0.33;
+    trade::SignalExecutor ex(p, false, -1, freshContext({}, "exec_equity_sizing"));
+
+    // Half the account is already tied up elsewhere, so cash is 5,000,000 of a
+    // 10,000,000 account. A third of the account is 3,300,000 → 33 shares at 100,000.
+    AccountBalance b;
+    b.success         = true;
+    b.cashBalance     = 5000000;
+    b.totalEvalAmount = 10000000;
+
+    const auto d = ex.execute(Signal::BUY, 100000, b);
+    CHECK(d.acted);
+    CHECK_EQ(d.quantity, int64_t{33});
+}
+
+TEST(executor, sizing_never_exceeds_the_cash_actually_available) {
+    auto p        = profile();
+    p.positionPct = 0.5;
+    trade::SignalExecutor ex(p, false, -1, freshContext({}, "exec_cash_bound"));
+
+    // Half of a 10,000,000 account is 5,000,000, but only 1,000,000 is in cash.
+    AccountBalance b;
+    b.success         = true;
+    b.cashBalance     = 1000000;
+    b.totalEvalAmount = 10000000;
+
+    const auto d = ex.execute(Signal::BUY, 100000, b);
+    CHECK_MSG(d.quantity <= 10, "ordered " + std::to_string(d.quantity) + " shares on 1,000,000 of cash");
+}
+
+TEST(executor, an_existing_holding_counts_toward_the_target) {
+    auto p        = profile();
+    p.positionPct = 0.5;
+    trade::SignalExecutor ex(p, false, -1, freshContext({}, "exec_topup"));
+
+    // Target is 5,000,000; 40 shares at 100,000 is already 4,000,000 of it, so only
+    // 1,000,000 of room remains — 10 shares, not 50.
+    const auto d = ex.execute(Signal::BUY, 100000, balance(6000000, 40, 100000, 100000));
+    if (d.acted) {
+        CHECK_MSG(d.quantity <= 10, "topped up by " + std::to_string(d.quantity) + " ignoring what is held");
+    }
+}
+
 TEST(executor, position_pct_is_respected_rather_than_rounded_up) {
     auto p        = profile();
     p.positionPct = 0.2;

@@ -61,7 +61,10 @@ BacktestResult BacktestEngine::run(IStrategy& strategy, const StockInfo& data, c
     int       exitsDone     = 0;
     int       addsDone      = 0;
     double    targetCapital = 0.0;  ///< cash earmarked for the whole position, fixed at first entry
-    double    lastAddPrice  = 0.0;  ///< price of the most recent buy, so adds step down rather than repeat
+    // Planned entries and drawdown adds share one budget, so enabling adds makes
+    // each slice smaller rather than making the position bigger.
+    const int totalSlices  = entryTranches + std::max(0, config.maxAdds);
+    double    lastAddPrice = 0.0;  ///< price of the most recent buy, so adds step down rather than repeat
 
     // Equity curve for drawdown & sharpe calculation
     std::vector<double> equity;
@@ -141,7 +144,7 @@ BacktestResult BacktestEngine::run(IStrategy& strategy, const StockInfo& data, c
                 buyIdx        = i;
                 inPos         = true;
             }
-            const double slice = std::min(targetCapital / ofTranches, capital);
+            const double slice = std::min(targetCapital / std::max(1, ofTranches), capital);
             if (slice <= 0.0) {
                 return false;
             }
@@ -154,15 +157,21 @@ BacktestResult BacktestEngine::run(IStrategy& strategy, const StockInfo& data, c
             return true;
         };
 
-        if (signal == Signal::BUY && entriesDone < entryTranches) {
-            if (buyTranche(entryTranches)) {
+        // A crossover strategy emits BUY on the transition only, so waiting for a
+        // second BUY to place the second tranche would leave the position at a third
+        // of its size forever. Once entered, the remaining tranches go in on
+        // following bars for as long as the strategy has not called for an exit.
+        const bool entering = (signal == Signal::BUY) || (inPos && signal != Signal::SELL);
+
+        if (entering && entriesDone < entryTranches) {
+            if (buyTranche(totalSlices)) {
                 ++entriesDone;
             }
         } else if (inPos && config.addOnDrawdownPct > 0.0 && addsDone < config.maxAdds && lastAddPrice > 0.0
                    && price <= lastAddPrice * (1.0 - config.addOnDrawdownPct / 100.0)) {
             // Averaging down: measured from the last buy, not from the average, so a
             // position that keeps falling adds at intervals instead of all at once.
-            if (buyTranche(entryTranches)) {
+            if (buyTranche(totalSlices)) {
                 ++addsDone;
             }
         } else if (signal == Signal::SELL && inPos) {
@@ -212,6 +221,7 @@ BacktestResult BacktestEngine::run(IStrategy& strategy, const StockInfo& data, c
         inPos  = false;
     }
 
+    result.equityCurve     = equity;
     result.finalCapital    = capital;
     result.peakCapital     = peakEq;
     result.peakTimestamp   = peakTs;
