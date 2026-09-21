@@ -27,6 +27,9 @@ add_library(${PROJECT_NAME} SHARED
   src/data/krx_calendar.cpp
   src/data/bar_recorder.cpp
   src/data/reference_series.cpp
+  src/portfolio/portfolio_data.cpp
+  src/portfolio/portfolio_engine.cpp
+  src/portfolio/strategies.cpp
   src/trade/trade_journal.cpp
   src/trade/signal_executor.cpp
   src/trade/risk_guard.cpp
@@ -131,6 +134,7 @@ add_executable(kairos_tests
   tests/test_trade.cpp
   tests/test_data_config.cpp
   tests/test_integration.cpp
+  tests/test_portfolio.cpp
 )
 target_link_libraries(kairos_tests PRIVATE ${PROJECT_NAME})
 target_include_directories(kairos_tests PRIVATE
