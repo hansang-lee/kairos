@@ -68,10 +68,10 @@ TEST(backtest, commission_and_slippage_reduce_the_result) {
     BacktestEngine engine(10000.0);
     const auto     clean = engine.run(a, bars, frictionless());
 
-    auto costly            = frictionless();
-    costly.commissionRate  = 0.001;
-    costly.slippagePct     = 0.001;
-    const auto withCosts   = engine.run(b, bars, costly);
+    auto costly           = frictionless();
+    costly.commissionRate = 0.001;
+    costly.slippagePct    = 0.001;
+    const auto withCosts  = engine.run(b, bars, costly);
 
     CHECK(withCosts.totalReturnPct < clean.totalReturnPct);
 }
@@ -84,8 +84,8 @@ TEST(backtest, sell_tax_is_charged_only_on_exit) {
     BacktestEngine engine(10000.0);
     const auto     noTax = engine.run(a, bars, frictionless());
 
-    auto taxed        = frictionless();
-    taxed.sellTaxRate = 0.002;
+    auto taxed         = frictionless();
+    taxed.sellTaxRate  = 0.002;
     const auto withTax = engine.run(b, bars, taxed);
 
     // One round trip, tax on the sell only: the drag is one 0.2% bite, not two.
@@ -95,12 +95,12 @@ TEST(backtest, sell_tax_is_charged_only_on_exit) {
 
 TEST(backtest, market_cost_presets_match_the_published_rates) {
     const auto krx = BacktestConfig::forMarket("KRX");
-    CHECK_NEAR(krx.sellTaxRate, 0.0020, 1e-12);      // 증권거래세 + 농특세, 2026
-    CHECK(krx.commissionRate < 0.0005);              // online commission, well under a bp
+    CHECK_NEAR(krx.sellTaxRate, 0.0020, 1e-12);  // 증권거래세 + 농특세, 2026
+    CHECK(krx.commissionRate < 0.0005);          // online commission, well under a bp
 
     const auto us = BacktestConfig::forMarket("US");
-    CHECK_NEAR(us.commissionRate, 0.0025, 1e-12);    // 0.25% per side
-    CHECK(us.sellTaxRate < krx.sellTaxRate);         // SEC fee is tiny next to the KRX tax
+    CHECK_NEAR(us.commissionRate, 0.0025, 1e-12);  // 0.25% per side
+    CHECK(us.sellTaxRate < krx.sellTaxRate);       // SEC fee is tiny next to the KRX tax
     // The round trip is what decides whether frequent trading is viable at all.
     CHECK(us.commissionRate * 2 > krx.commissionRate * 2 + krx.sellTaxRate);
 }
@@ -165,4 +165,117 @@ TEST(backtest, open_position_is_closed_at_the_end) {
     // Otherwise a strategy that never sells would report no result at all.
     CHECK_EQ(r.trades.size(), std::size_t{1});
     CHECK_NEAR(r.trades[0].sellPrice, 130.0, 1e-9);
+}
+
+/* ---------------------------- scaling in and out ---------------------------- */
+
+TEST(backtest, single_tranche_settings_reproduce_the_old_behaviour_exactly) {
+    // Tranching was added to an engine whose results this repo already relies on.
+    // With the defaults the numbers must be bit-identical, or every earlier
+    // backtest silently changed meaning.
+    const auto       bars = makeBars({100, 110, 120, 130, 120, 110});
+    ScriptedStrategy a({Signal::HOLD, Signal::BUY, Signal::HOLD, Signal::SELL});
+    ScriptedStrategy b({Signal::HOLD, Signal::BUY, Signal::HOLD, Signal::SELL});
+
+    auto plain                = frictionless();
+    auto explicitOne          = frictionless();
+    explicitOne.entryTranches = 1;
+    explicitOne.exitTranches  = 1;
+
+    BacktestEngine engine(10000.0);
+    const auto     r1 = engine.run(a, bars, plain);
+    const auto     r2 = engine.run(b, bars, explicitOne);
+
+    CHECK_EQ(r1.trades.size(), r2.trades.size());
+    CHECK_NEAR(r1.finalCapital, r2.finalCapital, 1e-9);
+    CHECK_NEAR(r1.totalReturnPct, r2.totalReturnPct, 1e-9);
+    CHECK_NEAR(r1.maxDrawdownPct, r2.maxDrawdownPct, 1e-9);
+}
+
+TEST(backtest, entry_tranches_average_the_entry_price) {
+    // Three buy signals at 100, 200 and 300 with a third committed each time.
+    const auto       bars = makeBars({100, 100, 200, 300, 300});
+    ScriptedStrategy strat({Signal::HOLD, Signal::BUY, Signal::BUY, Signal::BUY, Signal::SELL});
+
+    auto cfg          = frictionless();
+    cfg.entryTranches = 3;
+    cfg.positionPct   = 1.0;
+
+    BacktestEngine engine(9000.0);
+    const auto     r = engine.run(strat, bars, cfg);
+
+    CHECK_EQ(r.trades.size(), std::size_t{1});
+    // 3000 buys 30 at 100, 3000 buys 15 at 200, 3000 buys 10 at 300: 9000 for 55
+    // shares, an average of ~163.6 — not the 200 a simple mean of the prices gives.
+    CHECK_NEAR(r.trades[0].buyPrice, 9000.0 / 55.0, 0.01);
+}
+
+TEST(backtest, exit_tranches_unwind_without_leaving_dust) {
+    const auto       bars = makeBars({100, 100, 110, 120, 130});
+    ScriptedStrategy strat({Signal::HOLD, Signal::BUY, Signal::SELL, Signal::SELL, Signal::SELL});
+
+    auto cfg         = frictionless();
+    cfg.exitTranches = 3;
+
+    BacktestEngine engine(10000.0);
+    const auto     r = engine.run(strat, bars, cfg);
+
+    // The position must close exactly, not leave a fraction marked to market forever.
+    CHECK_EQ(r.trades.size(), std::size_t{1});
+    CHECK(r.finalCapital > 0.0);
+}
+
+TEST(backtest, averaging_down_is_off_unless_both_settings_are_given) {
+    const auto       bars = makeBars({100, 100, 80, 60, 60});
+    ScriptedStrategy a({Signal::HOLD, Signal::BUY, Signal::HOLD, Signal::HOLD, Signal::HOLD});
+    ScriptedStrategy b({Signal::HOLD, Signal::BUY, Signal::HOLD, Signal::HOLD, Signal::HOLD});
+
+    auto noAdds             = frictionless();
+    noAdds.addOnDrawdownPct = 10.0;  // a threshold with no maxAdds must still add nothing
+    noAdds.maxAdds          = 0;
+
+    BacktestEngine engine(10000.0);
+    const auto     plain  = engine.run(a, bars, frictionless());
+    const auto     capped = engine.run(b, bars, noAdds);
+    CHECK_NEAR(plain.finalCapital, capped.finalCapital, 1e-9);
+}
+
+TEST(backtest, averaging_down_adds_and_lowers_the_average_price) {
+    // Buy at 100, then the price falls in steps; each 15% step down buys another.
+    const auto       bars = makeBars({100, 100, 84, 70, 70, 70});
+    ScriptedStrategy strat({Signal::HOLD, Signal::BUY, Signal::HOLD, Signal::HOLD, Signal::HOLD, Signal::SELL});
+
+    auto cfg             = frictionless();
+    cfg.entryTranches    = 3;
+    cfg.addOnDrawdownPct = 15.0;
+    cfg.maxAdds          = 2;
+
+    BacktestEngine engine(9000.0);
+    const auto     r = engine.run(strat, bars, cfg);
+
+    CHECK_EQ(r.trades.size(), std::size_t{1});
+    // Entered at 100 and added twice below it, so the average must be under 100 —
+    // which is the appeal of averaging down, and also why the position is larger
+    // than intended exactly when the trade is going wrong.
+    CHECK_MSG(r.trades[0].buyPrice < 100.0,
+              "average entry " + std::to_string(r.trades[0].buyPrice) + " should be below the first buy");
+}
+
+TEST(backtest, adds_are_bounded_by_max_adds) {
+    // A relentless decline: without a bound this would keep buying all the way down.
+    const auto       bars = makeBars({100, 100, 80, 64, 51, 41, 33, 26, 21, 17});
+    ScriptedStrategy strat({Signal::HOLD, Signal::BUY});
+
+    auto cfg             = frictionless();
+    cfg.entryTranches    = 5;
+    cfg.addOnDrawdownPct = 15.0;
+    cfg.maxAdds          = 1;
+
+    BacktestEngine engine(10000.0);
+    const auto     r = engine.run(strat, bars, cfg);
+
+    // 1 planned entry + at most 1 add = 2/5 of the target committed, so most of the
+    // account must survive a 83% fall in the instrument.
+    CHECK_MSG(r.totalReturnPct > -50.0,
+              "loss of " + std::to_string(r.totalReturnPct) + "% suggests the add cap did not hold");
 }

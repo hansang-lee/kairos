@@ -27,6 +27,29 @@ struct BacktestConfig {
     // so it is modelled separately rather than folded into the commission.
     double sellTaxRate = 0.0;
 
+    /* ----- Scaling in and out (1 = the whole position at once) -----
+     *
+     * These existed in live trading long before the engine could model them, so
+     * every backtest run before this was of a strategy the trader was not
+     * actually running. With both at 1 and addOnDrawdownPct at 0, the engine
+     * behaves exactly as it did.
+     */
+    int entryTranches = 1;  ///< buy the target position over this many orders
+    int exitTranches  = 1;  ///< sell it over this many, except on a forced exit
+
+    /**
+     * @brief Buy another tranche once the position is this far underwater.
+     *
+     * Averaging down. It raises the win rate — most dips do recover — and pays
+     * for that with the ones that do not, by adding exposure precisely when the
+     * reason for the trade is being disproved. maxAdds bounds how far that can
+     * go; without a bound a single position can absorb the account.
+     *
+     * 0 disables it, which is the default.
+     */
+    double addOnDrawdownPct = 0.0;
+    int    maxAdds          = 0;  ///< cap on adds per position; 0 means none are allowed
+
     /**
      * @brief Real-world costs for a market, as charged by KIS (checked 2026-09).
      *

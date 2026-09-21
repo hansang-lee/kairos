@@ -289,8 +289,16 @@ int main(int argc, char* argv[]) {
         auto data = covers ? cached : nullptr;
         if (!data) {
             data = kis.getStockInfo(code, fetchStart, endDate);
-            if (data && !data->close.empty())
+            // Only a fetch that plausibly covers the range is written. A paging run
+            // cut short by a rate limit returns a handful of bars, and caching that
+            // poisons every later run — which is how a 2,700-bar series became 101
+            // and silently dropped two tickers from a sweep.
+            if (data && data->close.size() >= 300) {
                 saveCache(cp, *data);
+            } else if (data) {
+                std::cerr << "  " << code << ": fetched only " << data->close.size()
+                          << " bars; not caching a partial series\n";
+            }
         }
         if (!data || data->close.size() < 300) {
             std::cout << "  skip " << code << " " << name << " (insufficient data)\n";

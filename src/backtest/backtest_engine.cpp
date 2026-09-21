@@ -49,8 +49,19 @@ BacktestResult BacktestEngine::run(IStrategy& strategy, const StockInfo& data, c
     double      capital  = initialCapital_;
     double      shares   = 0.0;
     bool        inPos    = false;
-    double      buyPrice = 0.0;
+    double      buyPrice = 0.0;  ///< average entry price across every tranche bought
     std::size_t buyIdx   = 0;
+
+    // Scaling state. A position is built over entryTranches buys and unwound over
+    // exitTranches sells; adds triggered by drawdown are counted separately so
+    // maxAdds bounds them independently of the planned entry.
+    const int entryTranches = std::max(1, config.entryTranches);
+    const int exitTranches  = std::max(1, config.exitTranches);
+    int       entriesDone   = 0;
+    int       exitsDone     = 0;
+    int       addsDone      = 0;
+    double    targetCapital = 0.0;  ///< cash earmarked for the whole position, fixed at first entry
+    double    lastAddPrice  = 0.0;  ///< price of the most recent buy, so adds step down rather than repeat
 
     // Equity curve for drawdown & sharpe calculation
     std::vector<double> equity;
@@ -89,6 +100,9 @@ BacktestResult BacktestEngine::run(IStrategy& strategy, const StockInfo& data, c
                 shares         = 0.0;
                 inPos          = false;
                 stoppedThisBar = true;
+                entriesDone    = 0;
+                exitsDone      = 0;
+                addsDone       = 0;
             }
         }
 
@@ -115,32 +129,66 @@ BacktestResult BacktestEngine::run(IStrategy& strategy, const StockInfo& data, c
 
         const auto signal = strategy.evaluate(data, i);
 
-        if (signal == Signal::BUY && !inPos) {
-            // Buy: apply commission & slippage to entry price
-            const double effectiveBuyPrice = price * (1.0 + config.slippagePct) * (1.0 + config.commissionRate);
-            const double allocCapital      = capital * std::clamp(config.positionPct, 0.1, 1.0);
-            shares                         = allocCapital / effectiveBuyPrice;
-            buyPrice                       = effectiveBuyPrice;
-            buyIdx                         = i;
-            inPos                          = true;
-            capital -= allocCapital;
+        const double effectiveBuyPrice = price * (1.0 + config.slippagePct) * (1.0 + config.commissionRate);
+        const double effectiveSellPrice =
+            price * (1.0 - config.slippagePct) * (1.0 - config.commissionRate) * (1.0 - config.sellTaxRate);
+
+        // Buying one tranche: the first fixes how much cash the whole position may
+        // use, so later tranches cannot quietly grow it as the account moves.
+        auto buyTranche = [&](int ofTranches) {
+            if (!inPos) {
+                targetCapital = capital * std::clamp(config.positionPct, 0.1, 1.0);
+                buyIdx        = i;
+                inPos         = true;
+            }
+            const double slice = std::min(targetCapital / ofTranches, capital);
+            if (slice <= 0.0) {
+                return false;
+            }
+            const double bought = slice / effectiveBuyPrice;
+            // Average entry price, which is what the stop and the trade record use.
+            buyPrice = (shares + bought) > 0.0 ? (buyPrice * shares + slice) / (shares + bought) : effectiveBuyPrice;
+            shares += bought;
+            capital -= slice;
+            lastAddPrice = effectiveBuyPrice;
+            return true;
+        };
+
+        if (signal == Signal::BUY && entriesDone < entryTranches) {
+            if (buyTranche(entryTranches)) {
+                ++entriesDone;
+            }
+        } else if (inPos && config.addOnDrawdownPct > 0.0 && addsDone < config.maxAdds && lastAddPrice > 0.0
+                   && price <= lastAddPrice * (1.0 - config.addOnDrawdownPct / 100.0)) {
+            // Averaging down: measured from the last buy, not from the average, so a
+            // position that keeps falling adds at intervals instead of all at once.
+            if (buyTranche(entryTranches)) {
+                ++addsDone;
+            }
         } else if (signal == Signal::SELL && inPos) {
-            // Sell: apply commission & slippage to exit price
-            const double effectiveSellPrice =
-                price * (1.0 - config.slippagePct) * (1.0 - config.commissionRate) * (1.0 - config.sellTaxRate);
-            capital += shares * effectiveSellPrice;
+            // Unwind one tranche; the last one clears whatever is left so no dust
+            // remains to be marked to market forever.
+            const int    remaining = std::max(1, exitTranches - exitsDone);
+            const double sold      = (remaining <= 1) ? shares : shares / remaining;
+            capital += sold * effectiveSellPrice;
+            shares -= sold;
+            ++exitsDone;
 
-            Trade trade;
-            trade.buyIndex  = buyIdx;
-            trade.sellIndex = i;
-            trade.buyPrice  = buyPrice;
-            trade.sellPrice = effectiveSellPrice;
-            trade.returnPct = (effectiveSellPrice - buyPrice) / buyPrice * 100.0;
+            if (shares <= 1e-9) {
+                Trade trade;
+                trade.buyIndex  = buyIdx;
+                trade.sellIndex = i;
+                trade.buyPrice  = buyPrice;
+                trade.sellPrice = effectiveSellPrice;
+                trade.returnPct = (effectiveSellPrice - buyPrice) / buyPrice * 100.0;
+                result.trades.push_back(trade);
 
-            result.trades.push_back(trade);
-
-            shares = 0.0;
-            inPos  = false;
+                shares      = 0.0;
+                inPos       = false;
+                entriesDone = 0;
+                exitsDone   = 0;
+                addsDone    = 0;
+            }
         }
     }
 
