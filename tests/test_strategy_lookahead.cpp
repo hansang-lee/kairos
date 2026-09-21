@@ -1,3 +1,5 @@
+#include <filesystem>
+#include <fstream>
 #include <memory>
 #include <sstream>
 
@@ -14,6 +16,19 @@
  * signal at i. Any dependence on later bars shows up as a mismatch.
  */
 namespace {
+
+/** Write a reference price series where the relative-momentum strategy will look. */
+void writeReferenceFixture(const StockInfo& shape) {
+    std::error_code ec;
+    std::filesystem::create_directories("/tmp/kairos_test_refcache", ec);
+    std::ofstream out("/tmp/kairos_test_refcache/REF.csv", std::ios::trunc);
+    out << "timestamp,open,high,low,close,volume\n";
+    // A flat reference, so the strategy's verdict follows the asset alone and the
+    // look-ahead comparison is not muddied by two moving series.
+    for (std::size_t i = 0; i < shape.timestamps.size(); ++i) {
+        out << shape.timestamps[i] << ",100,100,100,100,1000\n";
+    }
+}
 
 StockInfo makeSeries(std::size_t n) {
     StockInfo s;
@@ -78,14 +93,19 @@ std::vector<std::pair<std::string, nlohmann::json>> allStrategies() {
         {"ma_timing", {{"period", 60}, {"buffer_pct", 1.0}}},
         {"absolute_momentum", {{"lookback", 60}, {"threshold", 0.0}}},
         {"dual_momentum", {{"ma_period", 60}, {"lookback", 60}, {"threshold", 0.0}}},
+        // Pointed at a fixture written by the test, since the real cache lives at a
+        // path derived from the executable and the test binary sits elsewhere.
+        {"relative_momentum",
+         {{"reference", "REF"}, {"lookback", 60}, {"margin_pct", 0.0}, {"cache_dir", "/tmp/kairos_test_refcache"}}},
     };
 }
 
 }  // namespace
 
 TEST(lookahead, every_strategy_reads_only_closed_bars) {
-    const auto        series = makeSeries(400);
-    const std::size_t n      = series.close.size();
+    const auto series = makeSeries(400);
+    writeReferenceFixture(series);
+    const std::size_t n = series.close.size();
 
     // Collected rather than thrown on first sight: one strategy failing must not
     // hide whether the other nineteen are sound.
@@ -138,6 +158,7 @@ TEST(lookahead, every_strategy_produces_some_signal) {
     // A strategy that only ever returns HOLD would pass the look-ahead test
     // trivially, so confirm the check above had something to check.
     const auto series = makeSeries(400);
+    writeReferenceFixture(series);
 
     for (const auto& [type, params] : allStrategies()) {
         StrategyProfile p;
@@ -161,6 +182,7 @@ TEST(lookahead, evaluating_one_past_the_last_bar_is_valid) {
     // Live trading calls evaluate(size) when the current bar has not been
     // published yet. That index must be in range, not silently clamped to HOLD.
     const auto series = makeSeries(300);
+    writeReferenceFixture(series);
 
     for (const auto& [type, params] : allStrategies()) {
         StrategyProfile p;

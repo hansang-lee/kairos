@@ -293,6 +293,50 @@
         "lookback": 252,
         "threshold": 0.0
       }
+    },
+    {
+      "id": "rel_mom_bond6m",
+      "name": "rel_mom_bond6m",
+      "type": "relative_momentum",
+      "category": "trend",
+      "params": {
+        "reference": "148070",
+        "lookback": 126,
+        "margin_pct": 0.0
+      }
+    },
+    {
+      "id": "rel_mom_bond12m",
+      "name": "rel_mom_bond12m",
+      "type": "relative_momentum",
+      "category": "trend",
+      "params": {
+        "reference": "148070",
+        "lookback": 252,
+        "margin_pct": 0.0
+      }
+    },
+    {
+      "id": "rel_mom_gold6m",
+      "name": "rel_mom_gold6m",
+      "type": "relative_momentum",
+      "category": "trend",
+      "params": {
+        "reference": "132030",
+        "lookback": 126,
+        "margin_pct": 0.0
+      }
+    },
+    {
+      "id": "rel_mom_usd6m",
+      "name": "rel_mom_usd6m",
+      "type": "relative_momentum",
+      "category": "trend",
+      "params": {
+        "reference": "138230",
+        "lookback": 126,
+        "margin_pct": 0.0
+      }
     }
   ],
   "grids": [
@@ -414,6 +458,45 @@
           252
         ],
         "threshold": [
+          0.0,
+          3.0
+        ]
+      }
+    },
+    {
+      "type": "aroon_trend",
+      "category": "trend",
+      "params": {
+        "period": [
+          10,
+          14,
+          20,
+          25,
+          30,
+          40,
+          50
+        ],
+        "strength_threshold": [
+          60.0,
+          70.0,
+          80.0
+        ]
+      }
+    },
+    {
+      "type": "relative_momentum",
+      "category": "trend",
+      "params": {
+        "reference": [
+          "148070"
+        ],
+        "lookback": [
+          63,
+          126,
+          189,
+          252
+        ],
+        "margin_pct": [
           0.0,
           3.0
         ]

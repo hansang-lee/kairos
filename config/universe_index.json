@@ -1,16 +1,183 @@
 {
-  "note": "Index and asset-class ETFs listed on KRX. Trend and timing rules are designed for broad indices, not single names: on 30 individual KRX stocks they cut no drawdown at all, because the noise in one company whipsaws a moving average. This universe is where those rules should be judged.",
-  "survivorship_warning": "Every ETF here still trades. Funds that closed are absent, so results are an upper bound — though far less so than for single stocks, since index ETFs rarely delist.",
-  "leverage_warning": "122630 is a 2x daily-reset leveraged ETF. Daily reset means it decays in choppy markets and does not deliver 2x the period return. Any result involving it must be read with that in mind, not as a proxy for borrowing.",
+  "note": "Index, sector and asset-class ETFs listed on KRX, all with history back to 2015-2016. Trend and timing rules are built for broad baskets, not single names: on 30 individual KRX stocks they cut no drawdown at all, because one company's news whipsaws a long average. This universe is where those rules should be judged.",
+  "survivorship_warning": "Every ETF here still trades. Funds that closed are absent, so results are an upper bound — less so than for single stocks, since index ETFs rarely delist, but sector and thematic ETFs do get wound up.",
+  "cost_warning": "The backtest models commission, slippage and transaction tax, but NOT the annual management fee, which is roughly 0.15-0.5% a year for these. Over five years that is 1-2.5 percentage points missing from every result below.",
+  "leverage_warning": "122630 and 233740 are 2x daily-reset products. Daily reset decays in choppy markets, so they do not deliver twice the period return and are not a proxy for borrowing. Any result involving them must be read with that in mind.",
   "tickers": [
-    { "code": "069500", "name": "KODEX 200 (코스피200)" },
-    { "code": "102110", "name": "TIGER 200 (코스피200)" },
-    { "code": "229200", "name": "KODEX 코스닥150" },
-    { "code": "133690", "name": "TIGER 미국나스닥100" },
-    { "code": "143850", "name": "TIGER 미국S&P500선물" },
-    { "code": "091160", "name": "KODEX 반도체" },
-    { "code": "132030", "name": "KODEX 골드선물" },
-    { "code": "148070", "name": "KOSEF 국고채10년" },
-    { "code": "122630", "name": "KODEX 레버리지 (2x, 일일리셋)" }
+    {
+      "code": "069500",
+      "name": "KODEX 200",
+      "group": "KR 대형주"
+    },
+    {
+      "code": "102110",
+      "name": "TIGER 200",
+      "group": "KR 대형주"
+    },
+    {
+      "code": "148020",
+      "name": "KBSTAR 200",
+      "group": "KR 대형주"
+    },
+    {
+      "code": "152100",
+      "name": "ARIRANG 200",
+      "group": "KR 대형주"
+    },
+    {
+      "code": "069660",
+      "name": "KOSEF 200",
+      "group": "KR 대형주"
+    },
+    {
+      "code": "226490",
+      "name": "KODEX 코스피",
+      "group": "KR 대형주"
+    },
+    {
+      "code": "229200",
+      "name": "KODEX 코스닥150",
+      "group": "KR 중소형"
+    },
+    {
+      "code": "133690",
+      "name": "TIGER 미국나스닥100",
+      "group": "해외주식"
+    },
+    {
+      "code": "143850",
+      "name": "TIGER 미국S&P500선물",
+      "group": "해외주식"
+    },
+    {
+      "code": "192090",
+      "name": "TIGER 차이나CSI300",
+      "group": "해외주식"
+    },
+    {
+      "code": "099140",
+      "name": "KODEX 차이나H",
+      "group": "해외주식"
+    },
+    {
+      "code": "195930",
+      "name": "TIGER 유로스탁스50",
+      "group": "해외주식"
+    },
+    {
+      "code": "238720",
+      "name": "KINDEX 일본TOPIX",
+      "group": "해외주식"
+    },
+    {
+      "code": "195980",
+      "name": "ARIRANG 신흥국MSCI",
+      "group": "해외주식"
+    },
+    {
+      "code": "091160",
+      "name": "KODEX 반도체",
+      "group": "섹터"
+    },
+    {
+      "code": "266370",
+      "name": "KODEX 200IT",
+      "group": "섹터"
+    },
+    {
+      "code": "139660",
+      "name": "TIGER 200 금융",
+      "group": "섹터"
+    },
+    {
+      "code": "091170",
+      "name": "KODEX 은행",
+      "group": "섹터"
+    },
+    {
+      "code": "117460",
+      "name": "KODEX 에너지화학",
+      "group": "섹터"
+    },
+    {
+      "code": "143860",
+      "name": "TIGER 헬스케어",
+      "group": "섹터"
+    },
+    {
+      "code": "227540",
+      "name": "TIGER 200 헬스케어",
+      "group": "섹터"
+    },
+    {
+      "code": "244580",
+      "name": "KODEX 바이오",
+      "group": "섹터"
+    },
+    {
+      "code": "139230",
+      "name": "TIGER 200 중공업",
+      "group": "섹터"
+    },
+    {
+      "code": "117680",
+      "name": "KODEX 철강",
+      "group": "섹터"
+    },
+    {
+      "code": "228790",
+      "name": "TIGER 화장품",
+      "group": "섹터"
+    },
+    {
+      "code": "148070",
+      "name": "KOSEF 국고채10년",
+      "group": "채권"
+    },
+    {
+      "code": "114260",
+      "name": "KODEX 국고채3년",
+      "group": "채권"
+    },
+    {
+      "code": "136340",
+      "name": "TIGER 단기선진하이일드",
+      "group": "채권"
+    },
+    {
+      "code": "132030",
+      "name": "KODEX 골드선물",
+      "group": "원자재"
+    },
+    {
+      "code": "130680",
+      "name": "TIGER 원유선물",
+      "group": "원자재"
+    },
+    {
+      "code": "261220",
+      "name": "KODEX WTI원유선물",
+      "group": "원자재"
+    },
+    {
+      "code": "138230",
+      "name": "KOSEF 미국달러선물",
+      "group": "통화"
+    },
+    {
+      "code": "261240",
+      "name": "KODEX 미국달러선물",
+      "group": "통화"
+    },
+    {
+      "code": "122630",
+      "name": "KODEX 레버리지 (2x, 일일리셋)",
+      "group": "레버리지"
+    },
+    {
+      "code": "233740",
+      "name": "KODEX 코스닥150레버리지 (2x)",
+      "group": "레버리지"
+    }
   ]
 }

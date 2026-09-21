@@ -35,6 +35,7 @@ macro(BUILD_APP "NAME")
       ${CMAKE_SOURCE_DIR}/lib/ma_timing
       ${CMAKE_SOURCE_DIR}/lib/absolute_momentum
       ${CMAKE_SOURCE_DIR}/lib/dual_momentum
+      ${CMAKE_SOURCE_DIR}/lib/relative_momentum
   )
   set_target_properties(
     ${APP} PROPERTIES

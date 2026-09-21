@@ -26,6 +26,7 @@ add_library(${PROJECT_NAME} SHARED
   src/data/kis_provider.cpp
   src/data/krx_calendar.cpp
   src/data/bar_recorder.cpp
+  src/data/reference_series.cpp
   src/trade/trade_journal.cpp
   src/trade/signal_executor.cpp
   src/trade/risk_guard.cpp
@@ -55,6 +56,7 @@ add_library(${PROJECT_NAME} SHARED
   lib/ma_timing/ma_timing.cpp
   lib/absolute_momentum/absolute_momentum.cpp
   lib/dual_momentum/dual_momentum.cpp
+  lib/relative_momentum/relative_momentum.cpp
   src/strategy/strategy_factory.cpp
   src/strategy/strategy_catalog.cpp
 )
@@ -87,6 +89,7 @@ target_include_directories(${PROJECT_NAME}
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/ma_timing
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/absolute_momentum
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/dual_momentum
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/relative_momentum
 )
 
 target_link_libraries(${PROJECT_NAME}

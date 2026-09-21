@@ -23,6 +23,7 @@
 #include "obv_trend.hpp"
 #include "psar_trend.hpp"
 #include "regime_rsi.hpp"
+#include "relative_momentum.hpp"
 #include "rsi_strategy.hpp"
 #include "sma_crossover.hpp"
 #include "squeeze_breakout.hpp"
@@ -119,6 +120,7 @@ std::unique_ptr<IStrategy> StrategyProfile::createStrategy() const {
         return std::make_unique<SuperTrendFollow>(period, multiplier);
     }
     if (type == "aroon_trend" || type == "aroon") {
+        warnUnknownParams(params, type, {"period", "strength_threshold"});
         const std::size_t period            = params.value("period", 25);
         const double      strengthThreshold = params.value("strength_threshold", 70.0);
         return std::make_unique<AroonTrend>(period, strengthThreshold);
@@ -203,6 +205,15 @@ std::unique_ptr<IStrategy> StrategyProfile::createStrategy() const {
         const double      threshold = params.value("threshold", 0.0);
         warnUnknownParams(params, type, {"ma_period", "lookback", "threshold"});
         return std::make_unique<DualMomentum>(maPeriod, lookback, threshold);
+    }
+
+    if (type == "relative_momentum") {
+        warnUnknownParams(params, type, {"reference", "lookback", "margin_pct", "cache_dir"});
+        const std::string reference = params.value("reference", std::string("148070"));
+        const std::size_t lookback  = params.value("lookback", 126);
+        const double      marginPct = params.value("margin_pct", 0.0);
+        const std::string cacheDir  = params.value("cache_dir", std::string());
+        return std::make_unique<RelativeMomentum>(reference, lookback, marginPct, cacheDir);
     }
 
     std::cerr << "StrategyProfile: Unknown strategy type '" << type << "'" << std::endl;
