@@ -169,6 +169,133 @@ std::vector<double> EqualWeight::targetWeights(const PortfolioData& data, std::s
     return weights;
 }
 
+/* ------------------------------ GroupParity ------------------------------ */
+
+GroupParity::GroupParity(std::vector<std::string> assetClasses, bool inverseVolWithin, std::size_t lookback)
+    : classes_(std::move(assetClasses))
+    , inverseVolWithin_(inverseVolWithin)
+    , lookback_(lookback) {}
+
+std::string GroupParity::name() const {
+    return inverseVolWithin_ ? "Group parity (vol-weighted in)" : "Group parity (equal in)";
+}
+
+void GroupParity::init(const PortfolioData&) {}
+
+std::size_t GroupParity::warmupPeriod() const {
+    // Equal weighting inside a class needs no history at all; the volatility
+    // variant needs as much as it measures over.
+    return inverseVolWithin_ ? lookback_ + 2 : 1;
+}
+
+std::vector<double> GroupParity::targetWeights(const PortfolioData& data, std::size_t index) {
+    const std::size_t   assets = data.assetCount();
+    std::vector<double> weights(assets, 0.0);
+    if (index == 0 || classes_.size() < assets) {
+        return weights;  // untagged assets cannot be grouped, and guessing would lie
+    }
+    const std::size_t bar = index - 1;
+
+    // Group the assets that are actually tradeable at this bar. A class whose
+    // every member lists later simply does not exist yet, and its share belongs to
+    // the classes that do rather than to cash.
+    std::vector<std::string>              labels;
+    std::vector<std::vector<std::size_t>> members;
+    for (std::size_t a = 0; a < assets; ++a) {
+        if (!data.available[a][bar] || classes_[a].empty()) {
+            continue;
+        }
+        const auto it = std::find(labels.begin(), labels.end(), classes_[a]);
+        if (it == labels.end()) {
+            labels.push_back(classes_[a]);
+            members.push_back({a});
+        } else {
+            members[static_cast<std::size_t>(it - labels.begin())].push_back(a);
+        }
+    }
+    if (labels.empty()) {
+        return weights;
+    }
+
+    const double perClass = 1.0 / static_cast<double>(labels.size());
+    for (const auto& group : members) {
+        if (!inverseVolWithin_) {
+            const double each = perClass / static_cast<double>(group.size());
+            for (const std::size_t a : group) {
+                weights[a] = each;
+            }
+            continue;
+        }
+
+        double              total = 0.0;
+        std::vector<double> inverse(group.size(), 0.0);
+        for (std::size_t i = 0; i < group.size(); ++i) {
+            const double vol = volatility(data, group[i], bar, lookback_);
+            if (vol > 1e-9) {
+                inverse[i] = 1.0 / vol;
+                total += inverse[i];
+            }
+        }
+        // A class where nothing has moved yet falls back to equal weight rather
+        // than dropping out: the class split is the decision, and it should not
+        // depend on whether a volatility estimate happened to be available.
+        if (total <= 0.0) {
+            const double each = perClass / static_cast<double>(group.size());
+            for (const std::size_t a : group) {
+                weights[a] = each;
+            }
+            continue;
+        }
+        for (std::size_t i = 0; i < group.size(); ++i) {
+            weights[group[i]] = perClass * inverse[i] / total;
+        }
+    }
+    return weights;
+}
+
+/* ------------------------- AbsoluteMomentumFilter ------------------------- */
+
+AbsoluteMomentumFilter::AbsoluteMomentumFilter(std::unique_ptr<IPortfolioStrategy> inner, std::size_t lookback,
+                                               double minReturnPct)
+    : inner_(std::move(inner))
+    , lookback_(lookback)
+    , minReturnPct_(minReturnPct) {}
+
+std::string AbsoluteMomentumFilter::name() const {
+    std::ostringstream os;
+    os << inner_->name() << " + abs" << lookback_;
+    return os.str();
+}
+
+void AbsoluteMomentumFilter::init(const PortfolioData& data) {
+    inner_->init(data);
+}
+
+std::size_t AbsoluteMomentumFilter::warmupPeriod() const {
+    return std::max(inner_->warmupPeriod(), lookback_ + 1);
+}
+
+std::vector<double> AbsoluteMomentumFilter::targetWeights(const PortfolioData& data, std::size_t index) {
+    auto weights = inner_->targetWeights(data, index);
+    if (index == 0) {
+        return weights;
+    }
+    const std::size_t bar = index - 1;
+
+    for (std::size_t a = 0; a < weights.size() && a < data.assetCount(); ++a) {
+        if (weights[a] <= 0.0) {
+            continue;
+        }
+        const double r = trailingReturn(data, a, bar, lookback_);
+        // An unrankable asset fails the test rather than passing it by default:
+        // not knowing whether something has been falling is not a reason to hold it.
+        if (!(r > -1e8) || r <= minReturnPct_) {
+            weights[a] = 0.0;
+        }
+    }
+    return weights;
+}
+
 Levered::Levered(std::unique_ptr<IPortfolioStrategy> inner, double multiple)
     : inner_(std::move(inner)),
       multiple_(multiple) {}
@@ -191,15 +318,35 @@ std::vector<double> Levered::targetWeights(const PortfolioData& data, std::size_
     return w;
 }
 
-std::vector<std::unique_ptr<IPortfolioStrategy>> standardStrategySet() {
+std::vector<std::unique_ptr<IPortfolioStrategy>> standardStrategySet(const std::vector<std::string>& assetClasses) {
     std::vector<std::unique_ptr<IPortfolioStrategy>> out;
     out.push_back(std::make_unique<EqualWeight>());
     out.push_back(std::make_unique<RiskParity>(63, 0.4));
     out.push_back(std::make_unique<RiskParity>(126, 0.25));
+
+    // Only when the universe tags its assets. A grouping rule fed untagged assets
+    // would report a diversification it does not have.
+    if (!assetClasses.empty()) {
+        out.push_back(std::make_unique<GroupParity>(assetClasses, false));
+        out.push_back(std::make_unique<GroupParity>(assetClasses, true, 63));
+        out.push_back(std::make_unique<AbsoluteMomentumFilter>(
+            std::make_unique<GroupParity>(assetClasses, false), 252, 0.0));
+        out.push_back(std::make_unique<AbsoluteMomentumFilter>(
+            std::make_unique<GroupParity>(assetClasses, true, 63), 252, 0.0));
+    }
+
+    out.push_back(std::make_unique<AbsoluteMomentumFilter>(std::make_unique<EqualWeight>(), 252, 0.0));
+    out.push_back(std::make_unique<AbsoluteMomentumFilter>(std::make_unique<RiskParity>(63, 0.4), 252, 0.0));
+
     for (std::size_t top : {1u, 2u, 3u, 5u}) {
         for (std::size_t look : {63u, 126u, 252u}) {
             out.push_back(std::make_unique<MomentumRotation>(top, look, 0.0));
         }
+    }
+    // The same ranking, but standing aside when nothing is actually rising.
+    for (std::size_t top : {3u, 5u}) {
+        out.push_back(std::make_unique<MomentumRotation>(top, 126, 0.0001));
+        out.push_back(std::make_unique<MomentumRotation>(top, 252, 0.0001));
     }
     return out;
 }

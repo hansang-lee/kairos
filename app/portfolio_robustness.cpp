@@ -159,7 +159,7 @@ int main(int argc, char* argv[]) {
     results.push_back(portfolio::buyAndHold(data, cfg));
 
     portfolio::PortfolioEngine engine(10000000.0);
-    auto                       strategies = portfolio::standardStrategySet();
+    auto                       strategies = portfolio::standardStrategySet(loaded.assetClasses);
     for (auto& s : strategies) {
         results.push_back(engine.run(*s, data, cfg));
     }

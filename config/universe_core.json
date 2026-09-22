@@ -1,0 +1,161 @@
+{
+  "note": "The index universe with its duplicate listings removed and every asset tagged with the class it actually belongs to. Measured over 2016-2026, the 34-ticker universe carries only 3.0 independent bets: KODEX 200, TIGER 200, KBSTAR 200, ARIRANG 200, KOSEF 200, KODEX 코스피 and KODEX 레버리지 correlate 0.975-0.998 with each other, and eleven sector ETFs correlate 0.49-0.78 with KOSPI 200 because they are pieces of it. Equal weight over that list is not a diversified portfolio; it is 59% Korean equity wearing thirty-four labels. One ticker survives from each redundant cluster, chosen for the longer history where history and liquidity disagreed, since a backtest cannot use bars that do not exist.",
+  "asset_class_note": "asset_class is what an allocation rule should group by; `group` stays as the descriptive label. Sector ETFs are tagged KR_EQUITY rather than given a class of their own, because a rule that treats 'sectors' as a separate class would put 40% of the book in Korean equity while believing it put 20%.",
+  "dropped": {
+    "102110, 148020, 152100, 069660, 226490": "KOSPI 200 again; kept 069500, by far the most traded",
+    "122630, 233740": "2x daily-reset versions of indices already here, correlating 0.994-0.998 with them. Leverage belongs in the account's exposure setting, not in the asset list",
+    "261220": "KODEX WTI 원유선물, correlating 0.952 with TIGER 원유선물; the kept one starts two years earlier",
+    "261240": "KODEX 미국달러선물; the kept one starts two years earlier",
+    "227540": "TIGER 200 헬스케어, correlating 0.887 with the kept TIGER 헬스케어",
+    "266370": "KODEX 200IT has no usable cached history"
+  },
+  "survivorship_warning": "Every ETF here still trades. Funds that were wound up are absent, so results are an upper bound.",
+  "cost_warning": "No ticker states its own expense_ratio yet, so runs apply the tool's assumed default and print that they did. Published fees for these products run roughly 0.05-0.5%/yr.",
+  "liquidity_warning": "Turnover in 2025 ranges from 4,628억원 a day (KODEX 200) to 0.2억원 (TIGER 200 금융). At a ten-million-won account every one of them is tradeable, but the 0.05% slippage the backtest assumes is optimistic for the thin ones. Closes repeat from the previous day on 0.4-5.7% of bars, which is low enough not to distort volatility or correlation estimates.",
+  "tickers": [
+    {
+      "code": "069500",
+      "name": "KODEX 200",
+      "group": "KR 대형주",
+      "asset_class": "KR_EQUITY"
+    },
+    {
+      "code": "229200",
+      "name": "KODEX 코스닥150",
+      "group": "KR 중소형",
+      "asset_class": "KR_EQUITY"
+    },
+    {
+      "code": "091160",
+      "name": "KODEX 반도체",
+      "group": "섹터",
+      "asset_class": "KR_EQUITY"
+    },
+    {
+      "code": "139660",
+      "name": "TIGER 200 금융",
+      "group": "섹터",
+      "asset_class": "KR_EQUITY"
+    },
+    {
+      "code": "091170",
+      "name": "KODEX 은행",
+      "group": "섹터",
+      "asset_class": "KR_EQUITY"
+    },
+    {
+      "code": "117460",
+      "name": "KODEX 에너지화학",
+      "group": "섹터",
+      "asset_class": "KR_EQUITY"
+    },
+    {
+      "code": "143860",
+      "name": "TIGER 헬스케어",
+      "group": "섹터",
+      "asset_class": "KR_EQUITY"
+    },
+    {
+      "code": "244580",
+      "name": "KODEX 바이오",
+      "group": "섹터",
+      "asset_class": "KR_EQUITY"
+    },
+    {
+      "code": "139230",
+      "name": "TIGER 200 중공업",
+      "group": "섹터",
+      "asset_class": "KR_EQUITY"
+    },
+    {
+      "code": "117680",
+      "name": "KODEX 철강",
+      "group": "섹터",
+      "asset_class": "KR_EQUITY"
+    },
+    {
+      "code": "228790",
+      "name": "TIGER 화장품",
+      "group": "섹터",
+      "asset_class": "KR_EQUITY"
+    },
+    {
+      "code": "133690",
+      "name": "TIGER 미국나스닥100",
+      "group": "해외주식",
+      "asset_class": "INTL_EQUITY"
+    },
+    {
+      "code": "143850",
+      "name": "TIGER 미국S&P500선물",
+      "group": "해외주식",
+      "asset_class": "INTL_EQUITY"
+    },
+    {
+      "code": "192090",
+      "name": "TIGER 차이나CSI300",
+      "group": "해외주식",
+      "asset_class": "INTL_EQUITY"
+    },
+    {
+      "code": "099140",
+      "name": "KODEX 차이나H",
+      "group": "해외주식",
+      "asset_class": "INTL_EQUITY"
+    },
+    {
+      "code": "195930",
+      "name": "TIGER 유로스탁스50",
+      "group": "해외주식",
+      "asset_class": "INTL_EQUITY"
+    },
+    {
+      "code": "238720",
+      "name": "KINDEX 일본TOPIX",
+      "group": "해외주식",
+      "asset_class": "INTL_EQUITY"
+    },
+    {
+      "code": "195980",
+      "name": "ARIRANG 신흥국MSCI",
+      "group": "해외주식",
+      "asset_class": "INTL_EQUITY"
+    },
+    {
+      "code": "148070",
+      "name": "KOSEF 국고채10년",
+      "group": "채권",
+      "asset_class": "BOND"
+    },
+    {
+      "code": "114260",
+      "name": "KODEX 국고채3년",
+      "group": "채권",
+      "asset_class": "BOND"
+    },
+    {
+      "code": "136340",
+      "name": "TIGER 단기선진하이일드",
+      "group": "채권",
+      "asset_class": "BOND"
+    },
+    {
+      "code": "132030",
+      "name": "KODEX 골드선물",
+      "group": "원자재",
+      "asset_class": "COMMODITY"
+    },
+    {
+      "code": "130680",
+      "name": "TIGER 원유선물",
+      "group": "원자재",
+      "asset_class": "COMMODITY"
+    },
+    {
+      "code": "138230",
+      "name": "KOSEF 미국달러선물",
+      "group": "통화",
+      "asset_class": "CURRENCY"
+    }
+  ]
+}

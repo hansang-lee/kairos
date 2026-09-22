@@ -156,7 +156,7 @@ int main(int argc, char* argv[]) {
 
         for (const double lev : {1.0, 1.5, 2.0, 2.5, 3.0}) {
             cfg.maxLeverage = lev;
-            auto strategies = portfolio::standardStrategySet();
+            auto strategies = portfolio::standardStrategySet(loaded.assetClasses);
             for (auto& s : strategies) {
                 const std::string base = s->name();
                 if (base.rfind("Momentum", 0) == 0) {
@@ -178,7 +178,7 @@ int main(int argc, char* argv[]) {
         std::cout << "\n rebalance every " << interval << " bars\n";
         printHeader();
         printRow(portfolio::buyAndHold(data, cfg));
-        auto strategies = portfolio::standardStrategySet();
+        auto strategies = portfolio::standardStrategySet(loaded.assetClasses);
         for (auto& s : strategies) {
             printRow(engine.run(*s, data, cfg));
         }

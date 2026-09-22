@@ -34,6 +34,15 @@ struct UniverseLoad {
     std::vector<double>                     expenseRatios;
 
     /**
+     * @brief Each asset's `asset_class`, aligned with `series`.
+     *
+     * What an allocation rule should group by. A universe that does not tag its
+     * assets leaves these empty rather than guessing, because a rule grouping on
+     * a guess would report a diversification it does not have.
+     */
+    std::vector<std::string> assetClasses;
+
+    /**
      * @brief Whether every asset kept carries a published fee.
      *
      * A run where some fees are guessed and some are measured is not a costed

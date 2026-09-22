@@ -79,6 +79,75 @@ class EqualWeight: public IPortfolioStrategy {
 };
 
 /**
+ * @brief Split the account evenly between asset classes, then within each one.
+ *
+ * Equal weight over a ticker list allocates to however many ways a bet happens to
+ * be listed, not to the bets. In this universe that put 59% of the book in Korean
+ * equity — six listings of KOSPI 200 plus eleven sector funds that are pieces of
+ * it — while the three bond funds got 8.8%. Grouping first makes the split a
+ * decision rather than an artefact of the list, and it does it without a single
+ * fitted parameter, so there is nothing here to overfit to a period.
+ *
+ * Classes with no asset available at a bar are skipped and their share is spread
+ * over the rest, so a class that lists late does not leave the book in cash.
+ */
+class GroupParity: public IPortfolioStrategy {
+   public:
+    /**
+     * @param assetClasses One label per asset, in the order of PortfolioData::tickers.
+     * @param inverseVolWithin When set, assets inside a class are weighted by the
+     *        inverse of their volatility rather than equally — the class split
+     *        stays fixed either way, so this only changes which names carry it.
+     * @param lookback Bars of returns used for that volatility.
+     */
+    explicit GroupParity(std::vector<std::string> assetClasses, bool inverseVolWithin = false,
+                         std::size_t lookback = 63);
+
+    [[nodiscard]] std::string         name() const override;
+    void                              init(const PortfolioData& data) override;
+    [[nodiscard]] std::size_t         warmupPeriod() const override;
+    [[nodiscard]] std::vector<double> targetWeights(const PortfolioData& data, std::size_t index) override;
+
+   private:
+    std::vector<std::string> classes_;
+    bool                     inverseVolWithin_;
+    std::size_t              lookback_;
+};
+
+/**
+ * @brief Hold an allocation only while the asset is above its own trailing return.
+ *
+ * Relative ranking always holds something: in a decline where everything is
+ * falling, "strongest" means least bad, and the book is fully invested into it.
+ * An absolute floor is what turns a ranking rule into one that can stand aside,
+ * and it is the oldest rule that has actually reduced drawdown out of sample.
+ *
+ * Assets failing the test are dropped and their weight is left in cash rather
+ * than redistributed, because redistributing it would reinvest the money the rule
+ * just decided not to risk.
+ */
+class AbsoluteMomentumFilter: public IPortfolioStrategy {
+   public:
+    /**
+     * @param inner The allocation rule being filtered.
+     * @param lookback Bars of trailing return the test is made over.
+     * @param minReturnPct The return an asset must clear to be held at all.
+     */
+    AbsoluteMomentumFilter(std::unique_ptr<IPortfolioStrategy> inner, std::size_t lookback = 252,
+                           double minReturnPct = 0.0);
+
+    [[nodiscard]] std::string         name() const override;
+    void                              init(const PortfolioData& data) override;
+    [[nodiscard]] std::size_t         warmupPeriod() const override;
+    [[nodiscard]] std::vector<double> targetWeights(const PortfolioData& data, std::size_t index) override;
+
+   private:
+    std::unique_ptr<IPortfolioStrategy> inner_;
+    std::size_t                         lookback_;
+    double                              minReturnPct_;
+};
+
+/**
  * @brief Any allocation rule, with every weight multiplied by a constant.
  *
  * Leverage is a property of the account, not of the allocation rule: the decision
@@ -110,6 +179,7 @@ class Levered: public IPortfolioStrategy {
  * all talking about the same strategies. When they each built their own, a
  * parameter changed in one place made two reports silently incomparable.
  */
-[[nodiscard]] std::vector<std::unique_ptr<IPortfolioStrategy>> standardStrategySet();
+[[nodiscard]] std::vector<std::unique_ptr<IPortfolioStrategy>> standardStrategySet(
+    const std::vector<std::string>& assetClasses = {});
 
 }  // namespace portfolio

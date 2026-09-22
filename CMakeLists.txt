@@ -137,6 +137,7 @@ add_executable(kairos_tests
   tests/test_integration.cpp
   tests/test_portfolio.cpp
   tests/test_portfolio_leverage.cpp
+  tests/test_portfolio_allocation.cpp
 )
 target_link_libraries(kairos_tests PRIVATE ${PROJECT_NAME})
 target_include_directories(kairos_tests PRIVATE

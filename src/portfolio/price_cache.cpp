@@ -108,6 +108,7 @@ UniverseLoad loadUniverse(const std::string& universePath, const std::string& st
             out.allFeesKnown = false;
         }
         out.expenseRatios.push_back(stated ? t["expense_ratio"].get<double>() : defaultExpenseRatio);
+        out.assetClasses.push_back(t.value("asset_class", std::string{}));
         out.series.push_back(window);
     }
     return out;
