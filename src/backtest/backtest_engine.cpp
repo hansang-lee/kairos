@@ -139,20 +139,33 @@ BacktestResult BacktestEngine::run(IStrategy& strategy, const StockInfo& data, c
         // Buying one tranche: the first fixes how much cash the whole position may
         // use, so later tranches cannot quietly grow it as the account moves.
         auto buyTranche = [&](int ofTranches) {
-            if (!inPos) {
-                targetCapital = capital * std::clamp(config.positionPct, 0.1, 1.0);
-                buyIdx        = i;
-                inPos         = true;
-            }
-            const double slice = std::min(targetCapital / std::max(1, ofTranches), capital);
+            // The budget a first tranche would fix, computed before anything is
+            // committed: a buy that cannot afford a whole share must leave the
+            // position untouched, and marking it open with nothing in it would
+            // start a trade that never happened.
+            const double budget = inPos ? targetCapital : capital * std::clamp(config.positionPct, 0.1, 1.0);
+            const double slice  = std::min(budget / std::max(1, ofTranches), capital);
             if (slice <= 0.0) {
                 return false;
             }
-            const double bought = slice / effectiveBuyPrice;
+            // Whole shares only. A backtest that buys 3.7 shares is reporting a trade
+            // nobody can place, and on a 10M account holding a 60,000-won ETF the
+            // rounding is worth several percent of the position, not a rounding error.
+            const double bought = std::floor(slice / effectiveBuyPrice);
+            if (bought < 1.0) {
+                return false;
+            }
+            const double spent = bought * effectiveBuyPrice;
+
+            if (!inPos) {
+                targetCapital = budget;
+                buyIdx        = i;
+                inPos         = true;
+            }
             // Average entry price, which is what the stop and the trade record use.
-            buyPrice = (shares + bought) > 0.0 ? (buyPrice * shares + slice) / (shares + bought) : effectiveBuyPrice;
+            buyPrice = (shares + bought) > 0.0 ? (buyPrice * shares + spent) / (shares + bought) : effectiveBuyPrice;
             shares += bought;
-            capital -= slice;
+            capital -= spent;
             lastAddPrice = effectiveBuyPrice;
             return true;
         };
@@ -178,7 +191,9 @@ BacktestResult BacktestEngine::run(IStrategy& strategy, const StockInfo& data, c
             // Unwind one tranche; the last one clears whatever is left so no dust
             // remains to be marked to market forever.
             const int    remaining = std::max(1, exitTranches - exitsDone);
-            const double sold      = (remaining <= 1) ? shares : shares / remaining;
+            // The final tranche takes whatever is left, so rounding cannot strand a
+            // share that then sits marked to market for the rest of the run.
+            const double sold = (remaining <= 1) ? shares : std::floor(shares / remaining);
             capital += sold * effectiveSellPrice;
             shares -= sold;
             ++exitsDone;

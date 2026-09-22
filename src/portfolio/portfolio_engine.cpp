@@ -229,8 +229,15 @@ PortfolioResult PortfolioEngine::run(IPortfolioStrategy& strategy, const Portfol
                 }
 
                 if (selling) {
-                    const double sellShares = std::min(shares[a], -delta / price);
-                    const double gross      = sellShares * price;
+                    // Whole shares, like the account this is meant to describe. With
+                    // 24 assets and ten million won a position is a handful of shares,
+                    // so rounding is not a rounding error here — it is the difference
+                    // between six shares and seven.
+                    const double sellShares = std::floor(std::min(shares[a], -delta / price));
+                    if (sellShares < 1.0) {
+                        continue;
+                    }
+                    const double gross = sellShares * price;
                     const double net =
                         gross * (1.0 - config.slippagePct) * (1.0 - config.commissionRate) * (1.0 - config.sellTaxRate);
                     cash += net;
@@ -246,9 +253,14 @@ PortfolioResult PortfolioEngine::run(IPortfolioStrategy& strategy, const Portfol
                         continue;
                     }
                     const double effectivePrice = price * (1.0 + config.slippagePct) * (1.0 + config.commissionRate);
-                    shares[a] += spend / effectivePrice;
-                    cash -= spend;
-                    result.totalCosts += spend * (1.0 - price / effectivePrice);
+                    const double bought         = std::floor(spend / effectivePrice);
+                    if (bought < 1.0) {
+                        continue;
+                    }
+                    const double paid = bought * effectivePrice;
+                    shares[a] += bought;
+                    cash -= paid;
+                    result.totalCosts += paid * (1.0 - price / effectivePrice);
                 }
                 ++result.orders;
             }
@@ -316,8 +328,12 @@ PortfolioResult buyAndHold(const PortfolioData& data, const PortfolioConfigBt& c
             continue;
         }
         const double effectivePrice = price * (1.0 + config.slippagePct) * (1.0 + config.commissionRate);
-        shares[a]                   = per / effectivePrice;
-        r.totalCosts += per - shares[a] * price;
+        // Whatever the slice cannot buy in whole shares stays as cash, which is what
+        // an account holding two dozen funds actually looks like.
+        shares[a]         = std::floor(per / effectivePrice);
+        const double paid = shares[a] * effectivePrice;
+        cash += per - paid;
+        r.totalCosts += paid - shares[a] * price;
     }
 
     r.equityCurve.reserve(data.barCount());
@@ -334,11 +350,15 @@ PortfolioResult buyAndHold(const PortfolioData& data, const PortfolioConfigBt& c
             }
             const double effectivePrice =
                 data.close[a][bar] * (1.0 + config.slippagePct) * (1.0 + config.commissionRate);
-            const double bought = pending[a] / effectivePrice;
+            const double bought = std::floor(pending[a] / effectivePrice);
+            if (bought < 1.0) {
+                continue;  // the slice still cannot buy a share; wait rather than round up
+            }
+            const double paid = bought * effectivePrice;
             shares[a] += bought;
-            cash -= pending[a];
-            r.totalCosts += pending[a] - bought * data.close[a][bar];
-            pending[a] = 0.0;
+            cash -= paid;
+            r.totalCosts += paid - bought * data.close[a][bar];
+            pending[a] -= paid;
         }
 
         double equity = cash;

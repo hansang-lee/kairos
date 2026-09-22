@@ -57,7 +57,38 @@ TEST(backtest, buy_then_sell_captures_the_move) {
     CHECK_EQ(r.trades.size(), std::size_t{1});
     CHECK_NEAR(r.trades[0].buyPrice, 110.0, 1e-9);
     CHECK_NEAR(r.trades[0].sellPrice, 130.0, 1e-9);
-    CHECK_NEAR(r.totalReturnPct, (130.0 / 110.0 - 1.0) * 100.0, 1e-6);
+
+    // 10,000 buys 90 shares at 110 and leaves 100 idle, because shares are whole.
+    // The position captured 18.18%; the account did not, and the gap is the
+    // remainder no broker would have invested for you.
+    CHECK_NEAR(r.trades[0].returnPct, (130.0 / 110.0 - 1.0) * 100.0, 1e-6);
+    CHECK_NEAR(r.totalReturnPct, ((90.0 * 130.0 + 100.0) / 10000.0 - 1.0) * 100.0, 1e-9);
+}
+
+TEST(backtest, positions_are_whole_shares_and_the_remainder_stays_in_cash) {
+    // A price that divides into the capital badly on purpose: 10,000 / 333 is
+    // 30.03, so a fractional engine would show a different number here.
+    const auto       bars = makeBars({100, 333, 333, 333});
+    ScriptedStrategy strat({Signal::HOLD, Signal::BUY, Signal::HOLD, Signal::SELL});
+    BacktestEngine   engine(10000.0);
+    const auto       r = engine.run(strat, bars, frictionless());
+
+    // 30 shares at 333 costs 9,990 and leaves 10. Bought and sold at the same
+    // price, so the account must end exactly where it started.
+    CHECK_NEAR(r.finalCapital, 10000.0, 1e-9);
+    CHECK_NEAR(r.totalReturnPct, 0.0, 1e-9);
+}
+
+TEST(backtest, an_allocation_too_small_for_one_share_opens_no_position) {
+    // 1,000 cannot buy a share at 5,000, and the engine must leave the account
+    // flat rather than record a trade nobody could place.
+    const auto       bars = makeBars({100, 5000, 6000, 7000});
+    ScriptedStrategy strat({Signal::HOLD, Signal::BUY, Signal::HOLD, Signal::SELL});
+    BacktestEngine   engine(1000.0);
+    const auto       r = engine.run(strat, bars, frictionless());
+
+    CHECK_EQ(r.trades.size(), std::size_t{0});
+    CHECK_NEAR(r.finalCapital, 1000.0, 1e-9);
 }
 
 TEST(backtest, commission_and_slippage_reduce_the_result) {
@@ -89,8 +120,11 @@ TEST(backtest, sell_tax_is_charged_only_on_exit) {
     const auto withTax = engine.run(b, bars, taxed);
 
     // One round trip, tax on the sell only: the drag is one 0.2% bite, not two.
-    const double expected = noTax.finalCapital * (1.0 - 0.002);
-    CHECK_NEAR(withTax.finalCapital, expected, expected * 1e-6);
+    // Charged on the sale proceeds, not on the account — 90 whole shares at 130,
+    // with the untouched remainder taxed nowhere.
+    const double proceeds = 90.0 * 130.0;
+    const double expected = noTax.finalCapital - proceeds * 0.002;
+    CHECK_NEAR(withTax.finalCapital, expected, expected * 1e-9);
 }
 
 TEST(backtest, market_cost_presets_match_the_published_rates) {
