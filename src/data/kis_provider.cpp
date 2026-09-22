@@ -111,13 +111,22 @@ std::string fetchOnce(const std::string& ticker, const std::string& startYmd, co
 
 /**
  * @brief Fetch one page of KIS daily-chart data (the endpoint returns at most ~100
- *        bars per call, regardless of the requested date range). Retries with
- *        backoff on KIS's per-second rate-limit error (EGW00201) instead of
- *        silently treating a throttled call as "no more data."
- * @return Bars in chronological (oldest-first) order, or empty on failure/no data.
+ *        bars per call, regardless of the requested date range).
+ *
+ * Retries with backoff on every error KIS raises that means "ask again" rather
+ * than "there is nothing there": the per-second rate limit (EGW00201), the
+ * generic retry request (EGW00316, whose own message says 재 조회 수행 부탁드립니다),
+ * a routing failure (OPSQ0003), and a transport timeout. Treating any of those as
+ * the end of the history is what turns a partial page into a cached series that
+ * looks complete — a 2,700-bar fund arrived as 500 bars starting in 2024 and would
+ * have been backtested that way.
+ *
+ * @param failed Set when the page could not be read after every retry, which the
+ *        caller must distinguish from an empty page meaning no more history.
+ * @return Bars in chronological (oldest-first) order; empty on failure or no data.
  */
 std::vector<DayBar> fetchChunk(const std::string& ticker, const std::string& startYmd, const std::string& endYmd,
-                               const std::string& periodCode) {
+                               const std::string& periodCode, bool* failed = nullptr) {
     auto& auth = KisAuth::instance();
     auth.loadFromEnv();
     const std::string token = auth.getAccessToken();
@@ -126,23 +135,33 @@ std::vector<DayBar> fetchChunk(const std::string& ticker, const std::string& sta
         return {};
     }
 
-    constexpr int kMaxAttempts = 5;
+    if (failed != nullptr) {
+        *failed = false;
+    }
+
+    constexpr int kMaxAttempts = 6;
     for (int attempt = 0; attempt < kMaxAttempts; ++attempt) {
         const std::string response = fetchOnce(ticker, startYmd, endYmd, periodCode, token, auth);
         if (response.empty()) {
-            return {};  // transport-level failure already logged by fetchOnce
+            // Transport-level failure, already logged by fetchOnce. Retryable: a
+            // timeout says nothing about whether the history exists.
+            std::this_thread::sleep_for(std::chrono::milliseconds(1500 * (attempt + 1)));
+            continue;
         }
 
         try {
             const auto json = nlohmann::json::parse(response);
-            if (json.value("msg_cd", "") == "EGW00201") {
-                // Per-second rate limit; back off and retry rather than giving up.
+            const auto code = json.value("msg_cd", std::string{});
+            if (code == "EGW00201" || code == "EGW00316" || code == "OPSQ0003") {
                 const auto backoff = std::chrono::milliseconds(1500 * (attempt + 1));
                 std::this_thread::sleep_for(backoff);
                 continue;
             }
             if (!json.contains("output2") || !json["output2"].is_array()) {
                 std::cerr << "KisProvider error response: " << response << std::endl;
+                if (failed != nullptr) {
+                    *failed = true;
+                }
                 return {};
             }
 
@@ -169,11 +188,17 @@ std::vector<DayBar> fetchChunk(const std::string& ticker, const std::string& sta
             return bars;
         } catch (const std::exception& e) {
             std::cerr << "KisProvider parse exception: " << e.what() << std::endl;
+            if (failed != nullptr) {
+                *failed = true;
+            }
             return {};
         }
     }
 
-    std::cerr << "KisProvider: gave up after " << kMaxAttempts << " rate-limit retries." << std::endl;
+    std::cerr << "KisProvider: gave up on " << ticker << " after " << kMaxAttempts << " retries." << std::endl;
+    if (failed != nullptr) {
+        *failed = true;
+    }
     return {};
 }
 
@@ -323,9 +348,21 @@ std::shared_ptr<StockInfo> KisProvider::getStockInfo(std::string_view ticker, st
     constexpr int       kMaxPages  = 40;
 
     for (int page = 0; page < kMaxPages; ++page) {
-        auto chunk = fetchChunk(tickerStr, normStart, currentEnd, periodCode);
+        bool pageFailed = false;
+        auto chunk      = fetchChunk(tickerStr, normStart, currentEnd, periodCode, &pageFailed);
+
+        // A page that could not be read is not the same as a fund whose history
+        // ends here, and the difference is invisible once the bars are on disk.
+        // Returning nothing makes the caller handle a failure it can see, instead
+        // of caching a series that starts years later than it should.
+        if (pageFailed) {
+            std::cerr << "KisProvider: " << tickerStr << " incomplete at page " << page << " (have "
+                      << allBars.size() << " bars, wanted back to " << normStart
+                      << "); returning nothing rather than a truncated series." << std::endl;
+            return nullptr;
+        }
         if (chunk.empty()) {
-            break;
+            break;  // genuinely no more history
         }
 
         allBars.insert(allBars.end(), chunk.begin(), chunk.end());

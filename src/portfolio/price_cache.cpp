@@ -1,7 +1,9 @@
 #include "portfolio/price_cache.hpp"
 
 #include <ctime>
+#include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <sstream>
 #include <stdexcept>
 
@@ -45,6 +47,26 @@ std::shared_ptr<StockInfo> loadCachedDaily(const std::string& ticker) {
         }
     }
     return data->close.empty() ? nullptr : data;
+}
+
+bool saveCachedDaily(const StockInfo& data, std::size_t minBars) {
+    if (data.ticker.empty() || data.close.size() < minBars || data.timestamps.size() != data.close.size()) {
+        return false;
+    }
+    const std::string path = util::resolveFromExe("cache/daily/" + data.ticker + ".csv");
+
+    std::error_code ec;
+    std::filesystem::create_directories(std::filesystem::path(path).parent_path(), ec);
+    std::ofstream out(path, std::ios::trunc);
+    if (!out.is_open()) {
+        return false;
+    }
+    out << "timestamp,open,high,low,close,volume\n" << std::fixed << std::setprecision(4);
+    for (std::size_t i = 0; i < data.close.size(); ++i) {
+        out << data.timestamps[i] << "," << data.open[i] << "," << data.high[i] << "," << data.low[i] << ","
+            << data.close[i] << "," << data.volume[i] << "\n";
+    }
+    return true;
 }
 
 int64_t parseDate(const std::string& date) {

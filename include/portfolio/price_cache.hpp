@@ -22,6 +22,18 @@ namespace portfolio {
 /** @brief One ticker's cached daily bars, or nullptr when the file is missing or empty. */
 [[nodiscard]] std::shared_ptr<StockInfo> loadCachedDaily(const std::string& ticker);
 
+/**
+ * @brief Write a ticker's bars to cache/daily/, replacing what is there.
+ *
+ * Refuses a series shorter than `minBars`, because a fetch cut short by a rate
+ * limit returns a handful of bars and caching that poisons every later run —
+ * which is how a 2,700-bar series once became 101 and silently dropped two
+ * tickers from a sweep.
+ *
+ * @return whether anything was written.
+ */
+bool saveCachedDaily(const StockInfo& data, std::size_t minBars = 300);
+
 /** @brief Seconds since epoch for a YYYY-MM-DD date, at the KRX open. */
 [[nodiscard]] int64_t parseDate(const std::string& date);
 
