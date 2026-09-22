@@ -1,0 +1,61 @@
+#pragma once
+
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <vector>
+
+#include "portfolio/portfolio_data.hpp"
+#include "stock_info.hpp"
+
+namespace portfolio {
+
+/**
+ * @brief Loading a universe's prices out of cache/daily/, shared by the tools.
+ *
+ * Extracted from portfolio_sweep because a second tool needed the same four
+ * steps, and two copies of a CSV parser drift: the moment one of them starts
+ * skipping a malformed row that the other keeps, the two tools disagree about
+ * history and nobody notices until their numbers differ.
+ */
+
+/** @brief One ticker's cached daily bars, or nullptr when the file is missing or empty. */
+[[nodiscard]] std::shared_ptr<StockInfo> loadCachedDaily(const std::string& ticker);
+
+/** @brief Seconds since epoch for a YYYY-MM-DD date, at the KRX open. */
+[[nodiscard]] int64_t parseDate(const std::string& date);
+
+/** @brief The bars of `series` inside [from, to), as a new series. */
+[[nodiscard]] std::shared_ptr<StockInfo> sliceTo(const std::shared_ptr<StockInfo>& series, int64_t from, int64_t to);
+
+struct UniverseLoad {
+    std::vector<std::shared_ptr<StockInfo>> series;
+    std::vector<std::string>                missing;  ///< tickers with no usable cache
+    std::vector<double>                     expenseRatios;
+
+    /**
+     * @brief Whether every asset kept carries a published fee.
+     *
+     * A run where some fees are guessed and some are measured is not a costed
+     * run, and the difference has to reach the report rather than being averaged
+     * away silently.
+     */
+    bool allFeesKnown = true;
+};
+
+/**
+ * @brief Load every ticker of a universe JSON over a date window.
+ *
+ * `expenseRatios` comes back aligned with `series`, reading each ticker's
+ * `expense_ratio` field and falling back to `defaultExpenseRatio` where the
+ * config does not state one.
+ *
+ * @param minBars Shortest history worth keeping; shorter series are dropped
+ *                rather than aligned, because a ticker with a handful of bars
+ *                contributes nothing but a hole in the timeline.
+ */
+[[nodiscard]] UniverseLoad loadUniverse(const std::string& universePath, const std::string& startDate,
+                                        const std::string& endDate, double defaultExpenseRatio,
+                                        std::size_t minBars = 300);
+
+}  // namespace portfolio

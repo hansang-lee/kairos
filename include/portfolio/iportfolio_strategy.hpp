@@ -35,8 +35,9 @@ struct IPortfolioStrategy {
      *
      * Weights are fractions of account equity and need not sum to 1 — the
      * remainder is held as cash, which is how these strategies express "stay
-     * out". A sum above 1 would be leverage and is rejected by the engine rather
-     * than silently scaled.
+     * out". A sum above 1 would be leverage, which is not modelled: the engine
+     * normalises such a target down to a gross exposure of 1, keeping the relative
+     * weights and capping only the total.
      */
     [[nodiscard]] virtual std::vector<double> targetWeights(const PortfolioData& data, std::size_t index) = 0;
 };

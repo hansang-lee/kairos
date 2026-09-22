@@ -167,4 +167,17 @@ std::vector<double> EqualWeight::targetWeights(const PortfolioData& data, std::s
     return weights;
 }
 
+std::vector<std::unique_ptr<IPortfolioStrategy>> standardStrategySet() {
+    std::vector<std::unique_ptr<IPortfolioStrategy>> out;
+    out.push_back(std::make_unique<EqualWeight>());
+    out.push_back(std::make_unique<RiskParity>(63, 0.4));
+    out.push_back(std::make_unique<RiskParity>(126, 0.25));
+    for (std::size_t top : {1u, 2u, 3u, 5u}) {
+        for (std::size_t look : {63u, 126u, 252u}) {
+            out.push_back(std::make_unique<MomentumRotation>(top, look, 0.0));
+        }
+    }
+    return out;
+}
+
 }  // namespace portfolio

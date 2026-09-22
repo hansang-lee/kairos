@@ -29,6 +29,7 @@ add_library(${PROJECT_NAME} SHARED
   src/data/reference_series.cpp
   src/portfolio/portfolio_data.cpp
   src/portfolio/portfolio_engine.cpp
+  src/portfolio/price_cache.cpp
   src/portfolio/strategies.cpp
   src/trade/trade_journal.cpp
   src/trade/signal_executor.cpp

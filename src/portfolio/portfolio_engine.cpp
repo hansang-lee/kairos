@@ -6,7 +6,40 @@
 
 namespace portfolio {
 
+double expenseRatioFor(const PortfolioConfigBt& config, std::size_t index) {
+    const double annual =
+        index < config.expenseRatios.size() ? config.expenseRatios[index] : config.defaultExpenseRatio;
+    // A negative ratio is a typo in a config, not a rebate a fund pays out.
+    return std::max(annual, 0.0);
+}
+
 namespace {
+
+/**
+ * Take one bar's management fee out of the holdings.
+ *
+ * Applied as a haircut on the share count rather than a debit to cash because
+ * that is where a fund's fee lands in reality — inside the net asset value,
+ * shrinking what each share is worth. Charging cash instead would break whenever
+ * the account is fully invested, and would let a strategy escape the fee by
+ * holding no cash, which is not an escape available to anyone.
+ */
+void accrueExpenses(const PortfolioConfigBt& config, const PortfolioData& data, std::size_t bar,
+                    std::vector<double>& shares, double& totalFees) {
+    if (config.barsPerYear <= 0.0) {
+        return;
+    }
+    for (std::size_t a = 0; a < shares.size(); ++a) {
+        if (shares[a] <= 0.0) {
+            continue;
+        }
+        // Clamped because a mistyped ratio should cost at most the whole position
+        // for the bar, never turn the holding negative.
+        const double drag = std::clamp(expenseRatioFor(config, a) / config.barsPerYear, 0.0, 1.0);
+        totalFees += shares[a] * data.close[a][bar] * drag;
+        shares[a] *= (1.0 - drag);
+    }
+}
 
 /** Fill in the metrics every result shares, from the equity curve. */
 void finalize(PortfolioResult& r, const PortfolioData& data, double initialCapital) {
@@ -70,14 +103,20 @@ PortfolioResult PortfolioEngine::run(IPortfolioStrategy& strategy, const Portfol
     strategy.init(data);
     const std::size_t warmup = strategy.warmupPeriod();
     const std::size_t assets = data.assetCount();
+    result.warmupBars        = warmup;
 
     double              cash = initialCapital_;
     std::vector<double> shares(assets, 0.0);
-    std::vector<double> weights(assets, 0.0);
 
     result.equityCurve.reserve(data.barCount());
 
     for (std::size_t bar = 0; bar < data.barCount(); ++bar) {
+        // Before the bar is valued, so the curve shows what the holdings are worth
+        // after the fee rather than a day before it.
+        if (bar >= 1) {
+            accrueExpenses(config, data, bar, shares, result.totalFees);
+        }
+
         double equity = cash;
         for (std::size_t a = 0; a < assets; ++a) {
             equity += shares[a] * data.close[a][bar];
@@ -96,8 +135,9 @@ PortfolioResult PortfolioEngine::run(IPortfolioStrategy& strategy, const Portfol
         auto target = strategy.targetWeights(data, bar);
         target.resize(assets, 0.0);
 
-        // Leverage is not modelled, so an over-allocated target is a bug in the
-        // strategy rather than something to silently normalise away.
+        // Leverage is not modelled, so a target summing above 1 is normalised down
+        // to a gross exposure of 1 rather than borrowed against. The relative
+        // weights the strategy asked for are preserved; only the total is capped.
         const double sum = std::accumulate(target.begin(), target.end(), 0.0);
         if (sum > 1.0 + 1e-9) {
             const double scale = 1.0 / sum;
@@ -120,7 +160,15 @@ PortfolioResult PortfolioEngine::run(IPortfolioStrategy& strategy, const Portfol
                 const double wantVal = equity * want;
                 const double delta   = wantVal - heldVal;
 
-                if (std::fabs(delta) < equity * config.minWeightChange) {
+                const double scale   = std::max(wantVal, heldVal);
+                const bool   opening = heldVal <= 0.0 && wantVal > 0.0;
+                const bool   closing = wantVal <= 0.0 && heldVal > 0.0;
+                // Opening and closing are the allocation itself, not drift around it, so the
+                // drift band must not veto them. Either band breaching is enough: one measures
+                // the error against the account, the other against the position.
+                const bool worthTrading = opening || closing || std::fabs(delta) >= equity * config.minWeightChange
+                                       || std::fabs(delta) >= scale * config.minPositionDrift;
+                if (!worthTrading) {
                     continue;
                 }
                 const bool selling = delta < 0.0;
@@ -147,7 +195,6 @@ PortfolioResult PortfolioEngine::run(IPortfolioStrategy& strategy, const Portfol
                     result.totalCosts += spend * (1.0 - price / effectivePrice);
                 }
                 ++result.orders;
-                weights[a] = want;
             }
         }
     }
@@ -160,7 +207,12 @@ PortfolioResult PortfolioEngine::run(IPortfolioStrategy& strategy, const Portfol
             continue;
         }
         const double gross = shares[a] * data.close[a][last];
-        cash += gross * (1.0 - config.slippagePct) * (1.0 - config.commissionRate) * (1.0 - config.sellTaxRate);
+        const double net =
+            gross * (1.0 - config.slippagePct) * (1.0 - config.commissionRate) * (1.0 - config.sellTaxRate);
+        cash += net;
+        // Counted like any other sale, so totalCosts means the same thing here as
+        // it does for the benchmark — otherwise the two columns are not comparable.
+        result.totalCosts += gross - net;
         shares[a] = 0.0;
     }
 
@@ -169,7 +221,7 @@ PortfolioResult PortfolioEngine::run(IPortfolioStrategy& strategy, const Portfol
     return result;
 }
 
-PortfolioResult buyAndHold(const PortfolioData& data, double initialCapital) {
+PortfolioResult buyAndHold(const PortfolioData& data, const PortfolioConfigBt& config, double initialCapital) {
     PortfolioResult r;
     r.strategyName = "Equal-weight buy & hold";
     r.finalCapital = initialCapital;
@@ -180,22 +232,83 @@ PortfolioResult buyAndHold(const PortfolioData& data, double initialCapital) {
 
     const std::size_t   assets = data.assetCount();
     std::vector<double> shares(assets, 0.0);
-    const double        per = initialCapital / static_cast<double>(assets);
+    const double        per  = initialCapital / static_cast<double>(assets);
+    double              cash = 0.0;
+
+    /**
+     * Slices set aside for assets that have no price yet, held as cash until the
+     * asset lists and then spent on it at its first available bar.
+     *
+     * This is deliberately not "equal weight at each asset's listing", which would
+     * resize every slice as the universe grows. It stays a 1/N-at-the-start
+     * allocation in which the late arrivals simply start late: each keeps exactly
+     * the slice it was given on day one, no more and no less. Equal-weight-on-entry
+     * is a defensible benchmark too, but a different one, and it would make the
+     * benchmark's early years depend on how many assets happen to list later.
+     */
+    std::vector<double> pending(assets, 0.0);
+
     for (std::size_t a = 0; a < assets; ++a) {
-        if (data.close[a][0] > 0.0) {
-            shares[a] = per / data.close[a][0];
+        const double price = data.close[a][0];
+        // An asset with no price yet keeps its slice in cash instead of forfeiting
+        // it: a benchmark that quietly starts with less capital than the strategies
+        // it is compared against is not measuring the same thing. Leaving it as cash
+        // forever is the other half of that same error, so it is only parked here.
+        if (price <= 0.0 || !data.available[a][0]) {
+            pending[a] = per;
+            cash += per;
+            continue;
         }
+        const double effectivePrice = price * (1.0 + config.slippagePct) * (1.0 + config.commissionRate);
+        shares[a]                   = per / effectivePrice;
+        r.totalCosts += per - shares[a] * price;
     }
 
     r.equityCurve.reserve(data.barCount());
     for (std::size_t bar = 0; bar < data.barCount(); ++bar) {
-        double equity = 0.0;
+        if (bar >= 1) {
+            accrueExpenses(config, data, bar, shares, r.totalFees);
+        }
+
+        // Deploy any slice whose asset has now listed, paying the same entry costs
+        // the day-one buys paid. An asset that never lists keeps its cash to the end.
+        for (std::size_t a = 0; a < assets; ++a) {
+            if (pending[a] <= 0.0 || !data.available[a][bar] || data.close[a][bar] <= 0.0) {
+                continue;
+            }
+            const double effectivePrice =
+                data.close[a][bar] * (1.0 + config.slippagePct) * (1.0 + config.commissionRate);
+            const double bought = pending[a] / effectivePrice;
+            shares[a] += bought;
+            cash -= pending[a];
+            r.totalCosts += pending[a] - bought * data.close[a][bar];
+            pending[a] = 0.0;
+        }
+
+        double equity = cash;
         for (std::size_t a = 0; a < assets; ++a) {
             equity += shares[a] * data.close[a][bar];
         }
         r.equityCurve.push_back(equity);
     }
-    r.finalCapital = r.equityCurve.back();
+
+    // The exit is paid once, after the curve is recorded: drawdown and Sharpe
+    // describe what the position was worth along the way, and subtracting a sale
+    // that never happened from every bar would understate both.
+    const std::size_t last = data.barCount() - 1;
+    for (std::size_t a = 0; a < assets; ++a) {
+        if (shares[a] <= 0.0) {
+            continue;
+        }
+        const double gross = shares[a] * data.close[a][last];
+        const double net =
+            gross * (1.0 - config.slippagePct) * (1.0 - config.commissionRate) * (1.0 - config.sellTaxRate);
+        cash += net;
+        r.totalCosts += gross - net;
+        shares[a] = 0.0;
+    }
+
+    r.finalCapital = cash;
     finalize(r, data, initialCapital);
     return r;
 }

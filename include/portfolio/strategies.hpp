@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "portfolio/iportfolio_strategy.hpp"
 
@@ -76,5 +77,14 @@ class EqualWeight: public IPortfolioStrategy {
     [[nodiscard]] std::size_t         warmupPeriod() const override { return 1; }
     [[nodiscard]] std::vector<double> targetWeights(const PortfolioData& data, std::size_t index) override;
 };
+
+/**
+ * @brief The set of allocation strategies the tools compare against each other.
+ *
+ * One list, so the sweep, the rebalance study and the rolling-window study are
+ * all talking about the same strategies. When they each built their own, a
+ * parameter changed in one place made two reports silently incomparable.
+ */
+[[nodiscard]] std::vector<std::unique_ptr<IPortfolioStrategy>> standardStrategySet();
 
 }  // namespace portfolio

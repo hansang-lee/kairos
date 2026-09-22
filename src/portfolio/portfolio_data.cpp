@@ -56,4 +56,28 @@ PortfolioData PortfolioData::align(const std::vector<std::shared_ptr<StockInfo>>
     return out;
 }
 
+PortfolioData PortfolioData::slice(std::size_t first, std::size_t last) const {
+    PortfolioData out;
+    out.tickers = tickers;
+
+    const std::size_t hi = std::min(last, barCount());
+    if (first >= hi) {
+        out.close.assign(tickers.size(), {});
+        out.available.assign(tickers.size(), {});
+        return out;
+    }
+
+    out.timestamps.assign(timestamps.begin() + static_cast<std::ptrdiff_t>(first),
+                          timestamps.begin() + static_cast<std::ptrdiff_t>(hi));
+    out.close.resize(close.size());
+    out.available.resize(available.size());
+    for (std::size_t a = 0; a < close.size(); ++a) {
+        out.close[a].assign(close[a].begin() + static_cast<std::ptrdiff_t>(first),
+                            close[a].begin() + static_cast<std::ptrdiff_t>(hi));
+        out.available[a].assign(available[a].begin() + static_cast<std::ptrdiff_t>(first),
+                                available[a].begin() + static_cast<std::ptrdiff_t>(hi));
+    }
+    return out;
+}
+
 }  // namespace portfolio

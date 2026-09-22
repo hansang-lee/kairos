@@ -35,6 +35,20 @@ struct PortfolioData {
      * @param series One entry per asset; entries with no bars are dropped.
      */
     static PortfolioData align(const std::vector<std::shared_ptr<StockInfo>>& series);
+
+    /**
+     * @brief The bars in [first, last) as their own PortfolioData.
+     *
+     * For walking a rolling window over one aligned history. Re-aligning each
+     * window from the raw series instead would quietly change the asset set from
+     * window to window — a ticker whose history is too short inside one window
+     * would drop out of it — and then the windows would not be comparable, which
+     * is the only reason to cut them.
+     *
+     * The asset list is preserved exactly, including assets that are unavailable
+     * for the whole slice; dropping them here would do the same damage.
+     */
+    [[nodiscard]] PortfolioData slice(std::size_t first, std::size_t last) const;
 };
 
 }  // namespace portfolio
