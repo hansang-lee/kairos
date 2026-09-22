@@ -79,6 +79,31 @@ class EqualWeight: public IPortfolioStrategy {
 };
 
 /**
+ * @brief Any allocation rule, with every weight multiplied by a constant.
+ *
+ * Leverage is a property of the account, not of the allocation rule: the decision
+ * to hold twice as much of what a strategy picked is separable from the picking.
+ * Wrapping rather than parameterising each strategy keeps it that way, and means
+ * a levered result and its unlevered twin are the same rule measured twice.
+ *
+ * The engine still caps gross exposure at its own ceiling, so a multiple above
+ * `PortfolioConfigBt::maxLeverage` is trimmed rather than honoured.
+ */
+class Levered: public IPortfolioStrategy {
+   public:
+    Levered(std::unique_ptr<IPortfolioStrategy> inner, double multiple);
+
+    [[nodiscard]] std::string         name() const override;
+    void                              init(const PortfolioData& data) override;
+    [[nodiscard]] std::size_t         warmupPeriod() const override;
+    [[nodiscard]] std::vector<double> targetWeights(const PortfolioData& data, std::size_t index) override;
+
+   private:
+    std::unique_ptr<IPortfolioStrategy> inner_;
+    double                              multiple_;
+};
+
+/**
  * @brief The set of allocation strategies the tools compare against each other.
  *
  * One list, so the sweep, the rebalance study and the rolling-window study are

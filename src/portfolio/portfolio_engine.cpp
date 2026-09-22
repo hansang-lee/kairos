@@ -117,14 +117,66 @@ PortfolioResult PortfolioEngine::run(IPortfolioStrategy& strategy, const Portfol
             accrueExpenses(config, data, bar, shares, result.totalFees);
         }
 
-        double equity = cash;
-        for (std::size_t a = 0; a < assets; ++a) {
-            equity += shares[a] * data.close[a][bar];
+        // Borrowing is charged before the bar is valued, for the same reason the fee
+        // is: the interest is owed for holding overnight, not for trading today.
+        if (bar >= 1 && cash < 0.0 && config.marginRateAnnual > 0.0 && config.barsPerYear > 0.0) {
+            const double interest = -cash * config.marginRateAnnual / config.barsPerYear;
+            cash -= interest;
+            result.totalInterest += interest;
         }
+
+        double invested = 0.0;
+        for (std::size_t a = 0; a < assets; ++a) {
+            invested += shares[a] * data.close[a][bar];
+        }
+        double equity = cash + invested;
+
+        // A levered account can be wiped out. Recording the zero and stopping is the
+        // honest end of the run: letting the arithmetic go negative and recover
+        // would describe a loan that no broker leaves outstanding.
+        //
+        // The curve is floored at zero rather than showing the debit balance, so a
+        // wipeout reads as -100% and not as some larger number. That is generous to
+        // leverage — a real account can end owing money — but a drawdown deeper than
+        // everything you had is not a figure the rest of the metrics can use.
+        if (equity <= 0.0 && config.maxLeverage > 1.0) {
+            result.ruined = true;
+            std::fill(shares.begin(), shares.end(), 0.0);
+            cash = 0.0;
+            result.equityCurve.insert(result.equityCurve.end(), data.barCount() - bar, 0.0);
+            break;
+        }
+
         result.equityCurve.push_back(equity);
 
         if (bar < warmup || equity <= 0.0) {
             continue;
+        }
+
+        // A margin call is not a decision, so it happens whatever the rebalancing
+        // schedule says — and it sells after the fall, which is where most of
+        // leverage's real cost lands rather than in the interest line.
+        if (config.marginCallLeverage > 0.0 && invested > equity * config.marginCallLeverage) {
+            const double keep = equity * config.maxLeverage / invested;
+            for (std::size_t a = 0; a < assets; ++a) {
+                const double price = data.close[a][bar];
+                if (shares[a] <= 0.0 || price <= 0.0) {
+                    continue;
+                }
+                const double sellShares = shares[a] * (1.0 - keep);
+                const double gross      = sellShares * price;
+                const double net =
+                    gross * (1.0 - config.slippagePct) * (1.0 - config.commissionRate) * (1.0 - config.sellTaxRate);
+                cash += net;
+                shares[a] -= sellShares;
+                result.totalCosts += gross - net;
+                ++result.orders;
+            }
+            ++result.marginCalls;
+            equity = cash;
+            for (std::size_t a = 0; a < assets; ++a) {
+                equity += shares[a] * data.close[a][bar];
+            }
         }
         const bool rebalanceBar = config.rebalanceEveryBars <= 0
                                || ((bar - warmup) % static_cast<std::size_t>(config.rebalanceEveryBars) == 0);
@@ -135,12 +187,12 @@ PortfolioResult PortfolioEngine::run(IPortfolioStrategy& strategy, const Portfol
         auto target = strategy.targetWeights(data, bar);
         target.resize(assets, 0.0);
 
-        // Leverage is not modelled, so a target summing above 1 is normalised down
-        // to a gross exposure of 1 rather than borrowed against. The relative
-        // weights the strategy asked for are preserved; only the total is capped.
+        // A target summing above the exposure ceiling is normalised down to it
+        // rather than borrowed against without limit. The relative weights the
+        // strategy asked for are preserved; only the total is capped.
         const double sum = std::accumulate(target.begin(), target.end(), 0.0);
-        if (sum > 1.0 + 1e-9) {
-            const double scale = 1.0 / sum;
+        if (sum > config.maxLeverage + 1e-9) {
+            const double scale = config.maxLeverage / sum;
             for (auto& w : target) {
                 w *= scale;
             }
@@ -185,7 +237,11 @@ PortfolioResult PortfolioEngine::run(IPortfolioStrategy& strategy, const Portfol
                     shares[a] -= sellShares;
                     result.totalCosts += gross - net;
                 } else {
-                    const double spend = std::min(delta, cash);
+                    // Spending may run the cash balance negative, but only as far as
+                    // the exposure ceiling allows; unlevered that floor is zero and
+                    // this is the same test as before.
+                    const double borrowFloor = -(config.maxLeverage - 1.0) * equity;
+                    const double spend       = std::min(delta, cash - borrowFloor);
                     if (spend <= 0.0) {
                         continue;
                     }

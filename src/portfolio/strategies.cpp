@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iomanip>
 #include <numeric>
+#include <sstream>
 
 namespace portfolio {
 
@@ -165,6 +167,28 @@ std::vector<double> EqualWeight::targetWeights(const PortfolioData& data, std::s
         }
     }
     return weights;
+}
+
+Levered::Levered(std::unique_ptr<IPortfolioStrategy> inner, double multiple)
+    : inner_(std::move(inner)),
+      multiple_(multiple) {}
+
+std::string Levered::name() const {
+    std::ostringstream os;
+    os << inner_->name() << " x" << std::fixed << std::setprecision(1) << multiple_;
+    return os.str();
+}
+
+void Levered::init(const PortfolioData& data) { inner_->init(data); }
+
+std::size_t Levered::warmupPeriod() const { return inner_->warmupPeriod(); }
+
+std::vector<double> Levered::targetWeights(const PortfolioData& data, std::size_t index) {
+    auto w = inner_->targetWeights(data, index);
+    for (double& x : w) {
+        x *= multiple_;
+    }
+    return w;
 }
 
 std::vector<std::unique_ptr<IPortfolioStrategy>> standardStrategySet() {

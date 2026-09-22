@@ -61,6 +61,38 @@ struct PortfolioConfigBt {
 
     /** @brief Trading bars in a year, used to prorate the annual rates above. */
     double barsPerYear = 252.0;
+
+    /**
+     * @brief Gross exposure ceiling as a multiple of equity. 1.0 is unlevered.
+     *
+     * A strategy whose drawdown is a third of the market's has bought safety it
+     * may not want; borrowing is how that safety is traded back for return. The
+     * reason it must be modelled rather than multiplied in afterwards is that
+     * leverage is path dependent: doubling the exposure does not double the
+     * return, it doubles the drawdown, pays interest along the way, and turns a
+     * decline that was merely painful into one the account does not come back
+     * from.
+     */
+    double maxLeverage = 1.0;
+
+    /**
+     * @brief Annual interest on a negative cash balance.
+     *
+     * KRX 신용융자 runs around 5-9% a year depending on the broker and the term.
+     * A backtest that borrows for nothing is measuring a product nobody sells.
+     */
+    double marginRateAnnual = 0.0;
+
+    /**
+     * @brief Gross exposure at which the broker forces a sale, as a multiple of equity.
+     *
+     * Above it the engine cuts the position back to `maxLeverage` at that bar's
+     * prices, which is what a margin call does: it sells the most after prices
+     * have already fallen. Zero disables the check, which models an investor who
+     * is never called — worth running to see how much of leverage's cost is the
+     * call rather than the interest.
+     */
+    double marginCallLeverage = 0.0;
 };
 
 struct PortfolioResult {
@@ -85,6 +117,22 @@ struct PortfolioResult {
      * less, this is what holding costs and cannot.
      */
     double totalFees = 0.0;
+
+    /** @brief Interest paid on borrowed cash over the run. */
+    double totalInterest = 0.0;
+
+    /** @brief Times the position had to be cut back to satisfy the exposure limit. */
+    std::size_t marginCalls = 0;
+
+    /**
+     * @brief Whether equity reached zero, ending the run there.
+     *
+     * A levered account can be wiped out, and a backtest that lets it go negative
+     * and recover is describing a loan nobody would extend. Any other metric on a
+     * ruined result is about the stretch before the wipeout, not about a strategy
+     * anyone could have held.
+     */
+    bool ruined = false;
 
     /**
      * @brief Bars at the start of the run during which nothing was held.

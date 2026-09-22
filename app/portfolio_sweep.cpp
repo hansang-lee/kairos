@@ -35,6 +35,21 @@ void printHeader() {
               << std::string(114, '-') << "\n";
 }
 
+void printLeverageHeader() {
+    std::cout << std::left << std::setw(34) << "" << std::right << std::setw(7) << "lev" << std::setw(10) << "return%"
+              << std::setw(9) << "CAGR" << std::setw(10) << "MDD%" << std::setw(9) << "sharpe" << std::setw(12)
+              << "interest" << std::setw(8) << "calls" << std::setw(8) << "ruined" << "\n"
+              << std::string(107, '-') << "\n";
+}
+
+void printLeverageRow(const portfolio::PortfolioResult& r, double leverage) {
+    std::cout << std::left << std::setw(34) << r.strategyName.substr(0, 33) << std::right << std::fixed
+              << std::setprecision(1) << std::setw(7) << leverage << std::setw(10) << r.totalReturnPct << std::setw(9)
+              << r.cagr << std::setw(10) << r.maxDrawdownPct << std::setprecision(2) << std::setw(9) << r.sharpeRatio
+              << std::setprecision(0) << std::setw(12) << r.totalInterest << std::setw(8) << r.marginCalls
+              << std::setw(8) << (r.ruined ? "YES" : "-") << "\n";
+}
+
 void printUsage() {
     std::cout << "Usage:\n"
               << "  portfolio_sweep [--universe <path>] [--start YYYY-MM-DD] [--end YYYY-MM-DD]\n"
@@ -42,7 +57,13 @@ void printUsage() {
               << "  Allocates one account across the universe and compares that against holding\n"
               << "  all of it in equal weight. Prices come from cache/daily/, which `sweep` fills.\n"
               << "  --rebalance-sweep repeats the comparison at several rebalancing intervals, to\n"
-              << "  separate the strategy's edge from the cost of chasing its target.\n";
+              << "  separate the strategy's edge from the cost of chasing its target.\n"
+              << "  --leverage-sweep borrows against each strategy at several multiples, charging\n"
+              << "  --margin-rate for the loan and cutting the position back at --margin-call.\n"
+              << "  --expense-ratio is the annual management fee assumed for any asset whose entry\n"
+              << "  in the universe does not state one. It defaults to 0.3%, the middle of the\n"
+              << "  published range for KRX index ETFs, because assuming zero is not neutral: it\n"
+              << "  is a claim that funds are free, and it flatters whatever stays invested.\n";
 }
 
 }  // namespace
@@ -53,7 +74,10 @@ int main(int argc, char* argv[]) {
     std::string endDate        = "2026-01-01";
     int         rebalance      = 21;
     bool        rebalanceSweep = false;
-    double      defaultExpense = 0.0;
+    double      defaultExpense = 0.003;
+    bool        leverageSweep  = false;
+    double      marginRate     = 0.06;
+    double      marginCall     = 0.0;
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -67,6 +91,12 @@ int main(int argc, char* argv[]) {
             rebalance = std::stoi(argv[++i]);
         else if (arg == "--rebalance-sweep")
             rebalanceSweep = true;
+        else if (arg == "--leverage-sweep")
+            leverageSweep = true;
+        else if (arg == "--margin-rate" && i + 1 < argc)
+            marginRate = std::stod(argv[++i]);
+        else if (arg == "--margin-call" && i + 1 < argc)
+            marginCall = std::stod(argv[++i]);
         else if (arg == "--expense-ratio" && i + 1 < argc)
             defaultExpense = std::stod(argv[++i]);
         else {
@@ -102,9 +132,46 @@ int main(int argc, char* argv[]) {
     // Several intervals rather than one, because a strategy that only wins at a
     // single rebalancing frequency has been fitted to that frequency: the interval
     // is a parameter like any other, and one that costs money to get wrong.
-    const std::vector<int> intervals = rebalanceSweep ? std::vector<int>{5, 10, 21, 42, 63, 126} : std::vector<int>{rebalance};
+    const std::vector<int> intervals =
+        rebalanceSweep ? std::vector<int>{5, 10, 21, 42, 63, 126} : std::vector<int>{rebalance};
 
     portfolio::PortfolioEngine engine(10000000.0);
+
+    // Borrowing is asked as its own question, because its answer is not a column
+    // next to the others: a levered result and its unlevered twin are the same
+    // rule, and the only thing worth reading is how the two differ.
+    if (leverageSweep) {
+        cfg.rebalanceEveryBars = rebalance;
+        cfg.marginRateAnnual   = marginRate;
+        cfg.marginCallLeverage = marginCall;
+
+        std::cout << "\n borrowing at " << std::fixed << std::setprecision(1) << marginRate * 100.0 << "%/yr";
+        if (marginCall > 0.0) {
+            std::cout << ", called back at " << std::setprecision(2) << marginCall << "x";
+        } else {
+            std::cout << ", never called (optimistic: a real broker sells into the fall)";
+        }
+        std::cout << "\n\n";
+        printLeverageHeader();
+
+        for (const double lev : {1.0, 1.5, 2.0, 2.5, 3.0}) {
+            cfg.maxLeverage = lev;
+            auto strategies = portfolio::standardStrategySet();
+            for (auto& s : strategies) {
+                const std::string base = s->name();
+                if (base.rfind("Momentum", 0) == 0) {
+                    continue;  // measured already and not worth borrowing against
+                }
+                portfolio::Levered levered(std::move(s), lev);
+                auto               r = engine.run(levered, data, cfg);
+                r.strategyName       = base;
+                printLeverageRow(r, lev);
+            }
+            std::cout << "\n";
+        }
+        return 0;
+    }
+
     for (const int interval : intervals) {
         cfg.rebalanceEveryBars = interval;
 

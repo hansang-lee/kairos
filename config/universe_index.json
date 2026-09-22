@@ -1,7 +1,7 @@
 {
   "note": "Index, sector and asset-class ETFs listed on KRX, all with history back to 2015-2016. Trend and timing rules are built for broad baskets, not single names: on 30 individual KRX stocks they cut no drawdown at all, because one company's news whipsaws a long average. This universe is where those rules should be judged.",
   "survivorship_warning": "Every ETF here still trades. Funds that closed are absent, so results are an upper bound — less so than for single stocks, since index ETFs rarely delist, but sector and thematic ETFs do get wound up.",
-  "cost_warning": "The backtest models commission, slippage and transaction tax, but NOT the annual management fee, which is roughly 0.15-0.5% a year for these. Over five years that is 1-2.5 percentage points missing from every result below.",
+  "cost_warning": "The backtest models commission, slippage, transaction tax and an annual management fee. No ticker below states its own expense_ratio yet, so every run applies the tool's assumed default (0.3%/yr unless --expense-ratio says otherwise) and prints that it did. Published fees for these products run roughly 0.05-0.5%/yr, so the assumption is worth a few percentage points over a decade: at 0.3% it costs the equal-weight basket 6.7 points of ten-year return. Fill in per-ticker expense_ratio fields to replace the assumption with the measurement.",
   "leverage_warning": "122630 and 233740 are 2x daily-reset products. Daily reset decays in choppy markets, so they do not deliver twice the period return and are not a proxy for borrowing. Any result involving them must be read with that in mind.",
   "tickers": [
     {
