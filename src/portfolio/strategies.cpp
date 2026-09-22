@@ -171,14 +171,41 @@ std::vector<double> EqualWeight::targetWeights(const PortfolioData& data, std::s
 
 /* ------------------------------ GroupParity ------------------------------ */
 
-GroupParity::GroupParity(std::vector<std::string> assetClasses, bool inverseVolWithin, std::size_t lookback)
+GroupParity::GroupParity(std::vector<std::string> assetClasses, bool inverseVolWithin, std::size_t lookback,
+                         std::vector<std::pair<std::string, double>> classWeights)
     : classes_(std::move(assetClasses))
     , inverseVolWithin_(inverseVolWithin)
-    , lookback_(lookback) {}
+    , lookback_(lookback)
+    , classWeights_(std::move(classWeights)) {}
 
 std::string GroupParity::name() const {
-    return inverseVolWithin_ ? "Group parity (vol-weighted in)" : "Group parity (equal in)";
+    const char* within = inverseVolWithin_ ? " (vol-weighted in)" : " (equal in)";
+    if (classWeights_.empty()) {
+        return std::string("Group parity") + within;
+    }
+    double total = 0.0;
+    for (const auto& [label, w] : classWeights_) {
+        (void)label;
+        total += w;
+    }
+    std::ostringstream os;
+    os << "Tilted parity" << within << " " << std::fixed << std::setprecision(0) << total;
+    return os.str();
 }
+
+namespace {
+
+/** The share a class is entitled to, before it is spread over what is available. */
+double configuredWeight(const std::vector<std::pair<std::string, double>>& weights, const std::string& label) {
+    for (const auto& [name, w] : weights) {
+        if (name == label) {
+            return std::max(w, 0.0);
+        }
+    }
+    return 0.0;
+}
+
+}  // namespace
 
 void GroupParity::init(const PortfolioData&) {}
 
@@ -217,8 +244,22 @@ std::vector<double> GroupParity::targetWeights(const PortfolioData& data, std::s
         return weights;
     }
 
-    const double perClass = 1.0 / static_cast<double>(labels.size());
-    for (const auto& group : members) {
+    // The configured shares are renormalised over the classes that actually exist
+    // at this bar, so a class whose funds all list later does not leave the book
+    // holding cash it never chose to hold.
+    std::vector<double> share(labels.size(), 0.0);
+    double              shareTotal = 0.0;
+    for (std::size_t g = 0; g < labels.size(); ++g) {
+        share[g] = classWeights_.empty() ? 1.0 : configuredWeight(classWeights_, labels[g]);
+        shareTotal += share[g];
+    }
+    if (shareTotal <= 0.0) {
+        return weights;
+    }
+
+    for (std::size_t g = 0; g < members.size(); ++g) {
+        const auto&  group    = members[g];
+        const double perClass = share[g] / shareTotal;
         if (!inverseVolWithin_) {
             const double each = perClass / static_cast<double>(group.size());
             for (const std::size_t a : group) {

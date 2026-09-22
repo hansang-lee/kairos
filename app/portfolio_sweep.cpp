@@ -58,6 +58,9 @@ void printUsage() {
               << "  all of it in equal weight. Prices come from cache/daily/, which `sweep` fills.\n"
               << "  --rebalance-sweep repeats the comparison at several rebalancing intervals, to\n"
               << "  separate the strategy's edge from the cost of chasing its target.\n"
+              << "  --equity-sweep sets the equity share explicitly, from all-bonds to all-equity,\n"
+              << "  using the universe's equity_classes. Redrawing a taxonomy sets this number\n"
+              << "  without admitting to setting it; this shows the whole trade-off instead.\n"
               << "  --leverage-sweep borrows against each strategy at several multiples, charging\n"
               << "  --margin-rate for the loan and cutting the position back at --margin-call.\n"
               << "  --expense-ratio is the annual management fee assumed for any asset whose entry\n"
@@ -76,6 +79,7 @@ int main(int argc, char* argv[]) {
     bool        rebalanceSweep = false;
     double      defaultExpense = 0.003;
     bool        leverageSweep  = false;
+    bool        equitySweep    = false;
     double      marginRate     = 0.06;
     double      marginCall     = 0.0;
 
@@ -93,6 +97,8 @@ int main(int argc, char* argv[]) {
             rebalanceSweep = true;
         else if (arg == "--leverage-sweep")
             leverageSweep = true;
+        else if (arg == "--equity-sweep")
+            equitySweep = true;
         else if (arg == "--margin-rate" && i + 1 < argc)
             marginRate = std::stod(argv[++i]);
         else if (arg == "--margin-call" && i + 1 < argc)
@@ -140,6 +146,56 @@ int main(int argc, char* argv[]) {
     // Borrowing is asked as its own question, because its answer is not a column
     // next to the others: a levered result and its unlevered twin are the same
     // rule, and the only thing worth reading is how the two differ.
+    // The equity share, asked directly. Every way of redrawing the class lines was
+    // really a way of setting this number, so setting it is the honest version of
+    // the same experiment — and it shows the whole trade-off rather than one point
+    // on it.
+    if (equitySweep) {
+        if (loaded.equityClasses.empty()) {
+            std::cerr << "[-] " << universePath << " does not say which classes are the equity sleeve.\n";
+            return 1;
+        }
+        cfg.rebalanceEveryBars = rebalance;
+        std::vector<std::string> defensive;
+        for (const auto& c : loaded.assetClasses) {
+            const bool isEquity = std::find(loaded.equityClasses.begin(), loaded.equityClasses.end(), c)
+                               != loaded.equityClasses.end();
+            if (!isEquity && !c.empty() && std::find(defensive.begin(), defensive.end(), c) == defensive.end()) {
+                defensive.push_back(c);
+            }
+        }
+
+        std::cout << "\n equity sleeve: ";
+        for (const auto& c : loaded.equityClasses) {
+            std::cout << c << " ";
+        }
+        std::cout << "  | rest: ";
+        for (const auto& c : defensive) {
+            std::cout << c << " ";
+        }
+        std::cout << "\n\n";
+        printHeader();
+        printRow(portfolio::buyAndHold(data, cfg));
+
+        for (const int pct : {0, 20, 30, 40, 50, 60, 70, 80, 100}) {
+            for (const bool volIn : {false, true}) {
+                std::vector<std::pair<std::string, double>> cw;
+                for (const auto& c : loaded.equityClasses) {
+                    cw.emplace_back(c, static_cast<double>(pct) / static_cast<double>(loaded.equityClasses.size()));
+                }
+                for (const auto& c : defensive) {
+                    cw.emplace_back(c, static_cast<double>(100 - pct) / static_cast<double>(defensive.size()));
+                }
+                portfolio::GroupParity s(loaded.assetClasses, volIn, 63, cw);
+                auto                   r = s.name();
+                auto                   res = engine.run(s, data, cfg);
+                res.strategyName = std::to_string(pct) + "% equity" + (volIn ? " (vol-weighted in)" : " (equal in)");
+                printRow(res);
+            }
+        }
+        return 0;
+    }
+
     if (leverageSweep) {
         cfg.rebalanceEveryBars = rebalance;
         cfg.marginRateAnnual   = marginRate;

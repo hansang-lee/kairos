@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "portfolio/iportfolio_strategy.hpp"
@@ -99,9 +100,18 @@ class GroupParity: public IPortfolioStrategy {
      *        inverse of their volatility rather than equally — the class split
      *        stays fixed either way, so this only changes which names carry it.
      * @param lookback Bars of returns used for that volatility.
+     * @param classWeights How much of the account each class gets, by label. Empty
+     *        splits evenly, which is the version with no fitted parameter.
+     *
+     *        Spelling the split out matters more than it looks. Across ten ways of
+     *        drawing the class lines over this universe the strategy's Sharpe ran
+     *        from 0.71 to 1.11, and that spread correlates 0.89 with one number:
+     *        how much of the book ended up outside equity. Redrawing the taxonomy
+     *        was never a modelling choice, it was a way of setting the equity share
+     *        without admitting to setting it. This parameter admits it.
      */
     explicit GroupParity(std::vector<std::string> assetClasses, bool inverseVolWithin = false,
-                         std::size_t lookback = 63);
+                         std::size_t lookback = 63, std::vector<std::pair<std::string, double>> classWeights = {});
 
     [[nodiscard]] std::string         name() const override;
     void                              init(const PortfolioData& data) override;
@@ -109,9 +119,10 @@ class GroupParity: public IPortfolioStrategy {
     [[nodiscard]] std::vector<double> targetWeights(const PortfolioData& data, std::size_t index) override;
 
    private:
-    std::vector<std::string> classes_;
-    bool                     inverseVolWithin_;
-    std::size_t              lookback_;
+    std::vector<std::string>                     classes_;
+    bool                                         inverseVolWithin_;
+    std::size_t                                  lookback_;
+    std::vector<std::pair<std::string, double>>  classWeights_;
 };
 
 /**

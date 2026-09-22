@@ -62,6 +62,9 @@ struct UniverseLoad {
      * away silently.
      */
     bool allFeesKnown = true;
+
+    /** @brief The universe's `equity_classes`, naming which classes are the equity sleeve. */
+    std::vector<std::string> equityClasses;
 };
 
 /**

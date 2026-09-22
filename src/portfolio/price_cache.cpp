@@ -106,6 +106,12 @@ UniverseLoad loadUniverse(const std::string& universePath, const std::string& st
         return out;
     }
 
+    if (universe->contains("equity_classes") && (*universe)["equity_classes"].is_array()) {
+        for (const auto& e : (*universe)["equity_classes"]) {
+            out.equityClasses.push_back(e.get<std::string>());
+        }
+    }
+
     const int64_t from = parseDate(startDate);
     const int64_t to   = parseDate(endDate);
 

@@ -1,17 +1,18 @@
 {
-  "note": "The index universe with its duplicate listings removed and every asset tagged with the class it actually belongs to. Measured over 2016-2026, the 34-ticker universe carries only 3.0 independent bets: KODEX 200, TIGER 200, KBSTAR 200, ARIRANG 200, KOSEF 200, KODEX 코스피 and KODEX 레버리지 correlate 0.975-0.998 with each other, and eleven sector ETFs correlate 0.49-0.78 with KOSPI 200 because they are pieces of it. Equal weight over that list is not a diversified portfolio; it is 59% Korean equity wearing thirty-four labels. One ticker survives from each redundant cluster, chosen for the longer history where history and liquidity disagreed, since a backtest cannot use bars that do not exist.",
-  "asset_class_note": "asset_class is what an allocation rule should group by; `group` stays as the descriptive label. Sector ETFs are tagged KR_EQUITY rather than given a class of their own, because a rule that treats 'sectors' as a separate class would put 40% of the book in Korean equity while believing it put 20%.",
-  "dropped": {
-    "102110, 148020, 152100, 069660, 226490": "KOSPI 200 again; kept 069500, by far the most traded",
-    "122630, 233740": "2x daily-reset versions of indices already here, correlating 0.994-0.998 with them. Leverage belongs in the account's exposure setting, not in the asset list",
-    "261220": "KODEX WTI 원유선물, correlating 0.952 with TIGER 원유선물; the kept one starts two years earlier",
-    "261240": "KODEX 미국달러선물; the kept one starts two years earlier",
-    "227540": "TIGER 200 헬스케어, correlating 0.887 with the kept TIGER 헬스케어",
-    "266370": "KODEX 200IT has no usable cached history"
+  "note": "universe_core widened with the five funds that were measurably different from what it already held, out of twelve fetched. The test applied was correlation against every asset already in the book over 2016-2026: a candidate whose closest match was above roughly 0.7 is the same bet under another name and was left out.",
+  "asset_class_note": "KOSEF 미국달러선물 moved from a currency class of its own into USD_RATES beside TIGER 미국채10년선물. The two correlate 0.754 because an unhedged US Treasury fund is a dollar bet before it is a rates bet, and giving each its own class would put a third of the book on the dollar while believing it put a sixth.",
+  "rejected": {
+    "308620 KODEX 미국채10년선물": "the same US 10-year bet as the kept 305080, with less history",
+    "144600 KODEX 은선물": "0.755 with the gold fund already held",
+    "245340 TIGER 미국다우존스30": "0.709 with TIGER 미국나스닥100",
+    "251350 KODEX 선진국MSCI World": "0.784 with TIGER 미국나스닥100",
+    "273130 KODEX 종합채권AA-": "0.885 with KOSEF 국고채10년",
+    "329200 TIGER 리츠부동산인프라": "0.540 with KOSPI 200, and no history before mid-2019",
+    "114800 KODEX 인버스": "-0.995 with KOSPI 200, which is the best diversification number in the whole search and still a reason to refuse it. A daily-reset inverse fund lost 71.2% over this decade; an allocation rule holding it permanently is paying that bleed forever in exchange for a hedge it could get by holding less equity. Negative correlation is not free when the asset has negative expected return."
   },
   "survivorship_warning": "Every ETF here still trades. Funds that were wound up are absent, so results are an upper bound.",
   "cost_warning": "No ticker states its own expense_ratio yet, so runs apply the tool's assumed default and print that they did. Published fees for these products run roughly 0.05-0.5%/yr.",
-  "liquidity_warning": "Turnover in 2025 ranges from 4,628억원 a day (KODEX 200) to 0.2억원 (TIGER 200 금융). At a ten-million-won account every one of them is tradeable, but the 0.05% slippage the backtest assumes is optimistic for the thin ones. Closes repeat from the previous day on 0.4-5.7% of bars, which is low enough not to distort volatility or correlation estimates.",
+  "history_warning": "TIGER 미국채10년선물 lists in August 2018, so the first two and a half years of a 2016 run have no US Treasury sleeve and USD_RATES is carried by the currency fund alone. The engine knows the fund is unavailable and will not weight it, but the early years are a different portfolio from the later ones.",
   "tickers": [
     {
       "code": "069500",
@@ -125,19 +126,19 @@
       "code": "148070",
       "name": "KOSEF 국고채10년",
       "group": "채권",
-      "asset_class": "BOND"
+      "asset_class": "KR_BOND"
     },
     {
       "code": "114260",
       "name": "KODEX 국고채3년",
       "group": "채권",
-      "asset_class": "BOND"
+      "asset_class": "KR_BOND"
     },
     {
       "code": "136340",
       "name": "TIGER 단기선진하이일드",
       "group": "채권",
-      "asset_class": "BOND"
+      "asset_class": "KR_BOND"
     },
     {
       "code": "132030",
@@ -155,12 +156,43 @@
       "code": "138230",
       "name": "KOSEF 미국달러선물",
       "group": "통화",
-      "asset_class": "CURRENCY"
+      "asset_class": "USD_RATES"
+    },
+    {
+      "code": "305080",
+      "name": "TIGER 미국채10년선물",
+      "group": "해외채권",
+      "asset_class": "USD_RATES"
+    },
+    {
+      "code": "160580",
+      "name": "TIGER 구리실물",
+      "group": "원자재",
+      "asset_class": "COMMODITY"
+    },
+    {
+      "code": "137610",
+      "name": "TIGER 농산물선물(H)",
+      "group": "원자재",
+      "asset_class": "COMMODITY"
+    },
+    {
+      "code": "245710",
+      "name": "KINDEX 베트남VN30(합성)",
+      "group": "해외주식",
+      "asset_class": "INTL_EQUITY"
+    },
+    {
+      "code": "182480",
+      "name": "TIGER 미국MSCI리츠(합성H)",
+      "group": "부동산",
+      "asset_class": "REAL_ESTATE"
     }
   ],
   "equity_classes": [
     "KR_EQUITY",
-    "INTL_EQUITY"
+    "INTL_EQUITY",
+    "REAL_ESTATE"
   ],
   "equity_classes_note": "Which asset classes count as the equity sleeve, so a tool can set the equity share explicitly instead of expressing it by redrawing the class lines. Over ten taxonomies the strategy's Sharpe ran 0.71-1.11 and that spread correlated 0.89 with the non-equity share alone."
 }

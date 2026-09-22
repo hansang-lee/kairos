@@ -174,6 +174,72 @@ TEST(allocation, the_allocation_cannot_see_the_bar_it_is_made_for) {
     }
 }
 
+TEST(allocation, a_configured_class_split_is_honoured_exactly) {
+    const auto d = portfolio::PortfolioData::align({aSeries("E1", {100, 100, 100, 100}),
+                                                    aSeries("E2", {100, 100, 100, 100}),
+                                                    aSeries("B1", {100, 100, 100, 100})});
+
+    // 20% equity is the split the frontier peaks at; the rule must actually put 20%
+    // there rather than approximately 20%.
+    portfolio::GroupParity s({"EQ", "EQ", "BOND"}, false, 63, {{"EQ", 20.0}, {"BOND", 80.0}});
+    s.init(d);
+    const auto w = s.targetWeights(d, 3);
+
+    CHECK_NEAR(w[0], 0.10, 1e-9);
+    CHECK_NEAR(w[1], 0.10, 1e-9);
+    CHECK_NEAR(w[2], 0.80, 1e-9);
+    CHECK_NEAR(sum(w), 1.0, 1e-9);
+}
+
+TEST(allocation, configured_shares_are_renormalised_over_the_classes_that_exist) {
+    // The bond fund lists on the last bar. Before it does, an 80% bond target has
+    // nowhere to go, and holding 80% cash is not the decision the rule made.
+    const auto d = portfolio::PortfolioData::align(
+        {aSeries("E", {100, 100, 100, 100}), aSeries("B", {100}, 1600000000 + 3 * 86400)});
+
+    portfolio::GroupParity s({"EQ", "BOND"}, false, 63, {{"EQ", 20.0}, {"BOND", 80.0}});
+    s.init(d);
+
+    CHECK_NEAR(s.targetWeights(d, 2)[0], 1.0, 1e-9);
+
+    const auto late = s.targetWeights(d, 4);
+    CHECK_NEAR(late[0], 0.20, 1e-9);
+    CHECK_NEAR(late[1], 0.80, 1e-9);
+}
+
+TEST(allocation, a_class_the_split_does_not_mention_is_left_out_rather_than_defaulted) {
+    const auto d = portfolio::PortfolioData::align({aSeries("E", {100, 100, 100}),
+                                                    aSeries("B", {100, 100, 100}),
+                                                    aSeries("G", {100, 100, 100})});
+
+    // Naming two classes and not the third means the third gets nothing; silently
+    // giving it an equal share would make an omission look like a decision.
+    portfolio::GroupParity s({"EQ", "BOND", "GOLD"}, false, 63, {{"EQ", 50.0}, {"BOND", 50.0}});
+    s.init(d);
+    const auto w = s.targetWeights(d, 2);
+
+    CHECK_NEAR(w[0], 0.5, 1e-9);
+    CHECK_NEAR(w[1], 0.5, 1e-9);
+    CHECK_NEAR(w[2], 0.0, 1e-9);
+}
+
+TEST(allocation, an_empty_split_is_the_even_one_and_changes_nothing) {
+    const auto d = portfolio::PortfolioData::align({aSeries("E1", {100, 100, 100}),
+                                                    aSeries("E2", {100, 100, 100}),
+                                                    aSeries("B", {100, 100, 100})});
+
+    portfolio::GroupParity plain({"EQ", "EQ", "BOND"});
+    portfolio::GroupParity spelled({"EQ", "EQ", "BOND"}, false, 63, {{"EQ", 1.0}, {"BOND", 1.0}});
+    plain.init(d);
+    spelled.init(d);
+
+    const auto a = plain.targetWeights(d, 2);
+    const auto b = spelled.targetWeights(d, 2);
+    for (std::size_t i = 0; i < a.size(); ++i) {
+        CHECK_NEAR(a[i], b[i], 1e-12);
+    }
+}
+
 /* ------------------------- AbsoluteMomentumFilter ------------------------- */
 
 TEST(allocation, an_asset_below_its_own_trailing_return_is_dropped_to_cash) {
