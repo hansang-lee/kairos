@@ -101,8 +101,13 @@ int main(int argc, char* argv[]) {
             continue;
         }
 
-        auto       cached = refetch ? nullptr : portfolio::loadCachedDaily(code);
-        const bool covers = cached && !cached->timestamps.empty() && cached->timestamps.front() <= wanted + 7 * 86400;
+        auto cached = refetch ? nullptr : portfolio::loadCachedDaily(code);
+        // Both ends, not just the start. Checking only the start meant a cache that
+        // stopped nine months ago was silently reused, and every backtest quietly
+        // ended in December while claiming to run to today.
+        const bool covers = cached && !cached->timestamps.empty()
+                         && cached->timestamps.front() <= wanted + 7 * 86400
+                         && cached->timestamps.back() >= portfolio::parseDate(to) - 10 * 86400;
 
         std::string status = "cached";
         auto        data   = covers ? cached : nullptr;
