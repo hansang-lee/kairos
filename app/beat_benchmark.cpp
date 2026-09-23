@@ -143,6 +143,10 @@ int main(int argc, char* argv[]) {
     const Series tlt = load("TLT", "TLT", start, end);
     const Series shy = load("SHY", "SHY", start, end);
     const Series gld = load("GLD", "GLD", start, end);
+    // The real leveraged funds rather than a reconstruction, wherever they reach.
+    const Series qld  = load("QLD", "QLD", start, end);
+    const Series tqqq = load("TQQQ", "TQQQ", start, end);
+    const Series bill = load("^IRX", "IRX", start, end);
     if (qqq.close.size() < 800 || tlt.close.size() < 800) {
         std::cerr << "[-] Not enough overlapping history." << std::endl;
         return 1;
@@ -174,6 +178,27 @@ int main(int argc, char* argv[]) {
     const std::vector<double>  T   = onTimeline(tlt);
     const std::vector<double>  C   = onTimeline(shy);
     const std::vector<double>  G   = onTimeline(gld);
+    const std::vector<double>  L2  = onTimeline(qld);
+    const std::vector<double>  L3  = onTimeline(tqqq);
+    const std::vector<double>  R   = onTimeline(bill);
+
+    // A reconstructed leveraged fund, so the question reaches back past 2006 when
+    // QLD listed and 2010 when TQQQ did — which is the only way the dot-com bust
+    // enters the comparison at all. The same construction tracked real QLD at 0.9951
+    // daily correlation over twenty years and grew slightly less than the fund did,
+    // so it errs against leverage.
+    auto reconstruct = [&](double mult) {
+        std::vector<double> out(qqq.close.size(), 1.0);
+        for (std::size_t i = 1; i < qqq.close.size(); ++i) {
+            const double r    = qqq.close[i] / qqq.close[i - 1] - 1.0;
+            const double rate = R[i - 1] > 0.0 ? R[i - 1] / 100.0 : 0.04;
+            const double cost = ((mult - 1.0) * (rate + 0.004) + 0.0095) / 252.0;
+            out[i]            = std::max(0.0, out[i - 1] * (1.0 + mult * r - cost));
+        }
+        return out;
+    };
+    const std::vector<double> S2 = reconstruct(2.0);
+    const std::vector<double> S3 = reconstruct(3.0);
     const std::size_t          n   = ts.size();
     const std::size_t          warm = 252;
 
@@ -197,12 +222,32 @@ int main(int argc, char* argv[]) {
      * the move it is about to receive.
      */
     using Weights = std::vector<std::pair<const std::vector<double>*, double>>;
-    auto walk = [&](const std::function<Weights(std::size_t)>& pick) {
+    // A fund that has not listed yet has a zero price here, and treating that as
+    // cash quietly credits a strategy with sitting out a crash it was not there for
+    // — QLD, which listed in 2006, appeared to dodge the dot-com bust entirely.
+    // Each candidate therefore reports the first bar on which everything it needs
+    // actually existed, and windows starting before that are not counted.
+    auto walk = [&](const std::function<Weights(std::size_t)>& pick, std::size_t* firstUsable) {
         std::vector<double> eq;
         eq.reserve(n - warm);
         double  value = 1.0;
         Weights held;
         eq.push_back(value);
+        if (firstUsable != nullptr) {
+            *firstUsable = 0;
+            for (std::size_t i = warm + 1; i < n; ++i) {
+                bool allThere = true;
+                for (const auto& [px, w] : pick(i - 1)) {
+                    if (w > 0.0 && (px == nullptr || (*px)[i - 1] <= 0.0)) {
+                        allThere = false;
+                    }
+                }
+                if (allThere) {
+                    *firstUsable = i - warm - 1;
+                    break;
+                }
+            }
+        }
         for (std::size_t i = warm + 1; i < n; ++i) {
             const Weights want = pick(i - 1);
             bool          same = want.size() == held.size();
@@ -264,12 +309,39 @@ int main(int argc, char* argv[]) {
          [&](std::size_t i) {
              return Q[i] > sma(Q, i, 200) ? Weights{{&Q, 0.8}, {&T, 0.2}} : Weights{{&T, 1.0}};
          }},
+
+        // Leverage, asked as a return question rather than a risk one. Over 41 years
+        // of the index a 2x fund with a trend rule did out-compound the index, and the
+        // reason it was set aside was the drawdown, not the return.
+        {"QLD (2x) held", [&](std::size_t) { return Weights{{&L2, 1.0}}; }},
+        {"QLD above ma200, else cash",
+         [&](std::size_t i) { return Q[i] > sma(Q, i, 200) ? Weights{{&L2, 1.0}} : Weights{{&C, 1.0}}; }},
+        {"QLD above ma200, else long bonds",
+         [&](std::size_t i) { return Q[i] > sma(Q, i, 200) ? Weights{{&L2, 1.0}} : Weights{{&T, 1.0}}; }},
+        {"QLD above ma100, else cash",
+         [&](std::size_t i) { return Q[i] > sma(Q, i, 100) ? Weights{{&L2, 1.0}} : Weights{{&C, 1.0}}; }},
+        {"Half QLD half cash, ma200",
+         [&](std::size_t i) { return Q[i] > sma(Q, i, 200) ? Weights{{&L2, 0.5}, {&C, 0.5}} : Weights{{&C, 1.0}}; }},
+        {"QLD 60 / TLT 40, rebalanced",
+         [&](std::size_t) { return Weights{{&L2, 0.6}, {&T, 0.4}}; }},
+        {"TQQQ (3x) held", [&](std::size_t) { return Weights{{&L3, 1.0}}; }},
+        {"TQQQ above ma200, else cash",
+         [&](std::size_t i) { return Q[i] > sma(Q, i, 200) ? Weights{{&L3, 1.0}} : Weights{{&C, 1.0}}; }},
+
+        {"2x reconstructed, held", [&](std::size_t) { return Weights{{&S2, 1.0}}; }},
+        {"2x reconstructed above ma200",
+         [&](std::size_t i) { return Q[i] > sma(Q, i, 200) ? Weights{{&S2, 1.0}} : Weights{{&C, 1.0}}; }},
+        {"2x recon 60 / TLT 40",
+         [&](std::size_t) { return Weights{{&S2, 0.6}, {&T, 0.4}}; }},
+        {"3x reconstructed above ma200",
+         [&](std::size_t i) { return Q[i] > sma(Q, i, 200) ? Weights{{&S3, 1.0}} : Weights{{&C, 1.0}}; }},
     };
 
     std::vector<std::vector<double>> curves;
+    std::vector<std::size_t>         firstUsable(candidates.size(), 0);
     curves.reserve(candidates.size());
-    for (const auto& c : candidates) {
-        curves.push_back(walk(c.pick));
+    for (std::size_t c = 0; c < candidates.size(); ++c) {
+        curves.push_back(walk(candidates[c].pick, &firstUsable[c]));
     }
     const std::vector<int64_t> eqTs(ts.begin() + static_cast<std::ptrdiff_t>(warm), ts.end());
 
@@ -292,8 +364,8 @@ int main(int argc, char* argv[]) {
               << std::setprecision(2) << switchCost * 100.0 << "% a change.\n"
               << "==========================================================================================\n\n"
               << std::left << std::setw(36) << "" << std::right << std::setw(9) << "CAGR%" << std::setw(9) << "MDD%"
-              << std::setw(9) << "sharpe" << std::setw(11) << "beat B&H%" << std::setw(12) << "med excess"
-              << std::setw(12) << "worst exc" << "\n"
+              << std::setw(9) << "sharpe" << std::setw(8) << "beat%" << std::setw(7) << "wins n" << std::setw(11) << "med exc"
+              << std::setw(11) << "worst exc" << "   from\n"
               << std::string(98, '-') << "\n";
 
     std::vector<double> benchWin;
@@ -302,9 +374,13 @@ int main(int argc, char* argv[]) {
     }
 
     for (std::size_t c = 0; c < candidates.size(); ++c) {
+        const std::size_t   from = firstUsable[c];
         std::vector<double> excess;
         int                 wins = 0;
         for (std::size_t w = 0; w < windows.size(); ++w) {
+            if (windows[w].first < from) {
+                continue;  // the funds this needs did not exist yet
+            }
             const double e = cagrOf(curves[c], eqTs, windows[w].first, windows[w].second) - benchWin[w];
             excess.push_back(e);
             if (e > 0.0) {
@@ -312,11 +388,15 @@ int main(int argc, char* argv[]) {
             }
         }
         std::cout << std::left << std::setw(36) << candidates[c].name.substr(0, 35) << std::right << std::fixed
-                  << std::setprecision(1) << std::setw(9) << cagrOf(curves[c], eqTs, 0, curves[c].size())
-                  << std::setw(9) << mddOf(curves[c], 0, curves[c].size()) << std::setprecision(2) << std::setw(9)
-                  << sharpeOf(curves[c]) << std::setprecision(1) << std::setw(11)
-                  << (windows.empty() ? 0.0 : wins * 100.0 / static_cast<double>(windows.size())) << std::setw(12)
-                  << median(excess) << std::setw(12) << *std::min_element(excess.begin(), excess.end()) << "\n";
+                  << std::setprecision(1) << std::setw(9) << cagrOf(curves[c], eqTs, from, curves[c].size())
+                  << std::setw(9) << mddOf(curves[c], from, curves[c].size()) << std::setprecision(2) << std::setw(9)
+                  << sharpeOf(std::vector<double>(curves[c].begin() + static_cast<std::ptrdiff_t>(from),
+                                                  curves[c].end()))
+                  << std::setprecision(1) << std::setw(8)
+                  << (excess.empty() ? 0.0 : wins * 100.0 / static_cast<double>(excess.size())) << std::setw(7)
+                  << excess.size() << std::setw(11) << median(excess) << std::setw(11)
+                  << (excess.empty() ? 0.0 : *std::min_element(excess.begin(), excess.end())) << "   "
+                  << (from > 0 ? dayOf(eqTs[from]) : "") << "\n";
     }
 
     std::cout << "\n beat B&H% is the share of holding periods whose annualised return came out above the\n"
