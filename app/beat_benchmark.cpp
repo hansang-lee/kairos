@@ -112,7 +112,7 @@ double median(std::vector<double> v) {
 }  // namespace
 
 int main(int argc, char* argv[]) {
-    std::string start = "2005-01-01", end = "2026-09-22";
+    std::string start = "2010-09-22", end = "2026-09-22";
     double      windowYears = 3.0, switchCost = 0.0005;
     int         stepMonths = 3;
 
@@ -282,6 +282,10 @@ int main(int argc, char* argv[]) {
     };
 
     const std::vector<Candidate> candidates = {
+        // The two plain holdings first, always. Every rule below is asking to be
+        // preferred over one of them, and a reader should not have to hunt for what
+        // it is being compared against.
+        {"SPY, held", [&](std::size_t) { return Weights{{&S, 1.0}}; }},
         {"QQQ, held (the benchmark)", [&](std::size_t) { return Weights{{&Q, 1.0}}; }},
         {"QQQ above ma200, else cash",
          [&](std::size_t i) { return Q[i] > sma(Q, i, 200) ? Weights{{&Q, 1.0}} : Weights{{&C, 1.0}}; }},
@@ -363,14 +367,15 @@ int main(int argc, char* argv[]) {
               << "-year holding periods, stepped " << stepMonths << " months. Switching costs "
               << std::setprecision(2) << switchCost * 100.0 << "% a change.\n"
               << "==========================================================================================\n\n"
-              << std::left << std::setw(36) << "" << std::right << std::setw(9) << "CAGR%" << std::setw(9) << "MDD%"
-              << std::setw(9) << "sharpe" << std::setw(8) << "beat%" << std::setw(7) << "wins n" << std::setw(11) << "med exc"
-              << std::setw(11) << "worst exc" << "   from\n"
-              << std::string(98, '-') << "\n";
+              << std::left << std::setw(34) << "" << std::right << std::setw(24) << "period" << std::setw(7)
+              << "years" << std::setw(11) << "total%" << std::setw(8) << "CAGR%" << std::setw(8) << "MDD%"
+              << std::setw(8) << "sharpe" << std::setw(8) << "beat%" << std::setw(10) << "med exc" << "\n"
+              << std::string(118, '-') << "\n";
 
-    std::vector<double> benchWin;
+    constexpr std::size_t kBench = 1;  // QQQ, held
+    std::vector<double>   benchWin;
     for (const auto& [a, b] : windows) {
-        benchWin.push_back(cagrOf(curves[0], eqTs, a, b));
+        benchWin.push_back(cagrOf(curves[kBench], eqTs, a, b));
     }
 
     for (std::size_t c = 0; c < candidates.size(); ++c) {
@@ -387,22 +392,29 @@ int main(int argc, char* argv[]) {
                 ++wins;
             }
         }
-        std::cout << std::left << std::setw(36) << candidates[c].name.substr(0, 35) << std::right << std::fixed
-                  << std::setprecision(1) << std::setw(9) << cagrOf(curves[c], eqTs, from, curves[c].size())
-                  << std::setw(9) << mddOf(curves[c], from, curves[c].size()) << std::setprecision(2) << std::setw(9)
-                  << sharpeOf(std::vector<double>(curves[c].begin() + static_cast<std::ptrdiff_t>(from),
-                                                  curves[c].end()))
-                  << std::setprecision(1) << std::setw(8)
-                  << (excess.empty() ? 0.0 : wins * 100.0 / static_cast<double>(excess.size())) << std::setw(7)
-                  << excess.size() << std::setw(11) << median(excess) << std::setw(11)
-                  << (excess.empty() ? 0.0 : *std::min_element(excess.begin(), excess.end())) << "   "
-                  << (from > 0 ? dayOf(eqTs[from]) : "") << "\n";
+        const std::vector<double> lived(curves[c].begin() + static_cast<std::ptrdiff_t>(from), curves[c].end());
+        const double totalPct = lived.front() > 0.0 ? (lived.back() / lived.front() - 1.0) * 100.0 : 0.0;
+        const double years    = static_cast<double>(eqTs.back() - eqTs[from]) / (365.25 * 86400.0);
+
+        std::cout << std::left << std::setw(34) << candidates[c].name.substr(0, 33) << std::right
+                  << std::setw(13) << dayOf(eqTs[from]) << " ~ " << std::setw(8) << dayOf(eqTs.back())
+                  << std::fixed << std::setprecision(1) << std::setw(7) << years << std::setw(11) << totalPct
+                  << std::setw(8) << cagrOf(curves[c], eqTs, from, curves[c].size()) << std::setw(8)
+                  << mddOf(curves[c], from, curves[c].size()) << std::setprecision(2) << std::setw(8)
+                  << sharpeOf(lived) << std::setprecision(1) << std::setw(8)
+                  << (excess.empty() ? 0.0 : wins * 100.0 / static_cast<double>(excess.size())) << std::setw(10)
+                  << median(excess) << "\n";
     }
 
-    std::cout << "\n beat B&H% is the share of holding periods whose annualised return came out above the\n"
-              << " benchmark's over the same stretch. med excess and worst exc are that difference in\n"
-              << " points a year. A rule is only worth holding if it wins most windows, not just the\n"
-              << " whole span — nobody holds a rule through the stretch where it loses.\n"
-              << " Windows overlap heavily, so these counts are not independent trials.\n";
+    std::cout << "\n period is each row's own, starting when every fund it needs had listed: a rule using\n"
+              << " TQQQ cannot be measured before February 2010 whatever the requested window says, and\n"
+              << " pretending otherwise credits it for a crash it was not there for. Rows with different\n"
+              << " periods are not directly comparable on total% — read CAGR and beat% for those.\n"
+              << " total% is the whole period's growth, CAGR the same thing compounded annually.\n"
+              << " beat% is the share of rolling " << std::setprecision(0) << windowYears
+              << "-year holding periods whose annualised return came out\n"
+              << " above QQQ's over the same stretch; med exc is that difference in points a year.\n"
+              << " Windows overlap heavily, so those counts are not independent trials.\n"
+              << " No tax and no currency effect; all figures are in USD and include distributions.\n";
     return 0;
 }
