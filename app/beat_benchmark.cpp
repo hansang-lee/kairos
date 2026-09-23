@@ -9,8 +9,13 @@
 #include <string>
 #include <vector>
 
+#include "backtest/backtest_engine.hpp"
 #include "common/util.hpp"
+#include "portfolio/portfolio_engine.hpp"
 #include "portfolio/price_cache.hpp"
+#include "portfolio/strategies.hpp"
+#include "strategy/strategy_catalog.hpp"
+#include "strategy/strategy_factory.hpp"
 #include "yfinance.hpp"
 
 /**
@@ -28,6 +33,31 @@ namespace {
 struct Series {
     std::vector<int64_t> ts;
     std::vector<double>  close;
+};
+
+/**
+ * @brief An equity curve keyed by date rather than by bar.
+ *
+ * Three engines produce results here — one position, a whole allocation, and the
+ * walk below — over two trading calendars that do not share holidays. Comparing
+ * them by bar index would silently offset a KRX result against a US one by however
+ * many days the two markets disagreed about. Looking values up by date does not.
+ */
+struct Curve {
+    std::string          name;
+    std::vector<int64_t> ts;
+    std::vector<double>  v;
+
+    [[nodiscard]] bool empty() const { return v.size() < 2; }
+
+    /** @brief The last value at or before `t`, or 0 before the curve starts. */
+    [[nodiscard]] double at(int64_t t) const {
+        if (ts.empty() || t < ts.front()) {
+            return 0.0;
+        }
+        const auto it = std::upper_bound(ts.begin(), ts.end(), t);
+        return v[static_cast<std::size_t>(it - ts.begin()) - 1];
+    }
 };
 
 Series load(const std::string& ticker, const std::string& key, const std::string& from, const std::string& to) {
@@ -65,21 +95,54 @@ std::string dayOf(int64_t ts) {
     return buf;
 }
 
-double cagrOf(const std::vector<double>& eq, const std::vector<int64_t>& ts, std::size_t a, std::size_t b) {
-    if (b <= a + 1 || eq[a] <= 0.0) {
+/** @brief Annualised growth between two dates, or 0 when the curve does not span them. */
+double cagrBetween(const Curve& c, int64_t t0, int64_t t1) {
+    const double a = c.at(t0), b = c.at(t1);
+    if (a <= 0.0 || b <= 0.0) {
         return 0.0;
     }
-    const double years = static_cast<double>(ts[b - 1] - ts[a]) / (365.25 * 86400.0);
-    return years > 0.05 ? (std::pow(eq[b - 1] / eq[a], 1.0 / years) - 1.0) * 100.0 : 0.0;
+    const double years = static_cast<double>(t1 - t0) / (365.25 * 86400.0);
+    return years > 0.05 ? (std::pow(b / a, 1.0 / years) - 1.0) * 100.0 : 0.0;
 }
 
-double mddOf(const std::vector<double>& eq, std::size_t a, std::size_t b) {
-    double peak = eq[a], worst = 0.0;
-    for (std::size_t i = a; i < b; ++i) {
-        peak  = std::max(peak, eq[i]);
-        worst = std::min(worst, (eq[i] - peak) / peak * 100.0);
+double totalBetween(const Curve& c, int64_t t0, int64_t t1) {
+    const double a = c.at(t0), b = c.at(t1);
+    return a > 0.0 ? (b / a - 1.0) * 100.0 : 0.0;
+}
+
+double mddBetween(const Curve& c, int64_t t0, int64_t t1) {
+    double peak = 0.0, worst = 0.0;
+    for (std::size_t i = 0; i < c.ts.size(); ++i) {
+        if (c.ts[i] < t0 || c.ts[i] > t1 || c.v[i] <= 0.0) {
+            continue;
+        }
+        peak  = std::max(peak, c.v[i]);
+        worst = std::min(worst, (c.v[i] - peak) / peak * 100.0);
     }
     return worst;
+}
+
+double sharpeBetween(const Curve& c, int64_t t0, int64_t t1) {
+    std::vector<double> slice;
+    for (std::size_t i = 0; i < c.ts.size(); ++i) {
+        if (c.ts[i] >= t0 && c.ts[i] <= t1 && c.v[i] > 0.0) {
+            slice.push_back(c.v[i]);
+        }
+    }
+    std::vector<double> r;
+    for (std::size_t i = 1; i < slice.size(); ++i) {
+        r.push_back(slice[i] / slice[i - 1] - 1.0);
+    }
+    if (r.size() < 2) {
+        return 0.0;
+    }
+    const double m = std::accumulate(r.begin(), r.end(), 0.0) / static_cast<double>(r.size());
+    double       v = 0.0;
+    for (const double x : r) {
+        v += (x - m) * (x - m);
+    }
+    const double sd = std::sqrt(v / static_cast<double>(r.size()));
+    return sd > 1e-12 ? m / sd * std::sqrt(252.0) : 0.0;
 }
 
 double sharpeOf(const std::vector<double>& eq) {
@@ -341,80 +404,214 @@ int main(int argc, char* argv[]) {
          [&](std::size_t i) { return Q[i] > sma(Q, i, 200) ? Weights{{&S3, 1.0}} : Weights{{&C, 1.0}}; }},
     };
 
-    std::vector<std::vector<double>> curves;
-    std::vector<std::size_t>         firstUsable(candidates.size(), 0);
-    curves.reserve(candidates.size());
-    for (std::size_t c = 0; c < candidates.size(); ++c) {
-        curves.push_back(walk(candidates[c].pick, &firstUsable[c]));
-    }
     const std::vector<int64_t> eqTs(ts.begin() + static_cast<std::ptrdiff_t>(warm), ts.end());
 
-    // Rolling windows, the question as the user actually lives it.
-    const int64_t                                   wl = static_cast<int64_t>(windowYears * 365.25 * 86400.0);
-    const int64_t                                   sp = static_cast<int64_t>(stepMonths * 30.44 * 86400.0);
-    std::vector<std::pair<std::size_t, std::size_t>> windows;
-    for (int64_t t = eqTs.front(); t + wl <= eqTs.back(); t += sp) {
-        const auto a = static_cast<std::size_t>(std::lower_bound(eqTs.begin(), eqTs.end(), t) - eqTs.begin());
-        const auto b = static_cast<std::size_t>(std::lower_bound(eqTs.begin(), eqTs.end(), t + wl) - eqTs.begin());
-        if (b > a + 100) {
-            windows.emplace_back(a, b);
+    std::vector<Curve> curves;
+    curves.reserve(candidates.size());
+    for (const auto& cand : candidates) {
+        std::size_t first = 0;
+        auto        eq    = walk(cand.pick, &first);
+        Curve       cv;
+        cv.name = cand.name;
+        // Dropping the bars before every fund existed, rather than carrying a flat
+        // stretch that would read as a strategy calmly sitting out a crash.
+        cv.ts.assign(eqTs.begin() + static_cast<std::ptrdiff_t>(first), eqTs.end());
+        cv.v.assign(eq.begin() + static_cast<std::ptrdiff_t>(first), eq.end());
+        curves.push_back(std::move(cv));
+    }
+
+    /* ---- Strategies from the other two engines, on their own calendars ---- */
+
+    // An allocation over a whole universe, run by PortfolioEngine.
+    auto addPortfolio = [&](const std::string& universePath, const std::string& label) {
+        const auto loaded = portfolio::loadUniverse(universePath, "1990-01-01", end, 0.0);
+        if (loaded.series.empty()) {
+            return;
         }
+        const auto                   data = portfolio::PortfolioData::align(loaded.series);
+        portfolio::PortfolioConfigBt cfg;
+        cfg.rebalanceEveryBars = 21;
+        cfg.expenseRatios      = loaded.expenseRatios;
+
+        portfolio::PortfolioEngine engine(10000000.0);
+        auto                       set = portfolio::standardStrategySet(loaded.assetClasses);
+        for (auto& st : set) {
+            const std::string nm = st->name();
+            // Only the ones worth carrying into a cross-market table; the momentum
+            // grid was disqualified long ago and would be twelve rows of noise.
+            if (nm.rfind("Momentum", 0) == 0 || nm.find("abs252") != std::string::npos) {
+                continue;
+            }
+            const auto  r     = engine.run(*st, data, cfg);
+            const auto  warmN = std::min(r.warmupBars, r.equityCurve.size());
+            Curve       cv;
+            cv.name = label + " " + nm;
+            for (std::size_t i = warmN; i < r.equityCurve.size(); ++i) {
+                cv.ts.push_back(data.timestamps[i]);
+                cv.v.push_back(r.equityCurve[i]);
+            }
+            if (!cv.empty()) {
+                curves.push_back(std::move(cv));
+            }
+        }
+        Curve bh;
+        bh.name       = label + " equal-weight buy & hold";
+        const auto bhr = portfolio::buyAndHold(data, cfg);
+        bh.ts          = data.timestamps;
+        bh.v           = bhr.equityCurve;
+        if (!bh.empty()) {
+            curves.push_back(std::move(bh));
+        }
+    };
+
+    // One signal on one ticker, run by BacktestEngine, then the live set combined
+    // equally — which is what config/live.json actually instructs the trader to do.
+    auto addLive = [&](const std::string& liveConfig, const std::string& catalogPath) {
+        const auto cfgJson = util::loadJsonConfig(liveConfig);
+        const auto catalog = StrategyCatalog::loadFromFile(catalogPath);
+        if (!cfgJson || !catalog.loaded() || !cfgJson->contains("positions")) {
+            return;
+        }
+        std::vector<Curve> legs;
+        std::string        stratId;
+        for (const auto& pos : (*cfgJson)["positions"]) {
+            if (!pos.value("enabled", false)) {
+                continue;
+            }
+            const auto* def = catalog.find(pos.value("strategy", ""));
+            const auto  px  = portfolio::loadCachedDaily(pos.value("ticker", ""));
+            if (def == nullptr || !px) {
+                continue;
+            }
+            stratId = def->id;
+            StrategyProfile prof;
+            prof.type        = def->type;
+            prof.params      = def->params;
+            prof.positionPct = 1.0;  // each leg is its own account; they are combined below
+            prof.stopLossPct = pos.value("stop_loss_pct", 0.0);
+            auto strat       = prof.createStrategy();
+            if (!strat) {
+                continue;
+            }
+            BacktestEngine engine(10000000.0);
+            const auto     r = engine.run(*strat, *px, BacktestConfig::forMarket("KRX"));
+            Curve          cv;
+            cv.ts = px->timestamps;
+            cv.v  = r.equityCurve;
+            if (!cv.empty()) {
+                legs.push_back(std::move(cv));
+            }
+        }
+        if (legs.empty()) {
+            return;
+        }
+        // Equal money in each leg, valued on the union of their dates.
+        std::vector<int64_t> all;
+        for (const auto& l : legs) {
+            all.insert(all.end(), l.ts.begin(), l.ts.end());
+        }
+        std::sort(all.begin(), all.end());
+        all.erase(std::unique(all.begin(), all.end()), all.end());
+        Curve combined;
+        combined.name = "KRX live: " + stratId + " x" + std::to_string(legs.size()) + " equal";
+        for (const int64_t t : all) {
+            double sum = 0.0;
+            bool   ok  = true;
+            for (const auto& l : legs) {
+                const double base = l.v.front();
+                const double now  = l.at(t);
+                if (base <= 0.0 || now <= 0.0) {
+                    ok = false;
+                    break;
+                }
+                sum += now / base;
+            }
+            if (ok) {
+                combined.ts.push_back(t);
+                combined.v.push_back(sum / static_cast<double>(legs.size()));
+            }
+        }
+        if (!combined.empty()) {
+            curves.push_back(std::move(combined));
+        }
+    };
+
+    addPortfolio("config/universe_us.json", "US");
+    addPortfolio("config/universe_core.json", "KRX");
+    addLive("config/live.json", "");
+
+    // Rolling windows, the question as the user actually lives it. They are defined
+    // on the benchmark's calendar and every curve is read by date, so a KRX result
+    // and a US one are measured over the same stretch of wall-clock time rather than
+    // the same count of bars.
+    const int64_t                                wl = static_cast<int64_t>(windowYears * 365.25 * 86400.0);
+    const int64_t                                sp = static_cast<int64_t>(stepMonths * 30.44 * 86400.0);
+    std::vector<std::pair<int64_t, int64_t>>     windows;
+    for (int64_t t = eqTs.front(); t + wl <= eqTs.back(); t += sp) {
+        windows.emplace_back(t, t + wl);
+    }
+
+    const Curve& bench = curves[1];  // QQQ, held
+    std::vector<double> benchWin;
+    for (const auto& [a, b] : windows) {
+        benchWin.push_back(cagrBetween(bench, a, b));
     }
 
     std::cout << "==========================================================================================\n"
-              << " Beating a named benchmark   " << dayOf(eqTs.front()) << " ~ " << dayOf(eqTs.back()) << "\n"
-              << " " << windows.size() << " rolling " << std::fixed << std::setprecision(0) << windowYears
-              << "-year holding periods, stepped " << stepMonths << " months. Switching costs "
-              << std::setprecision(2) << switchCost * 100.0 << "% a change.\n"
+              << " Everything measured so far, against SPY and QQQ held plainly\n"
+              << " requested " << dayOf(eqTs.front()) << " ~ " << dayOf(eqTs.back()) << ", " << windows.size()
+              << " rolling " << std::fixed << std::setprecision(0) << windowYears << "-year holding periods\n"
               << "==========================================================================================\n\n"
-              << std::left << std::setw(34) << "" << std::right << std::setw(24) << "period" << std::setw(7)
-              << "years" << std::setw(11) << "total%" << std::setw(8) << "CAGR%" << std::setw(8) << "MDD%"
-              << std::setw(8) << "sharpe" << std::setw(8) << "beat%" << std::setw(10) << "med exc" << "\n"
-              << std::string(118, '-') << "\n";
+              << std::left << std::setw(40) << "" << std::right << std::setw(23) << "period" << std::setw(7)
+              << "years" << std::setw(12) << "total%" << std::setw(8) << "CAGR%" << std::setw(8) << "MDD%"
+              << std::setw(8) << "sharpe" << std::setw(8) << "beat%" << std::setw(9) << "med exc" << "\n"
+              << std::string(123, '-') << "\n";
 
-    constexpr std::size_t kBench = 1;  // QQQ, held
-    std::vector<double>   benchWin;
-    for (const auto& [a, b] : windows) {
-        benchWin.push_back(cagrOf(curves[kBench], eqTs, a, b));
-    }
+    for (const auto& c : curves) {
+        if (c.empty()) {
+            continue;
+        }
+        const int64_t t0 = std::max(c.ts.front(), eqTs.front());
+        const int64_t t1 = std::min(c.ts.back(), eqTs.back());
+        if (t1 <= t0) {
+            continue;
+        }
 
-    for (std::size_t c = 0; c < candidates.size(); ++c) {
-        const std::size_t   from = firstUsable[c];
         std::vector<double> excess;
         int                 wins = 0;
         for (std::size_t w = 0; w < windows.size(); ++w) {
-            if (windows[w].first < from) {
-                continue;  // the funds this needs did not exist yet
+            if (windows[w].first < t0 || windows[w].second > t1) {
+                continue;  // the curve does not cover this stretch
             }
-            const double e = cagrOf(curves[c], eqTs, windows[w].first, windows[w].second) - benchWin[w];
+            const double e = cagrBetween(c, windows[w].first, windows[w].second) - benchWin[w];
             excess.push_back(e);
             if (e > 0.0) {
                 ++wins;
             }
         }
-        const std::vector<double> lived(curves[c].begin() + static_cast<std::ptrdiff_t>(from), curves[c].end());
-        const double totalPct = lived.front() > 0.0 ? (lived.back() / lived.front() - 1.0) * 100.0 : 0.0;
-        const double years    = static_cast<double>(eqTs.back() - eqTs[from]) / (365.25 * 86400.0);
 
-        std::cout << std::left << std::setw(34) << candidates[c].name.substr(0, 33) << std::right
-                  << std::setw(13) << dayOf(eqTs[from]) << " ~ " << std::setw(8) << dayOf(eqTs.back())
-                  << std::fixed << std::setprecision(1) << std::setw(7) << years << std::setw(11) << totalPct
-                  << std::setw(8) << cagrOf(curves[c], eqTs, from, curves[c].size()) << std::setw(8)
-                  << mddOf(curves[c], from, curves[c].size()) << std::setprecision(2) << std::setw(8)
-                  << sharpeOf(lived) << std::setprecision(1) << std::setw(8)
-                  << (excess.empty() ? 0.0 : wins * 100.0 / static_cast<double>(excess.size())) << std::setw(10)
-                  << median(excess) << "\n";
+        std::cout << std::left << std::setw(40) << c.name.substr(0, 39) << std::right << std::setw(12) << dayOf(t0)
+                  << " ~ " << std::setw(8) << dayOf(t1) << std::fixed << std::setprecision(1) << std::setw(7)
+                  << static_cast<double>(t1 - t0) / (365.25 * 86400.0) << std::setw(12) << totalBetween(c, t0, t1)
+                  << std::setw(8) << cagrBetween(c, t0, t1) << std::setw(8) << mddBetween(c, t0, t1)
+                  << std::setprecision(2) << std::setw(8) << sharpeBetween(c, t0, t1) << std::setprecision(1)
+                  << std::setw(8) << (excess.empty() ? 0.0 : wins * 100.0 / static_cast<double>(excess.size()))
+                  << std::setw(9) << (excess.empty() ? 0.0 : median(excess)) << "\n";
     }
 
-    std::cout << "\n period is each row's own, starting when every fund it needs had listed: a rule using\n"
-              << " TQQQ cannot be measured before February 2010 whatever the requested window says, and\n"
-              << " pretending otherwise credits it for a crash it was not there for. Rows with different\n"
-              << " periods are not directly comparable on total% — read CAGR and beat% for those.\n"
-              << " total% is the whole period's growth, CAGR the same thing compounded annually.\n"
+    std::cout << "\n period is each row's own, starting when every fund it needs had listed. A rule using\n"
+              << " TQQQ cannot be measured before February 2010 whatever window is requested, and\n"
+              << " pretending otherwise credits it for a crash it was not there for. Rows spanning\n"
+              << " different periods are not comparable on total% — read CAGR and beat% for those.\n"
               << " beat% is the share of rolling " << std::setprecision(0) << windowYears
-              << "-year holding periods whose annualised return came out\n"
-              << " above QQQ's over the same stretch; med exc is that difference in points a year.\n"
-              << " Windows overlap heavily, so those counts are not independent trials.\n"
-              << " No tax and no currency effect; all figures are in USD and include distributions.\n";
+              << "-year holding periods whose annualised return beat\n"
+              << " QQQ's over the same stretch; med exc is that difference in points a year. Windows\n"
+              << " overlap heavily, so those counts are not independent trials.\n\n"
+              << " US rows are in USD, include distributions, and carry no tax. KRX rows are in KRW\n"
+              << " and their prices are NOT adjusted for distributions, so they are understated by\n"
+              << " roughly each fund's yield — a point or two a year for equity, most of the return\n"
+              << " for the bond funds. Comparing a KRX row against a US one therefore flatters the\n"
+              << " US one, before any currency effect, which is also not modelled.\n";
+
     return 0;
 }
