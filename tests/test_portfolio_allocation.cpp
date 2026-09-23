@@ -299,6 +299,70 @@ TEST(allocation, a_rising_asset_keeps_exactly_the_weight_the_rule_asked_for) {
     CHECK_NEAR(s.targetWeights(d, 39)[0], 0.37, 1e-12);
 }
 
+/* --------------------------- MovingAverageFilter -------------------------- */
+
+TEST(allocation, an_asset_below_its_own_moving_average_is_dropped_to_cash) {
+    std::vector<double> up, down;
+    for (std::size_t i = 0; i < 60; ++i) {
+        up.push_back(100.0 + static_cast<double>(i));
+        down.push_back(160.0 - static_cast<double>(i));
+    }
+    const auto d = portfolio::PortfolioData::align({aSeries("UP", up), aSeries("DOWN", down)});
+
+    portfolio::MovingAverageFilter s(std::make_unique<Says>(std::vector<double>{0.5, 0.5}), 20);
+    s.init(d);
+    const auto w = s.targetWeights(d, 59);
+
+    CHECK_NEAR(w[0], 0.5, 1e-9);
+    CHECK_NEAR(w[1], 0.0, 1e-9);
+    // Left in cash, not handed to the one that passed.
+    CHECK_NEAR(sum(w), 0.5, 1e-9);
+}
+
+TEST(allocation, the_trend_test_reads_the_average_of_the_bars_before_the_one_it_trades) {
+    std::vector<double> flat(60, 100.0);
+    const auto          before = portfolio::PortfolioData::align({aSeries("A", flat)});
+
+    // Make the very last bar soar. A rule reading it would suddenly be above.
+    flat.back()      = 10000.0;
+    const auto after = portfolio::PortfolioData::align({aSeries("A", flat)});
+
+    portfolio::MovingAverageFilter s1(std::make_unique<Says>(std::vector<double>{1.0}), 20);
+    portfolio::MovingAverageFilter s2(std::make_unique<Says>(std::vector<double>{1.0}), 20);
+    s1.init(before);
+    s2.init(after);
+    CHECK_NEAR(s1.targetWeights(before, 59)[0], s2.targetWeights(after, 59)[0], 1e-12);
+}
+
+TEST(allocation, the_filter_can_be_restricted_so_the_defensive_sleeve_is_always_held) {
+    std::vector<double> falling;
+    for (std::size_t i = 0; i < 60; ++i) {
+        falling.push_back(160.0 - static_cast<double>(i));
+    }
+    const auto d = portfolio::PortfolioData::align({aSeries("STOCK", falling), aSeries("BOND", falling)});
+
+    // Both are falling, but only the equity sleeve is in scope: a bond fund is held
+    // precisely so that it is there while equity falls.
+    portfolio::MovingAverageFilter s(std::make_unique<Says>(std::vector<double>{0.5, 0.5}), 20,
+                                     std::vector<std::string>{"EQ", "BOND"}, std::vector<std::string>{"EQ"});
+    s.init(d);
+    const auto w = s.targetWeights(d, 59);
+
+    CHECK_NEAR(w[0], 0.0, 1e-9);
+    CHECK_NEAR(w[1], 0.5, 1e-9);
+}
+
+TEST(allocation, without_enough_history_the_trend_is_unknown_and_the_asset_is_not_held) {
+    const auto d = portfolio::PortfolioData::align({aSeries("A", {100, 101, 102, 103, 104})});
+
+    portfolio::MovingAverageFilter s(std::make_unique<Says>(std::vector<double>{1.0}), 200);
+    s.init(d);
+    // Rising, but over four bars against a 200-bar average: not knowing is not a
+    // reason to assume the trend is up.
+    CHECK_NEAR(s.targetWeights(d, 4)[0], 0.0, 1e-9);
+    CHECK(s.warmupPeriod() > std::size_t{200});
+}
+
 /* ------------------------- through the engine ---------------------------- */
 
 TEST(allocation, group_parity_run_end_to_end_stays_fully_invested_and_balanced) {
