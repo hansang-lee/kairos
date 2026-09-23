@@ -1,0 +1,63 @@
+{
+  "note": "A dollar-denominated universe, because every KRX allocation result topped out at 8% a year while simply holding the NASDAQ returned 22%: asset choice dominated every rule tested. History starts in 2005 rather than 1985 because the defensive funds a balanced book needs did not exist earlier — TLT lists in 2002, GLD in 2004 — so the dot-com bust is out of reach here even though the leverage study could reach it.",
+  "currency_warning": "Everything here is priced in USD and a Korean investor also carries KRW/USD. That is not modelled. It generally helps: the dollar rises when Korean equity falls, measured at -0.533 correlation against KOSPI 200, so a won-based investor's real drawdown on these funds is smaller than the numbers below.",
+  "tax_warning": "Gains on US funds are taxed as 해외주식 양도소득세 (22% above the annual allowance), unlike a domestic ETF. A rule that trades more realises more, and none of that is modelled.",
+  "equity_classes": [
+    "US_EQUITY",
+    "INTL_EQUITY",
+    "REAL_ESTATE"
+  ],
+  "tickers": [
+    {
+      "code": "QQQ",
+      "name": "Invesco NASDAQ 100",
+      "asset_class": "US_EQUITY"
+    },
+    {
+      "code": "SPY",
+      "name": "SPDR S&P 500",
+      "asset_class": "US_EQUITY"
+    },
+    {
+      "code": "IWM",
+      "name": "iShares Russell 2000",
+      "asset_class": "US_EQUITY"
+    },
+    {
+      "code": "EFA",
+      "name": "iShares MSCI EAFE",
+      "asset_class": "INTL_EQUITY"
+    },
+    {
+      "code": "EEM",
+      "name": "iShares MSCI Emerging Markets",
+      "asset_class": "INTL_EQUITY"
+    },
+    {
+      "code": "VNQ",
+      "name": "Vanguard Real Estate",
+      "asset_class": "REAL_ESTATE"
+    },
+    {
+      "code": "TLT",
+      "name": "iShares 20+ Year Treasury",
+      "asset_class": "LONG_BOND"
+    },
+    {
+      "code": "IEF",
+      "name": "iShares 7-10 Year Treasury",
+      "asset_class": "SHORT_BOND"
+    },
+    {
+      "code": "SHY",
+      "name": "iShares 1-3 Year Treasury",
+      "asset_class": "SHORT_BOND"
+    },
+    {
+      "code": "GLD",
+      "name": "SPDR Gold Shares",
+      "asset_class": "GOLD"
+    }
+  ],
+  "cost_note": "Prices are Yahoo's adjusted series, so distributions are included and each fund's own fee is already deducted from its net asset value. Do not add --expense-ratio on top of that; it would be charged twice."
+}

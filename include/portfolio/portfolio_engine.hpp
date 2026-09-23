@@ -46,12 +46,18 @@ struct PortfolioConfigBt {
     double minPositionDrift = 0.25;
 
     /**
-     * @brief Annual expense ratio per asset, as a fraction (0.005 = 0.5% a year).
+     * @brief An annual holding cost per asset NOT already in its price series.
      *
-     * A fund's fee is taken out of its net asset value daily, so it never appears
-     * as a transaction and no amount of trading discipline avoids it. Left out of
-     * a backtest it silently flatters every buy-and-hold result and every strategy
-     * that stays invested, by one to three percentage points over a decade.
+     * A listed fund's own fee is taken out of net asset value daily, so a price
+     * series already carries it and charging it again here is double counting.
+     * That is what this field was doing when it defaulted to 0.3%. It stays for the
+     * costs a price cannot contain — an advisory fee, a wrap charge, or a synthetic
+     * series built from an index rather than from a fund.
+     *
+     * The real omission in these backtests runs the other way: KRX prices from KIS
+     * are not adjusted for distributions, so a fund's payouts are missing entirely.
+     * On US data that is now fixed by using the adjusted series; on KRX it is not,
+     * and every KRX figure is understated by roughly its distribution yield.
      *
      * Indexed by asset, in the order of PortfolioData::tickers. Entries past the
      * end of the vector use `defaultExpenseRatio`.

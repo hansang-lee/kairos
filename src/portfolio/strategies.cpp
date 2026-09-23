@@ -169,6 +169,63 @@ std::vector<double> EqualWeight::targetWeights(const PortfolioData& data, std::s
     return weights;
 }
 
+/* --------------------------- MovingAverageFilter --------------------------- */
+
+MovingAverageFilter::MovingAverageFilter(std::unique_ptr<IPortfolioStrategy> inner, std::size_t window,
+                                         std::vector<std::string> assetClasses,
+                                         std::vector<std::string> classesToFilter)
+    : inner_(std::move(inner))
+    , window_(std::max<std::size_t>(window, 2))
+    , classes_(std::move(assetClasses))
+    , filtered_(std::move(classesToFilter)) {}
+
+std::string MovingAverageFilter::name() const {
+    return inner_->name() + " + ma" + std::to_string(window_) + (filtered_.empty() ? "" : " (equity only)");
+}
+
+void MovingAverageFilter::init(const PortfolioData& data) {
+    inner_->init(data);
+}
+
+std::size_t MovingAverageFilter::warmupPeriod() const {
+    return std::max(inner_->warmupPeriod(), window_ + 1);
+}
+
+std::vector<double> MovingAverageFilter::targetWeights(const PortfolioData& data, std::size_t index) {
+    auto weights = inner_->targetWeights(data, index);
+    if (index == 0) {
+        return weights;
+    }
+    const std::size_t bar = index - 1;
+
+    for (std::size_t a = 0; a < weights.size() && a < data.assetCount(); ++a) {
+        if (weights[a] <= 0.0) {
+            continue;
+        }
+        if (!filtered_.empty()) {
+            const bool inScope = a < classes_.size()
+                              && std::find(filtered_.begin(), filtered_.end(), classes_[a]) != filtered_.end();
+            if (!inScope) {
+                continue;  // held regardless of its own trend
+            }
+        }
+        // Not enough history to know the trend is not a reason to assume it is up.
+        if (bar + 1 < window_ || !data.available[a][bar]) {
+            weights[a] = 0.0;
+            continue;
+        }
+        double sum = 0.0;
+        for (std::size_t k = bar + 1 - window_; k <= bar; ++k) {
+            sum += data.close[a][k];
+        }
+        const double average = sum / static_cast<double>(window_);
+        if (!(average > 0.0) || data.close[a][bar] <= average) {
+            weights[a] = 0.0;
+        }
+    }
+    return weights;
+}
+
 /* ------------------------------ GroupParity ------------------------------ */
 
 GroupParity::GroupParity(std::vector<std::string> assetClasses, bool inverseVolWithin, std::size_t lookback,
@@ -378,6 +435,11 @@ std::vector<std::unique_ptr<IPortfolioStrategy>> standardStrategySet(const std::
 
     out.push_back(std::make_unique<AbsoluteMomentumFilter>(std::make_unique<EqualWeight>(), 252, 0.0));
     out.push_back(std::make_unique<AbsoluteMomentumFilter>(std::make_unique<RiskParity>(63, 0.4), 252, 0.0));
+    out.push_back(std::make_unique<MovingAverageFilter>(std::make_unique<EqualWeight>(), 200));
+    if (!assetClasses.empty()) {
+        out.push_back(std::make_unique<MovingAverageFilter>(std::make_unique<GroupParity>(assetClasses, false), 200));
+        out.push_back(std::make_unique<MovingAverageFilter>(std::make_unique<GroupParity>(assetClasses, true, 63), 200));
+    }
 
     for (std::size_t top : {1u, 2u, 3u, 5u}) {
         for (std::size_t look : {63u, 126u, 252u}) {

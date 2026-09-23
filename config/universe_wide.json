@@ -11,7 +11,7 @@
     "114800 KODEX 인버스": "-0.995 with KOSPI 200, which is the best diversification number in the whole search and still a reason to refuse it. A daily-reset inverse fund lost 71.2% over this decade; an allocation rule holding it permanently is paying that bleed forever in exchange for a hedge it could get by holding less equity. Negative correlation is not free when the asset has negative expected return."
   },
   "survivorship_warning": "Every ETF here still trades. Funds that were wound up are absent, so results are an upper bound.",
-  "cost_warning": "No ticker states its own expense_ratio yet, so runs apply the tool's assumed default and print that they did. Published fees for these products run roughly 0.05-0.5%/yr.",
+  "cost_warning": "Prices come from KIS and are market prices: each fund's own fee is already deducted from them, so --expense-ratio must not be used to model it again. What is missing is the other direction — KIS prices are not adjusted for distributions, so every return here is understated by roughly the fund's yield, which is a point or two a year for equity ETFs and most of the return for the bond ones.",
   "history_warning": "TIGER 미국채10년선물 lists in August 2018, so the first two and a half years of a 2016 run have no US Treasury sleeve and USD_RATES is carried by the currency fund alone. The engine knows the fund is unavailable and will not weight it, but the early years are a different portfolio from the later ones.",
   "tickers": [
     {

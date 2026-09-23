@@ -10,7 +10,7 @@
     "266370": "KODEX 200IT has no usable cached history"
   },
   "survivorship_warning": "Every ETF here still trades. Funds that were wound up are absent, so results are an upper bound.",
-  "cost_warning": "No ticker states its own expense_ratio yet, so runs apply the tool's assumed default and print that they did. Published fees for these products run roughly 0.05-0.5%/yr.",
+  "cost_warning": "Prices come from KIS and are market prices: each fund's own fee is already deducted from them, so --expense-ratio must not be used to model it again. What is missing is the other direction — KIS prices are not adjusted for distributions, so every return here is understated by roughly the fund's yield, which is a point or two a year for equity ETFs and most of the return for the bond ones.",
   "liquidity_warning": "Turnover in 2025 ranges from 4,628억원 a day (KODEX 200) to 0.2억원 (TIGER 200 금융). At a ten-million-won account every one of them is tradeable, but the 0.05% slippage the backtest assumes is optimistic for the thin ones. Closes repeat from the previous day on 0.4-5.7% of bars, which is low enough not to distort volatility or correlation estimates.",
   "tickers": [
     {

@@ -20,7 +20,7 @@ namespace {
  * @return Number of bars dropped.
  */
 std::size_t fillQuotes(const nlohmann::json& quote, const nlohmann::json& timestamps,
-                       const std::shared_ptr<StockInfo>& data) {
+                       const std::shared_ptr<StockInfo>& data, const nlohmann::json& adjclose) {
     auto at = [](const nlohmann::json& arr, std::size_t i) -> const nlohmann::json* {
         return (arr.is_array() && i < arr.size()) ? &arr[i] : nullptr;
     };
@@ -47,13 +47,23 @@ std::size_t fillQuotes(const nlohmann::json& quote, const nlohmann::json& timest
         const auto* v = at(volume, i);
 
         const double closeVal = c->get<double>();
+
+        // The whole bar is scaled by the same factor rather than only the close,
+        // so a stop reading the low and a signal reading the close stay on one
+        // series instead of half a total-return one and half a price one.
+        const auto*  a      = at(adjclose, i);
+        const double factor = (a && !a->is_null() && closeVal > 0.0) ? a->get<double>() / closeVal : 1.0;
+        if (factor != 1.0) {
+            data->adjustedForDistributions = true;
+        }
+
         data->timestamps.push_back(timestamps[i].get<int64_t>());
-        data->close.push_back(closeVal);
+        data->close.push_back(closeVal * factor);
         // A missing open/high/low on a bar that did trade falls back to the close
         // rather than dropping the bar, which would lose a real price.
-        data->open.push_back((o && !o->is_null()) ? o->get<double>() : closeVal);
-        data->high.push_back((h && !h->is_null()) ? h->get<double>() : closeVal);
-        data->low.push_back((l && !l->is_null()) ? l->get<double>() : closeVal);
+        data->open.push_back(((o && !o->is_null()) ? o->get<double>() : closeVal) * factor);
+        data->high.push_back(((h && !h->is_null()) ? h->get<double>() : closeVal) * factor);
+        data->low.push_back(((l && !l->is_null()) ? l->get<double>() : closeVal) * factor);
         data->volume.push_back((v && !v->is_null()) ? v->get<int64_t>() : 0);
     }
 
@@ -81,7 +91,8 @@ static time_t parseDateToTimestamp(const std::string& date) {
 
 std::shared_ptr<StockInfo> yFinance::getStockInfo(const std::string& ticker, const std::string& interval,
                                                   const std::string& range) {
-    const auto fetched = fetch(std::string(url_base_) + ticker + "?interval=" + interval + "&range=" + range);
+    const auto fetched =
+        fetch(std::string(url_base_) + ticker + "?interval=" + interval + "&range=" + range + "&events=div%7Csplit");
     if (fetched.empty()) {
         return nullptr;
     }
@@ -136,7 +147,12 @@ std::shared_ptr<StockInfo> yFinance::getStockInfo(const std::string& ticker, con
 
         if (result.contains("timestamp") && result.contains("indicators") && result["indicators"].contains("quote")
             && !result["indicators"]["quote"].empty()) {
-            fillQuotes(result["indicators"]["quote"][0], result["timestamp"], data);
+            const auto& adj = (result["indicators"].contains("adjclose")
+                               && !result["indicators"]["adjclose"].empty()
+                               && result["indicators"]["adjclose"][0].contains("adjclose"))
+                                ? result["indicators"]["adjclose"][0]["adjclose"]
+                                : nlohmann::json::array();
+            fillQuotes(result["indicators"]["quote"][0], result["timestamp"], data, adj);
         } else if (result.contains("timestamp")) {
             data->timestamps = result["timestamp"].get<std::vector<int64_t>>();
         }
@@ -158,8 +174,9 @@ std::shared_ptr<StockInfo> yFinance::getStockInfo(const std::string& ticker, con
 
     p2 += 86400;
 
+    // events=div|split makes Yahoo return the adjusted series alongside the raw one.
     const std::string url = std::string(url_base_) + ticker + "?period1=" + std::to_string(p1)
-                          + "&period2=" + std::to_string(p2) + "&interval=" + interval;
+                          + "&period2=" + std::to_string(p2) + "&interval=" + interval + "&events=div%7Csplit";
 
     const auto fetched = fetch(url);
     if (fetched.empty()) {
@@ -216,7 +233,12 @@ std::shared_ptr<StockInfo> yFinance::getStockInfo(const std::string& ticker, con
 
         if (result.contains("timestamp") && result.contains("indicators") && result["indicators"].contains("quote")
             && !result["indicators"]["quote"].empty()) {
-            fillQuotes(result["indicators"]["quote"][0], result["timestamp"], data);
+            const auto& adj = (result["indicators"].contains("adjclose")
+                               && !result["indicators"]["adjclose"].empty()
+                               && result["indicators"]["adjclose"][0].contains("adjclose"))
+                                ? result["indicators"]["adjclose"][0]["adjclose"]
+                                : nlohmann::json::array();
+            fillQuotes(result["indicators"]["quote"][0], result["timestamp"], data, adj);
         } else if (result.contains("timestamp")) {
             data->timestamps = result["timestamp"].get<std::vector<int64_t>>();
         }

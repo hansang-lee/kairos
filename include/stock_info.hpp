@@ -91,6 +91,17 @@ struct StockInfo {
     std::vector<double> close;
 
     /**
+     * @brief Whether OHLC has been scaled to include dividends and splits.
+     *
+     * It matters most where it is least visible. A bond fund pays out nearly
+     * everything it earns, so on price alone TLT compounds at -0.14% a year and
+     * SHY at -0.05% — which makes any allocation toward bonds look worthless for
+     * a reason that has nothing to do with bonds. Equity funds understate by a
+     * point or two; the defensive sleeve understates by all of it.
+     */
+    bool adjustedForDistributions = false;
+
+    /**
      * @brief
      * @example [100.0, 101.0, ...]
      */

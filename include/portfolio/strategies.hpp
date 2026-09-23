@@ -159,6 +159,46 @@ class AbsoluteMomentumFilter: public IPortfolioStrategy {
 };
 
 /**
+ * @brief Hold an allocation only while the asset is above its own moving average.
+ *
+ * The one timing rule that held up across forty-one years of NASDAQ, including the
+ * busts the funds' own histories miss: on the unlevered index it lifted Sharpe in
+ * both halves of that span, 0.57 to 0.67 before 2006 and 0.76 to 0.82 after, and
+ * roughly halved the drawdown for about two points of compound return.
+ *
+ * Distinct from AbsoluteMomentumFilter, which compares an asset against where it
+ * stood one lookback ago. That test passes an asset that fell and recovered to the
+ * same place; this one asks whether the asset is above its own recent path, which
+ * is a question about the trend rather than about two endpoints.
+ *
+ * A rejected asset's weight is left in cash rather than shared out, because
+ * redistributing it would reinvest exactly the money the rule declined to risk.
+ */
+class MovingAverageFilter: public IPortfolioStrategy {
+   public:
+    /**
+     * @param assetClasses   One label per asset; needed only to restrict the filter.
+     * @param classesToFilter Which classes the trend test applies to. Empty filters
+     *        everything. Restricting it matters: a bond fund's drift is the coupon,
+     *        so standing aside when it dips below an average sells the very thing
+     *        that was meant to be held while equity fell.
+     */
+    MovingAverageFilter(std::unique_ptr<IPortfolioStrategy> inner, std::size_t window = 200,
+                        std::vector<std::string> assetClasses = {}, std::vector<std::string> classesToFilter = {});
+
+    [[nodiscard]] std::string         name() const override;
+    void                              init(const PortfolioData& data) override;
+    [[nodiscard]] std::size_t         warmupPeriod() const override;
+    [[nodiscard]] std::vector<double> targetWeights(const PortfolioData& data, std::size_t index) override;
+
+   private:
+    std::unique_ptr<IPortfolioStrategy> inner_;
+    std::size_t                         window_;
+    std::vector<std::string>            classes_;
+    std::vector<std::string>            filtered_;
+};
+
+/**
  * @brief Any allocation rule, with every weight multiplied by a constant.
  *
  * Leverage is a property of the account, not of the allocation rule: the decision

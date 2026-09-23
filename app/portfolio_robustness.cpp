@@ -99,7 +99,7 @@ int main(int argc, char* argv[]) {
     int         rebalance      = 21;
     double      windowYears    = 3.0;
     int         stepMonths     = 3;
-    double      defaultExpense = 0.003;
+    double      defaultExpense = 0.0;
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];

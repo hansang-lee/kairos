@@ -6,6 +6,7 @@
 
 #include "common/util.hpp"
 #include "data/kis_provider.hpp"
+#include "yfinance.hpp"
 #include "portfolio/price_cache.hpp"
 
 /**
@@ -30,7 +31,8 @@ std::string dayOf(int64_t ts) {
 
 void printUsage() {
     std::cout << "Usage:\n"
-              << "  fetch_universe --universe <path> [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--refetch]\n\n"
+              << "  fetch_universe --universe <path> [--from YYYY-MM-DD] [--to YYYY-MM-DD]\n"
+              << "                 [--source kis|yahoo] [--refetch]\n\n"
               << "  Fetches every ticker in the universe into cache/daily/ and prints the history\n"
               << "  each one turned out to have. A ticker already covering the range is left alone\n"
               << "  unless --refetch says otherwise.\n";
@@ -43,6 +45,7 @@ int main(int argc, char* argv[]) {
     std::string from    = "2015-01-01";
     std::string to      = "2026-09-22";
     bool        refetch = false;
+    std::string source  = "kis";
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -52,6 +55,8 @@ int main(int argc, char* argv[]) {
             from = argv[++i];
         else if (arg == "--to" && i + 1 < argc)
             to = argv[++i];
+        else if (arg == "--source" && i + 1 < argc)
+            source = argv[++i];
         else if (arg == "--refetch")
             refetch = true;
         else {
@@ -70,8 +75,19 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // Two sources because the universes do not overlap: KIS serves KRX, and the US
+    // funds a dollar-denominated universe needs are only on Yahoo.
+    const bool  useYahoo = (source == "yahoo");
     KisProvider kis;
-    const auto  wanted = portfolio::parseDate(from);
+    if (useYahoo) {
+        yFinance::init();
+    }
+    util::Defer cleanup([useYahoo] {
+        if (useYahoo) {
+            yFinance::close();
+        }
+    });
+    const auto wanted = portfolio::parseDate(from);
 
     std::cout << std::left << std::setw(9) << "code" << std::setw(30) << "name" << std::right << std::setw(7) << "bars"
               << std::setw(13) << "from" << std::setw(13) << "to" << "  status\n"
@@ -91,7 +107,10 @@ int main(int argc, char* argv[]) {
         std::string status = "cached";
         auto        data   = covers ? cached : nullptr;
         if (!data) {
-            data = kis.getStockInfo(code, from, to);
+            data = useYahoo ? yFinance::getStockInfo(code, from, to, "1d") : kis.getStockInfo(code, from, to);
+            if (data) {
+                data->ticker = code;  // Yahoo echoes its own spelling; the cache key is ours
+            }
             if (data && portfolio::saveCachedDaily(*data)) {
                 status = "fetched";
             } else if (data) {

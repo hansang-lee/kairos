@@ -63,10 +63,9 @@ void printUsage() {
               << "  without admitting to setting it; this shows the whole trade-off instead.\n"
               << "  --leverage-sweep borrows against each strategy at several multiples, charging\n"
               << "  --margin-rate for the loan and cutting the position back at --margin-call.\n"
-              << "  --expense-ratio is the annual management fee assumed for any asset whose entry\n"
-              << "  in the universe does not state one. It defaults to 0.3%, the middle of the\n"
-              << "  published range for KRX index ETFs, because assuming zero is not neutral: it\n"
-              << "  is a claim that funds are free, and it flatters whatever stays invested.\n";
+              << "  --expense-ratio adds an annual holding cost NOT already in the price. It is\n"
+              << "  zero by default because a fund's own fee comes out of its net asset value,\n"
+              << "  so the price series already carries it; charging it again double counts.\n";
 }
 
 }  // namespace
@@ -77,7 +76,7 @@ int main(int argc, char* argv[]) {
     std::string endDate        = "2026-01-01";
     int         rebalance      = 21;
     bool        rebalanceSweep = false;
-    double      defaultExpense = 0.003;
+    double      defaultExpense = 0.0;
     bool        leverageSweep  = false;
     bool        equitySweep    = false;
     double      marginRate     = 0.06;
@@ -178,7 +177,7 @@ int main(int argc, char* argv[]) {
         printRow(portfolio::buyAndHold(data, cfg));
 
         for (const int pct : {0, 20, 30, 40, 50, 60, 70, 80, 100}) {
-            for (const bool volIn : {false, true}) {
+            for (const bool trend : {false, true}) {
                 std::vector<std::pair<std::string, double>> cw;
                 for (const auto& c : loaded.equityClasses) {
                     cw.emplace_back(c, static_cast<double>(pct) / static_cast<double>(loaded.equityClasses.size()));
@@ -186,10 +185,23 @@ int main(int argc, char* argv[]) {
                 for (const auto& c : defensive) {
                     cw.emplace_back(c, static_cast<double>(100 - pct) / static_cast<double>(defensive.size()));
                 }
-                portfolio::GroupParity s(loaded.assetClasses, volIn, 63, cw);
-                auto                   r = s.name();
-                auto                   res = engine.run(s, data, cfg);
-                res.strategyName = std::to_string(pct) + "% equity" + (volIn ? " (vol-weighted in)" : " (equal in)");
+                auto inner = std::make_unique<portfolio::GroupParity>(loaded.assetClasses, true, 63, cw);
+
+                // Both axes at once, because they are the two things that survived
+                // every other test: how much sits in equity, and whether it is held
+                // while falling. Reporting one without the other would leave the
+                // question of whether they add up or overlap unanswered.
+                std::unique_ptr<portfolio::IPortfolioStrategy> s;
+                if (trend) {
+                    // Only the equity sleeve: the defensive one is there to be held
+                    // while equity falls, and a trend test would sell it then.
+                    s = std::make_unique<portfolio::MovingAverageFilter>(std::move(inner), 200, loaded.assetClasses,
+                                                                         loaded.equityClasses);
+                } else {
+                    s = std::move(inner);
+                }
+                auto res         = engine.run(*s, data, cfg);
+                res.strategyName = std::to_string(pct) + "% equity" + (trend ? " + ma200" : "");
                 printRow(res);
             }
         }
