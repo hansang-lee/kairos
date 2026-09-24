@@ -39,7 +39,9 @@ TEST(calendar, unknown_dates_fail_open_as_trading_days) {
 
 TEST(calendar, listed_holidays_are_closed) {
     const std::string path = tmp("calendar.json");
+    // clang-format off
     writeFile(path, R"({"holidays":{"2026-06-03":"Local elections","2026-07-17":"Constitution Day"}})");
+    // clang-format on
 
     const data::KrxCalendar c(path);
     CHECK(c.loaded());
@@ -48,6 +50,64 @@ TEST(calendar, listed_holidays_are_closed) {
     CHECK(!c.isTradingDay("2026-07-17"));
     CHECK_EQ(c.closedReason("2026-06-03"), std::string("Local elections"));
     CHECK(c.isTradingDay("2026-06-04"));
+}
+
+TEST(calendar, a_holiday_that_actually_traded_is_reported) {
+    const std::string path = tmp("calendar_audit_false_holiday.json");
+    // clang-format off
+    // Delimited raw string: the value contains `)"`, which would end a plain R"(...)".
+    writeFile(path, R"json({"holidays":{"2026-09-24":"Chuseok holiday (projected)"}})json");
+    // clang-format on
+    const data::KrxCalendar c(path);
+
+    // The exchange published a bar on the "holiday": the projection was wrong and
+    // the trader will have skipped that day's signals with no error.
+    const auto issues = c.audit({"2026-09-23", "2026-09-24", "2026-09-25"}, "2026-09-23", "2026-09-25");
+    CHECK_EQ(issues.size(), std::size_t{1});
+    CHECK_EQ(issues[0].date, std::string("2026-09-24"));
+    CHECK(issues[0].expected.find("closed") == 0);
+    CHECK_EQ(issues[0].observed, std::string("a bar was published"));
+}
+
+TEST(calendar, an_open_day_with_no_bar_is_reported) {
+    const data::KrxCalendar c(tmp("no_such_calendar.json"));
+    // Wednesday 2026-09-23 has no bar in what was fetched: either a holiday the
+    // list does not know about, or a data problem. Either way someone should look.
+    const auto issues = c.audit({"2026-09-22", "2026-09-24"}, "2026-09-22", "2026-09-24");
+    CHECK_EQ(issues.size(), std::size_t{1});
+    CHECK_EQ(issues[0].date, std::string("2026-09-23"));
+    CHECK_EQ(issues[0].expected, std::string("open"));
+    CHECK_EQ(issues[0].observed, std::string("no bar"));
+}
+
+TEST(calendar, a_correct_calendar_produces_no_disagreements) {
+    const std::string path = tmp("calendar_audit_ok.json");
+    // clang-format off
+    writeFile(path, R"({"holidays":{"2026-09-24":"Chuseok","2026-09-25":"Chuseok"}})");
+    // clang-format on
+    const data::KrxCalendar c(path);
+
+    // Mon-Wed traded, Thu-Fri were the holiday, Sat-Sun the weekend. Every day
+    // agrees, including the weekend, which has no bar and is not expected to.
+    const auto issues = c.audit({"2026-09-21", "2026-09-22", "2026-09-23"}, "2026-09-21", "2026-09-27");
+    CHECK(issues.empty());
+}
+
+TEST(calendar, the_audit_range_is_inclusive_at_both_ends) {
+    const data::KrxCalendar c(tmp("no_such_calendar.json"));
+    // Nothing traded on either end day, both weekdays: both must be reported.
+    const auto issues = c.audit({}, "2026-09-22", "2026-09-23");
+    CHECK_EQ(issues.size(), std::size_t{2});
+    CHECK_EQ(issues[0].date, std::string("2026-09-22"));
+    CHECK_EQ(issues[1].date, std::string("2026-09-23"));
+}
+
+TEST(calendar, a_malformed_audit_range_returns_nothing_rather_than_spinning) {
+    const data::KrxCalendar c(tmp("no_such_calendar.json"));
+    // Sorts before a real September date, so only an explicit check catches it.
+    CHECK(c.audit({"2026-09-22"}, "2026-13-01", "2026-09-23").empty());
+    CHECK(c.audit({"2026-09-22"}, "not-a-date", "2026-09-23").empty());
+    CHECK(c.audit({"2026-09-22"}, "2026-09-23", "2026-09-22").empty());  // from > to
 }
 
 TEST(calendar, malformed_dates_do_not_crash) {
@@ -213,20 +273,9 @@ TEST(recorder, recording_nothing_is_not_an_error) {
 
 TEST(config, profile_fields_are_parsed) {
     const std::string path = tmp("portfolio.json");
-    writeFile(path, R"({
-      "initial_capital_krw": 5000000,
-      "risk": { "daily_loss_limit_pct": 2.5, "max_orders_per_day": 7 },
-      "strategies": [{
-        "id": 1, "name": "T", "ticker": "005930", "market": "KRX",
-        "type": "bollinger", "category": "swing",
-        "params": { "period": 40, "std_devs": 2.0 },
-        "position_pct": 0.3, "stop_loss_pct": 8.0,
-        "take_profit_pct": 12.0, "trailing_stop_pct": 5.0,
-        "cooldown_minutes": 30, "entry_tranches": 2, "exit_tranches": 3,
-        "trade_window": { "start": "0930", "end": "1520" },
-        "enabled": false
-      }]
-    })");
+    // clang-format off
+    writeFile(path, R"({"initial_capital_krw": 5000000,"risk": { "daily_loss_limit_pct": 2.5, "max_orders_per_day": 7 },"strategies": [{"id": 1, "name": "T", "ticker": "005930", "market": "KRX","type": "bollinger", "category": "swing","params": { "period": 40, "std_devs": 2.0 },"position_pct": 0.3, "stop_loss_pct": 8.0,"take_profit_pct": 12.0, "trailing_stop_pct": 5.0,"cooldown_minutes": 30, "entry_tranches": 2, "exit_tranches": 3,"trade_window": { "start": "0930", "end": "1520" },"enabled": false}]})");
+    // clang-format on
 
     const auto cfg = PortfolioConfig::loadFromFile(path);
     CHECK_NEAR(cfg.getInitialCapitalKrw(), 5000000.0, 1e-6);
@@ -248,7 +297,9 @@ TEST(config, profile_fields_are_parsed) {
 
 TEST(config, defaults_apply_when_fields_are_absent) {
     const std::string path = tmp("portfolio_min.json");
+    // clang-format off
     writeFile(path, R"({"strategies":[{"id":1,"ticker":"005930","type":"rsi"}]})");
+    // clang-format on
 
     const auto  cfg = PortfolioConfig::loadFromFile(path);
     const auto* p   = cfg.findById(1);
@@ -262,8 +313,9 @@ TEST(config, defaults_apply_when_fields_are_absent) {
 
 TEST(config, tranche_counts_below_one_are_clamped) {
     const std::string path = tmp("portfolio_tranche.json");
-    writeFile(path, R"({"strategies":[{"id":1,"ticker":"005930","type":"rsi",
-                        "entry_tranches":0,"exit_tranches":-5}]})");
+    // clang-format off
+    writeFile(path, R"({"strategies":[{"id":1,"ticker":"005930","type":"rsi","entry_tranches":0,"exit_tranches":-5}]})");
+    // clang-format on
     const auto  cfg = PortfolioConfig::loadFromFile(path);
     const auto* p   = cfg.findById(1);
     // Zero tranches would mean a position that can never be entered or exited.
@@ -276,11 +328,9 @@ TEST(config, find_by_ticker_prefers_the_enabled_profile) {
     // Returning the first in file order credited a live holding to a strategy that
     // was not trading, which the dashboard then displayed as fact.
     const std::string path = tmp("portfolio_dupe.json");
-    writeFile(path, R"({"strategies":[
-      {"id":1,"ticker":"005930","type":"rsi","enabled":false},
-      {"id":18,"ticker":"005930","type":"sma_crossover","enabled":false},
-      {"id":30,"ticker":"005930","type":"bollinger","enabled":true}
-    ]})");
+    // clang-format off
+    writeFile(path, R"({"strategies":[{"id":1,"ticker":"005930","type":"rsi","enabled":false},{"id":18,"ticker":"005930","type":"sma_crossover","enabled":false},{"id":30,"ticker":"005930","type":"bollinger","enabled":true}]})");
+    // clang-format on
 
     const auto  cfg = PortfolioConfig::loadFromFile(path);
     const auto* p   = cfg.findByTicker("005930");
@@ -290,10 +340,9 @@ TEST(config, find_by_ticker_prefers_the_enabled_profile) {
 
 TEST(config, find_by_ticker_falls_back_when_nothing_is_enabled) {
     const std::string path = tmp("portfolio_alldisabled.json");
-    writeFile(path, R"({"strategies":[
-      {"id":1,"ticker":"005930","type":"rsi","enabled":false},
-      {"id":2,"ticker":"005930","type":"macd","enabled":false}
-    ]})");
+    // clang-format off
+    writeFile(path, R"({"strategies":[{"id":1,"ticker":"005930","type":"rsi","enabled":false},{"id":2,"ticker":"005930","type":"macd","enabled":false}]})");
+    // clang-format on
 
     const auto  cfg = PortfolioConfig::loadFromFile(path);
     const auto* p   = cfg.findByTicker("005930");
@@ -356,14 +405,9 @@ TEST(config, dangerous_percentages_are_clamped_at_load) {
     // is price <= avg * 1.05, so the position sells the moment it opens — and
     // nothing downstream would report that as anything but a working stop.
     const std::string path = tmp("portfolio_dangerous.json");
-    writeFile(path, R"({"strategies":[{
-      "id":1,"ticker":"005930","type":"bollinger",
-      "position_pct": 5.0,
-      "stop_loss_pct": -5.0,
-      "take_profit_pct": -1.0,
-      "trailing_stop_pct": -2.0,
-      "cooldown_minutes": -30
-    }]})");
+    // clang-format off
+    writeFile(path, R"({"strategies":[{"id":1,"ticker":"005930","type":"bollinger","position_pct": 5.0,"stop_loss_pct": -5.0,"take_profit_pct": -1.0,"trailing_stop_pct": -2.0,"cooldown_minutes": -30}]})");
+    // clang-format on
 
     const auto  cfg = PortfolioConfig::loadFromFile(path);
     const auto* p   = cfg.findById(1);
@@ -377,11 +421,9 @@ TEST(config, dangerous_percentages_are_clamped_at_load) {
 
 TEST(config, valid_percentages_pass_through_untouched) {
     const std::string path = tmp("portfolio_valid.json");
-    writeFile(path, R"({"strategies":[{
-      "id":1,"ticker":"005930","type":"bollinger",
-      "position_pct": 0.2, "stop_loss_pct": 8.0,
-      "take_profit_pct": 12.0, "trailing_stop_pct": 5.0, "cooldown_minutes": 30
-    }]})");
+    // clang-format off
+    writeFile(path, R"({"strategies":[{"id":1,"ticker":"005930","type":"bollinger","position_pct": 0.2, "stop_loss_pct": 8.0,"take_profit_pct": 12.0, "trailing_stop_pct": 5.0, "cooldown_minutes": 30}]})");
+    // clang-format on
 
     const auto  cfg = PortfolioConfig::loadFromFile(path);
     const auto* p   = cfg.findById(1);
@@ -396,11 +438,9 @@ TEST(config, valid_percentages_pass_through_untouched) {
 
 TEST(catalog, concrete_strategies_load_with_their_parameters) {
     const std::string path = tmp("catalog.json");
-    writeFile(path, R"({"strategies":[
-      {"id":"bb40","name":"Bollinger 40","type":"bollinger","category":"swing",
-       "params":{"period":40,"std_devs":2.0}},
-      {"id":"slope","type":"ma_slope_trend","params":{"ma_period":20,"slope_window":10}}
-    ]})");
+    // clang-format off
+    writeFile(path, R"({"strategies":[{"id":"bb40","name":"Bollinger 40","type":"bollinger","category":"swing","params":{"period":40,"std_devs":2.0}},{"id":"slope","type":"ma_slope_trend","params":{"ma_period":20,"slope_window":10}}]})");
+    // clang-format on
 
     const auto cat = StrategyCatalog::loadFromFile(path);
     CHECK(cat.loaded());
@@ -416,9 +456,9 @@ TEST(catalog, concrete_strategies_load_with_their_parameters) {
 
 TEST(catalog, a_grid_expands_to_every_combination) {
     const std::string path = tmp("catalog_grid.json");
-    writeFile(path, R"({"grids":[
-      {"type":"bollinger","category":"swing","params":{"period":[14,20,40],"std_devs":[1.5,2.0]}}
-    ]})");
+    // clang-format off
+    writeFile(path, R"({"grids":[{"type":"bollinger","category":"swing","params":{"period":[14,20,40],"std_devs":[1.5,2.0]}}]})");
+    // clang-format on
 
     const auto cat  = StrategyCatalog::loadFromFile(path);
     const auto grid = cat.gridFor("bollinger");
@@ -434,11 +474,9 @@ TEST(catalog, a_grid_expands_to_every_combination) {
 
 TEST(catalog, entries_without_an_id_or_type_are_skipped) {
     const std::string path = tmp("catalog_bad.json");
-    writeFile(path, R"({"strategies":[
-      {"name":"no id","type":"rsi"},
-      {"id":"no-type"},
-      {"id":"fine","type":"rsi"}
-    ]})");
+    // clang-format off
+    writeFile(path, R"({"strategies":[{"name":"no id","type":"rsi"},{"id":"no-type"},{"id":"fine","type":"rsi"}]})");
+    // clang-format on
 
     const auto cat = StrategyCatalog::loadFromFile(path);
     CHECK_EQ(cat.concrete().size(), std::size_t{1});

@@ -6,6 +6,7 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <set>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -322,6 +323,10 @@ int main(int argc, char* argv[]) {
         const int                nowHhmm = kstNow().second;
         std::vector<std::string> notable;
         bool                     ranDaily = false;
+        // Every date any daily series carried a bar for. One bar on a date proves
+        // the exchange was open, which is the only ground truth a paper account
+        // has for checking the holiday projections.
+        std::set<std::string> observedBarDates;
 
         for (auto& r : runners) {
             const auto& p = *r.profile;
@@ -357,6 +362,9 @@ int main(int argc, char* argv[]) {
                 // Archive the bars this decision was made on: KIS re-serves revised
                 // history, so the inputs would otherwise be unrecoverable.
                 recorder.recordSeries(p.ticker, "daily", *data);
+                for (const int64_t ts : data->timestamps) {
+                    observedBarDates.insert(barDate(ts));
+                }
                 // The index to evaluate is the bar the order fills at: today's if KIS
                 // has published it, otherwise the one past the last.
                 const std::size_t lastIdx = data->close.size() - 1;
@@ -414,6 +422,19 @@ int main(int argc, char* argv[]) {
                     schedule.markEvaluated(p.id, today);
                 }
                 ranDaily = true;
+            }
+        }
+
+        // The projections in config/krx_holidays.json, held against what actually
+        // traded. Both mistakes are silent otherwise: a trading day marked closed
+        // skips its signals with no error, and a holiday marked open would have
+        // sent orders against a stale close. Yesterday is the latest day judged,
+        // since today's bar may simply not be published yet.
+        if (!observedBarDates.empty()) {
+            for (const auto& d : calendar.audit(observedBarDates, kstDate(14), kstDate(1))) {
+                std::cout << "[!] Calendar disagreement on " << d.date << ": expected " << d.expected << ", "
+                          << d.observed << ".\n";
+                notable.push_back("달력 불일치 " + d.date + ": " + d.expected + " / " + d.observed);
             }
         }
 

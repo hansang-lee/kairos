@@ -1,7 +1,9 @@
 #pragma once
 
 #include <map>
+#include <set>
 #include <string>
+#include <vector>
 
 namespace data {
 
@@ -34,6 +36,32 @@ class KrxCalendar {
 
     /** @brief Whether any holiday list was actually loaded. */
     [[nodiscard]] bool loaded() const { return loaded_; }
+
+    /** @brief One day where this calendar and the exchange disagreed. */
+    struct Disagreement {
+        std::string date;
+        std::string expected;  ///< "closed (<reason>)" or "open"
+        std::string observed;  ///< "a bar was published" or "no bar"
+    };
+
+    /**
+     * @brief Check the calendar's claims against days the exchange actually traded.
+     *
+     * Every closure in the list is a projection until something confirms it, and
+     * both mistakes are silent: a trading day marked closed skips that day's
+     * signals with no error, and a holiday marked open sends orders against
+     * yesterday's close. The only ground truth available on a paper account is
+     * whether KIS published a bar for the date, so that is what this compares to.
+     *
+     * @param observedBarDates Every "YYYY-MM-DD" with a daily bar, across any
+     *        ticker the caller has fetched. One bar on a date is enough to prove
+     *        the exchange was open.
+     * @param from Inclusive start of the range to judge.
+     * @param to   Inclusive end. Pass yesterday, not today: today's bar may simply
+     *        not be published yet, which is not a disagreement.
+     */
+    [[nodiscard]] std::vector<Disagreement> audit(const std::set<std::string>& observedBarDates,
+                                                  const std::string& from, const std::string& to) const;
 
    private:
     bool                                            loaded_ = false;

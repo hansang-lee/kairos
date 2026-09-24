@@ -34,6 +34,26 @@ int weekdayOf(const std::string& date) {
     return std::gmtime(&t)->tm_wday;
 }
 
+/** The calendar day after a "YYYY-MM-DD", or empty if the input is malformed. */
+std::string nextDay(const std::string& date) {
+    if (date.size() != 10) {
+        return "";
+    }
+    std::tm tm = {};
+    try {
+        tm.tm_year = std::stoi(date.substr(0, 4)) - 1900;
+        tm.tm_mon  = std::stoi(date.substr(5, 2)) - 1;
+        tm.tm_mday = std::stoi(date.substr(8, 2));
+    } catch (const std::exception&) {
+        return "";
+    }
+    tm.tm_hour          = 12;
+    const std::time_t t = timegm(&tm) + 86400;
+    char              buf[16];
+    std::strftime(buf, sizeof(buf), "%Y-%m-%d", std::gmtime(&t));
+    return buf;
+}
+
 }  // namespace
 
 KrxCalendar::KrxCalendar(const std::string& configPath) {
@@ -62,6 +82,29 @@ std::string KrxCalendar::closedReason(const std::string& date) const {
 
 bool KrxCalendar::isTradingDay(const std::string& date) const {
     return closedReason(date).empty();
+}
+
+std::vector<KrxCalendar::Disagreement> KrxCalendar::audit(const std::set<std::string>& observedBarDates,
+                                                          const std::string& from, const std::string& to) const {
+    std::vector<Disagreement> out;
+    // A malformed endpoint is refused outright. "2026-13-01" sorts before a real
+    // September date, and timegm would happily normalise it into next January, so
+    // the loop would report junk days that never existed.
+    if (weekdayOf(from) < 0 || weekdayOf(to) < 0) {
+        return out;
+    }
+    // Bounded so a runaway range cannot spin: two years of days is more than any
+    // caller has bars for.
+    for (std::string d = from; !d.empty() && d <= to && out.size() < 800; d = nextDay(d)) {
+        const std::string reason = closedReason(d);
+        const bool        hasBar = observedBarDates.count(d) > 0;
+        if (!reason.empty() && hasBar) {
+            out.push_back({d, "closed (" + reason + ")", "a bar was published"});
+        } else if (reason.empty() && !hasBar) {
+            out.push_back({d, "open", "no bar"});
+        }
+    }
+    return out;
 }
 
 }  // namespace data
