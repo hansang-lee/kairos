@@ -403,10 +403,16 @@ int main(int argc, char* argv[]) {
                 notable.push_back(tag + decision.side + " 주문 실패 — " + decision.order.message);
             }
 
-            if (!r.isIntraday() && !force) {
-                // Recorded even under --once, so a timer firing twice, or a retry after
-                // a restart, does not evaluate the same profile again today.
-                schedule.markEvaluated(p.id, today);
+            if (!r.isIntraday()) {
+                // Two separate things, which used to be one. Marking the schedule is
+                // what stops a timer firing twice, or a retry after a restart, from
+                // evaluating the same profile again today — and an inspection run
+                // must not consume that. But whether the daily pass happened is just
+                // a fact, and tying it to --force meant the summary below could only
+                // ever be exercised by waiting for a real scheduled run.
+                if (!force) {
+                    schedule.markEvaluated(p.id, today);
+                }
                 ranDaily = true;
             }
         }
