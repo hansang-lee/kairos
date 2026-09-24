@@ -1,0 +1,41 @@
+name: CI
+
+# The 181 tests ran nowhere on push until this existed: only a daily macro cron
+# lived here, so a local run that was forgotten landed broken. Build, test, and
+# hold the formatter to the same standard the repo already declares.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq cmake ninja-build libcurl4-openssl-dev nlohmann-json3-dev clang-format
+
+      - name: Configure
+        run: cmake -S . -B build/Release -DCMAKE_BUILD_TYPE=Release -G Ninja
+
+      - name: Build
+        run: cmake --build build/Release -j
+
+      - name: Test
+        # No network in the suite by design; a test that needs one is a bug.
+        run: ./build/Release/kairos_tests
+
+      - name: Format
+        # Reports every violation rather than stopping at the first, so one run
+        # shows the whole list.
+        run: |
+          git ls-files '*.cpp' '*.hpp' | xargs clang-format --dry-run --Werror
