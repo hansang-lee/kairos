@@ -315,6 +315,51 @@ TEST(executor, entry_tranches_split_the_position) {
     CHECK_EQ(d.quantity, int64_t{50});
 }
 
+TEST(executor, later_entry_tranches_do_not_wait_for_another_buy_signal) {
+    // A crossover strategy says BUY once and HOLD forever after. If tranche two
+    // needed a second BUY, a three-tranche plan would sit at a third of its size
+    // until the next crossover, which may be months away.
+    auto p          = profile();
+    p.entryTranches = 3;
+    auto ctx        = freshContext({}, "exec_tranche_continue");
+
+    trade::SignalExecutor ex(p, false, -1, ctx);
+    const auto            first = ex.execute(Signal::BUY, 1000, balance(300000, 0, 0, 1000));
+    CHECK_EQ(first.side, std::string{"BUY"});
+    CHECK(first.quantity > int64_t{0});
+    ctx.positions->recordEntryTranche("005930");
+
+    // Next session: still no new signal, but the plan is not filled.
+    const auto second = ex.execute(Signal::HOLD, 1000, balance(200000, 100, 100000, 1000));
+    CHECK_EQ(second.side, std::string{"BUY"});
+    CHECK(second.quantity > int64_t{0});
+}
+
+TEST(executor, a_holding_this_strategy_did_not_open_draws_no_tranche_on_hold) {
+    // Bought by hand at the broker: no entry tranche was ever recorded, so a HOLD
+    // must not be read as permission to keep adding to it.
+    auto p          = profile();
+    p.entryTranches = 3;
+    trade::SignalExecutor ex(p, false, -1, freshContext({}, "exec_tranche_manual"));
+
+    const auto d = ex.execute(Signal::HOLD, 1000, balance(200000, 100, 100000, 1000));
+    CHECK(!d.acted);
+    CHECK(d.side.empty());
+}
+
+TEST(executor, a_sell_signal_stops_the_entry_plan_rather_than_continuing_it) {
+    auto p          = profile();
+    p.entryTranches = 3;
+    auto ctx        = freshContext({}, "exec_tranche_sell");
+
+    trade::SignalExecutor ex(p, false, -1, ctx);
+    ex.execute(Signal::BUY, 1000, balance(300000, 0, 0, 1000));
+    ctx.positions->recordEntryTranche("005930");
+
+    const auto d = ex.execute(Signal::SELL, 1000, balance(200000, 100, 100000, 1000));
+    CHECK_EQ(d.side, std::string{"SELL"});
+}
+
 TEST(executor, cooldown_blocks_reentry_but_not_exits) {
     auto p            = profile();
     p.cooldownMinutes = 30;

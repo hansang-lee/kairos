@@ -135,7 +135,22 @@ Decision SignalExecutor::execute(Signal signal, double price, const AccountBalan
     }
 
     // A buy can add to an existing position until the entry plan is filled.
-    if (!d.acted && signal == Signal::BUY && state.entryTranches < profile_.entryTranches) {
+    //
+    // The later tranches do not wait for another BUY. A crossover strategy emits BUY
+    // on the transition bar only and HOLD forever after, so requiring a fresh signal
+    // for tranche two would leave a three-tranche plan permanently at a third of its
+    // intended size. BacktestEngine was fixed for exactly this; the executor was not,
+    // and the two would have described different portfolios the moment entry_tranches
+    // went above one.
+    //
+    // The first tranche still needs a real BUY: `entryTranches > 0` is the executor's
+    // version of the backtest's `inPos`, and it means this strategy opened the
+    // position. A holding it did not open — bought by hand at the broker — must not
+    // start drawing tranches on a HOLD.
+    const bool continuingEntry = state.entryTranches > 0 && signal != Signal::SELL;
+    const bool entering        = (signal == Signal::BUY) || continuingEntry;
+
+    if (!d.acted && entering && state.entryTranches < profile_.entryTranches) {
         d.acted  = true;
         d.side   = "BUY";
         d.reason = profile_.entryTranches > 1 ? ("signal BUY (tranche " + std::to_string(state.entryTranches + 1) + "/"
