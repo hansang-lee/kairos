@@ -6,7 +6,7 @@ shelling out to build/Release/app/portfolio_report. Live JSON is written to
 cache/ (gitignored) and served under /live/, so the repo stays clean and the
 account snapshot is never committed anywhere public.
 
-  ./scripts/dashboard_server.py --port 8800 --interval 60
+  ./scripts/dashboard_server.py --port 8800 --interval 60   # loopback only; --bind to widen
 """
 
 import argparse
@@ -158,6 +158,11 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 def main():
     parser = argparse.ArgumentParser(description="Local paper-trading dashboard server")
     parser.add_argument("--port", type=int, default=8800)
+    # Loopback by default. This serves the account balance with no authentication,
+    # so anything wider than the machine itself is a leak — it was found listening
+    # on the LAN address during the 2026-09-25 review. Checking from a phone is
+    # the Telegram bot's job, which does check who is asking.
+    parser.add_argument("--bind", default="127.0.0.1", help="address to listen on")
     parser.add_argument("--interval", type=int, default=60, help="refresh seconds")
     args = parser.parse_args()
 
@@ -168,7 +173,7 @@ def main():
     threading.Thread(target=refresh_loop, args=(args.interval,), daemon=True).start()
 
     handler = partial(DashboardHandler, directory=DOCS_DIR)
-    server = ThreadingHTTPServer(("0.0.0.0", args.port), handler)
+    server = ThreadingHTTPServer((args.bind, args.port), handler)
     print(f"[dashboard] http://localhost:{args.port}  (refresh every {args.interval}s, Ctrl+C to stop)", flush=True)
     try:
         server.serve_forever()
