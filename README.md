@@ -80,10 +80,9 @@ kairos/
 │   │                             #           ichimoku_trend, ma_timing, absolute_momentum, dual_momentum, relative_momentum
 │   │                             # position: donchian_breakout, obv_trend, keltner_breakout, volume_breakout, squeeze_breakout
 │
-├── app/                         # CLI executables (28)
-│   │                             # product:  trader, bot, doctor, portfolio_report, fetch_universe
-│   │                             # research: backtest, sweep, portfolio_sweep, portfolio_robustness,
-│   │                             #           beat_benchmark, leverage_study, dca_backtest, macro*, ...
+├── app/                         # What runs the account (9): trader, bot, doctor, portfolio_report,
+│   │                             #   fetch_universe, kis_order, notify_test, bar_collect, macro
+│   └── research/                # Backtests, sweeps and studies (18); nothing here places an order
 ├── scripts/                     # install_systemd.sh, dashboard_server.py
 ├── config/                      # JSON configuration
 │   ├── strategies.json          # Strategy definitions and parameter grids (no tickers)
@@ -139,14 +138,14 @@ Build output: `build/Release/` (or `build/Debug/`).
 ### US stock data
 
 ```bash
-./build/Release/app/stock AAPL 1d 1y
+./build/Release/app/research/stock AAPL 1d 1y
 ```
 
 ### Korean stock data (KIS API)
 
 ```bash
 # Requires KIS credentials in .env (see .env.example)
-./build/Release/app/kis_stock 005930 2024-01-01 2024-12-31
+./build/Release/app/research/kis_stock 005930 2024-01-01 2024-12-31
 ```
 
 ### Paper-trading orders / balance (KIS API)
@@ -162,32 +161,32 @@ Build output: `build/Release/` (or `build/Debug/`).
 
 ```bash
 # Backtest the SMA crossover strategy on AAPL over 1 year
-./build/Release/app/backtest AAPL sma 1y
+./build/Release/app/research/backtest AAPL sma 1y
 ```
 
 ### Strategy sweep (multi-strategy × multi-ticker comparison)
 
 ```bash
-./build/Release/app/strategy_sweep
+./build/Release/app/research/strategy_sweep
 ```
 
 ### Portfolio-driven strategy runs
 
 ```bash
 # List registered strategies
-./build/Release/app/run_strategy --list
+./build/Release/app/research/run_strategy --list
 
 # Run one strategy by ID
-./build/Release/app/run_strategy --id 1
+./build/Release/app/research/run_strategy --id 1
 
 # Run every strategy in the portfolio
-./build/Release/app/run_strategy --all
+./build/Release/app/research/run_strategy --all
 
 # Custom backtest window (default: last ~1 year)
-./build/Release/app/run_strategy --id 1 --start 2021-01-01 --end 2026-09-18
+./build/Release/app/research/run_strategy --id 1 --start 2021-01-01 --end 2026-09-18
 
 # Custom config file
-./build/Release/app/run_strategy --config my_live.json --all
+./build/Release/app/research/run_strategy --config my_live.json --all
 ```
 
 ### Macro analysis
@@ -201,7 +200,7 @@ export FRED_API_KEY=your_key
 ### Fear & Greed Index
 
 ```bash
-./build/Release/app/fng
+./build/Release/app/research/fng
 ```
 
 ---
@@ -359,7 +358,7 @@ What to edit, what needs a restart, and what to check when something looks wrong
 
 ## 📊 Technical indicators
 
-All of them are computed from daily OHLCV alone — no order book or tick data required. `app/test_indicators.cpp` smoke-tests all 25.
+All of them are computed from daily OHLCV alone — no order book or tick data required. `app/research/test_indicators.cpp` smoke-tests all 25.
 
 | Group | Indicator | Function |
 |---|---|---|
