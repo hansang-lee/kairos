@@ -8,6 +8,7 @@
 #include "trade/risk_guard.hpp"
 #include "trade/schedule_state.hpp"
 #include "trade/signal_executor.hpp"
+#include "trade/fill_reconciler.hpp"
 #include "trade/trade_journal.hpp"
 
 namespace {
@@ -253,6 +254,121 @@ TEST(positions, a_position_closed_outside_the_system_is_noticed) {
     // A stale peak here would fire a trailing stop the instant we re-entered.
     store.sync("005930", 10, 120000);
     CHECK_NEAR(store.get("005930").peakPrice, 120000.0, 1e-6);
+}
+
+/* ---------------------------- Fill reconciler ---------------------------- */
+
+namespace {
+
+Fill aFill(const std::string& orderNo, const std::string& ticker, int64_t filled, double avg,
+           OrderSide side = OrderSide::Buy) {
+    Fill f;
+    f.orderNo   = orderNo;
+    f.ticker    = ticker;
+    f.side      = side;
+    f.orderQty  = filled;
+    f.filledQty = filled;
+    f.avgPrice  = avg;
+    f.name      = "TEST";
+    return f;
+}
+
+trade::JournalEntry anOrder(const std::string& orderNo, int id, const std::string& strategy) {
+    trade::JournalEntry e;
+    e.event      = "order";
+    e.mode       = "paper";
+    e.orderNo    = orderNo;
+    e.strategyId = id;
+    e.strategy   = strategy;
+    e.category   = "daily";
+    e.reason     = "signal BUY";
+    e.ticker     = "133690";
+    e.side       = "BUY";
+    e.quantity   = 17;
+    e.price      = 184985.0;
+    e.success    = true;
+    return e;
+}
+
+}  // namespace
+
+TEST(fills, a_fill_is_recorded_once_and_carries_the_strategy_that_ordered_it) {
+    const std::string path = tmp("fills_basic.jsonl");
+    removeFile(path);
+    const trade::TradeJournal journal(path);
+    journal.append(anOrder("0001", 50, "Aroon Trend 25/70"));
+
+    const auto r = trade::reconcileFills(journal, {aFill("0001", "133690", 17, 185100.0)}, "paper");
+    CHECK_EQ(r.recorded, std::size_t{1});
+
+    // Running it again must write nothing: KIS reports the same fill every time it
+    // is asked about that day.
+    const auto again = trade::reconcileFills(journal, {aFill("0001", "133690", 17, 185100.0)}, "paper");
+    CHECK_EQ(again.recorded, std::size_t{0});
+    CHECK_EQ(again.alreadyKnown, std::size_t{1});
+
+    // The strategy travels across from the order, which is the only place it exists.
+    const auto keys = journal.recordedFillKeys();
+    CHECK(keys.count("0001:17") > 0);
+}
+
+TEST(fills, an_order_that_fills_further_is_recorded_again_at_the_larger_quantity) {
+    const std::string path = tmp("fills_partial.jsonl");
+    removeFile(path);
+    const trade::TradeJournal journal(path);
+    journal.append(anOrder("0002", 51, "Aroon Trend 25/70"));
+
+    CHECK_EQ(trade::reconcileFills(journal, {aFill("0002", "069500", 10, 113000.0)}, "paper").recorded,
+             std::size_t{1});
+    // The rest fills later in the session.
+    CHECK_EQ(trade::reconcileFills(journal, {aFill("0002", "069500", 29, 113145.0)}, "paper").recorded,
+             std::size_t{1});
+
+    const auto keys = journal.recordedFillKeys();
+    CHECK(keys.count("0002:10") > 0);
+    CHECK(keys.count("0002:29") > 0);
+}
+
+TEST(fills, an_accepted_but_unfilled_order_is_not_a_fill) {
+    const std::string path = tmp("fills_unfilled.jsonl");
+    removeFile(path);
+    const trade::TradeJournal journal(path);
+
+    Fill pending   = aFill("0003", "133690", 0, 0.0);
+    pending.orderQty = 17;
+    Fill cancelled   = aFill("0004", "133690", 17, 185000.0);
+    cancelled.cancelled = true;
+
+    const auto r = trade::reconcileFills(journal, {pending, cancelled}, "paper");
+    CHECK_EQ(r.recorded, std::size_t{0});
+    CHECK_EQ(r.ignored, std::size_t{2});
+    // Recording either would put a price in the journal that nobody paid.
+    CHECK(journal.recordedFillKeys().empty());
+}
+
+TEST(fills, a_trade_made_by_hand_is_still_recorded_with_no_strategy_attached) {
+    const std::string path = tmp("fills_manual.jsonl");
+    removeFile(path);
+    const trade::TradeJournal journal(path);
+
+    const auto r = trade::reconcileFills(journal, {aFill("9999", "005930", 3, 71000.0, OrderSide::Sell)}, "paper");
+    CHECK_EQ(r.recorded, std::size_t{1});
+    // A gap in the log is harder to explain later than a row with no strategy on it.
+    CHECK(journal.recordedFillKeys().count("9999:3") > 0);
+}
+
+TEST(fills, a_dry_run_order_leaves_nothing_to_reconcile_against) {
+    const std::string path = tmp("fills_dryrun.jsonl");
+    removeFile(path);
+    const trade::TradeJournal journal(path);
+
+    auto dry    = anOrder("", 50, "Aroon Trend 25/70");
+    dry.dryRun  = true;
+    dry.success = false;
+    journal.append(dry);
+
+    // No order number, so it must not become a key that swallows a real fill later.
+    CHECK(journal.orderContexts().empty());
 }
 
 /* ----------------------------- SignalExecutor ----------------------------- */

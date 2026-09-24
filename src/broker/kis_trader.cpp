@@ -251,8 +251,21 @@ FillHistory KisTrader::getDailyFills(const std::string& startYmd, const std::str
     // Inner (within 3 months) lookup. The "before" variants (CTSC9215R / VTSC9215R)
     // would be needed for older ranges, which paper trading has no use for yet.
     const std::string trId = auth.isPaper() ? "VTTC0081R" : "TTTC0081R";
-    const std::string from = startYmd;
-    const std::string to   = endYmd.empty() ? startYmd : endYmd;
+    // Accept either "YYYYMMDD" or "YYYY-MM-DD". Everything else in this codebase
+    // passes dates around with the dashes, so a raw pass-through here is a trap that
+    // fails silently — KIS answers an unparseable range with an empty result rather
+    // than an error, which reads exactly like "nothing filled".
+    const auto ymd = [](const std::string& d) {
+        std::string out;
+        for (const char ch : d) {
+            if (ch != '-') {
+                out.push_back(ch);
+            }
+        }
+        return out;
+    };
+    const std::string from = ymd(startYmd);
+    const std::string to   = ymd(endYmd.empty() ? startYmd : endYmd);
 
     // Paper accounts cap a page at 15 records, so a busy scalping day needs many pages.
     constexpr int kMaxPages = 60;

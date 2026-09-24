@@ -1,5 +1,7 @@
 #include "trade/trade_journal.hpp"
 
+#include <map>
+
 #include <ctime>
 #include <filesystem>
 #include <fstream>
@@ -57,6 +59,41 @@ bool TradeJournal::append(const JournalEntry& entry) const {
     }
     out << j.dump() << "\n";
     return out.good();
+}
+
+std::map<std::string, TradeJournal::OrderContext> TradeJournal::orderContexts() const {
+    std::map<std::string, OrderContext> out;
+
+    std::ifstream in(path_);
+    if (!in.is_open()) {
+        return out;
+    }
+    std::string line;
+    while (std::getline(in, line)) {
+        if (line.empty()) {
+            continue;
+        }
+        try {
+            const auto        j     = nlohmann::json::parse(line);
+            const std::string event = j.value("event", "");
+            if (event != "order" && event != "order_unknown") {
+                continue;
+            }
+            const std::string no = j.value("order_no", "");
+            if (no.empty()) {
+                continue;  // a dry run places nothing, so it has nothing to reconcile
+            }
+            OrderContext ctx;
+            ctx.strategyId = j.value("strategy_id", -1);
+            ctx.strategy   = j.value("strategy", "");
+            ctx.category   = j.value("category", "");
+            ctx.reason     = j.value("reason", "");
+            out[no]        = std::move(ctx);
+        } catch (const std::exception&) {
+            continue;
+        }
+    }
+    return out;
 }
 
 std::set<std::string> TradeJournal::recordedFillKeys() const {

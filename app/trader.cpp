@@ -19,6 +19,7 @@
 #include "data/kis_provider.hpp"
 #include "data/krx_calendar.hpp"
 #include "notify/telegram.hpp"
+#include "trade/fill_reconciler.hpp"
 #include "strategy/strategy_factory.hpp"
 #include "trade/schedule_state.hpp"
 #include "trade/signal_executor.hpp"
@@ -241,6 +242,23 @@ int main(int argc, char* argv[]) {
         std::cout << "[*] Dry-run: no real orders will be placed. Pass --live to trade for real.\n";
     }
     std::cout << "[*] Journal: " << ctx.journal->path() << "\n";
+
+    // What filled since last time, written back before anything new is decided.
+    // KIS advises querying after 15:30, and this process runs at 15:15, so the
+    // reconciliation that matters is always the previous session's — which is why it
+    // happens at the start of a run rather than straight after an order goes out.
+    // Several days back, so a long weekend or a holiday week does not lose a fill.
+    if (live) {
+        const auto  from  = kstDate(7);
+        const auto  hist  = KisTrader::getDailyFills(from, kstDate(0), true);
+        if (!hist.success) {
+            std::cout << "[!] Fill history unavailable (" << hist.message << "); nothing reconciled.\n";
+        } else {
+            const auto r = trade::reconcileFills(*ctx.journal, hist.fills, KisAuth::instance().isPaper() ? "paper" : "live");
+            std::cout << "[*] Fills since " << from << ": " << r.recorded << " newly recorded, " << r.alreadyKnown
+                      << " already known, " << r.ignored << " unfilled or cancelled.\n";
+        }
+    }
 
     std::signal(SIGINT, onStop);
     std::signal(SIGTERM, onStop);  // what systemd sends to stop a service

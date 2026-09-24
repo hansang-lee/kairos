@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
 #include <set>
 #include <string>
 
@@ -65,6 +66,24 @@ class TradeJournal {
      * Malformed lines are skipped rather than aborting the read.
      */
     [[nodiscard]] std::set<std::string> recordedFillKeys() const;
+
+    /** @brief What an order entry recorded about the decision behind it. */
+    struct OrderContext {
+        int         strategyId = -1;
+        std::string strategy;
+        std::string category;
+        std::string reason;
+    };
+
+    /**
+     * @brief The decision behind each order, keyed by KIS order number.
+     *
+     * KIS reports what filled and at what price but has no idea which strategy asked
+     * for it. Carrying the context across from the order entry is what makes the
+     * journal answer the question it exists for — what a given strategy actually
+     * paid, rather than what it hoped to pay.
+     */
+    [[nodiscard]] std::map<std::string, OrderContext> orderContexts() const;
 
     [[nodiscard]] const std::string& path() const { return path_; }
 

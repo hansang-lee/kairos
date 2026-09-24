@@ -32,6 +32,7 @@ add_library(${PROJECT_NAME} SHARED
   src/portfolio/price_cache.cpp
   src/portfolio/strategies.cpp
   src/trade/trade_journal.cpp
+  src/trade/fill_reconciler.cpp
   src/trade/signal_executor.cpp
   src/trade/risk_guard.cpp
   src/trade/schedule_state.cpp

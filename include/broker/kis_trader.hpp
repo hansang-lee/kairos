@@ -102,8 +102,8 @@ class KisTrader {
      * followed until the server stops handing one back. KIS recommends querying
      * after 15:30 KST — same-day results before the close may still be incomplete.
      *
-     * @param startYmd Inclusive start date, "YYYYMMDD".
-     * @param endYmd   Inclusive end date, "YYYYMMDD". Empty (default) means startYmd.
+     * @param startYmd Inclusive start date, "YYYYMMDD" or "YYYY-MM-DD".
+     * @param endYmd   Inclusive end date, same forms. Empty (default) means startYmd.
      * @param filledOnly Return only orders with a fill (CCLD_DVSN=01) instead of all.
      */
     [[nodiscard]] static FillHistory getDailyFills(const std::string& startYmd, const std::string& endYmd = "",
