@@ -241,10 +241,34 @@ Modelled as a daily share-count haircut, which is where a fund's fee actually la
 | **0.30% (default)** | **126.9** | **55.0** |
 | 0.50% | 122.6 | 52.2 |
 
-No ticker in any universe file states its own `expense_ratio` yet, so every run applies
-the assumed default and prints that it did. Published fees for these products run
-roughly 0.05-0.5%/yr. Filling in per-ticker `expense_ratio` fields replaces the
-assumption with a measurement; until then, treat the fee column as an estimate.
+**Both of the above were later found to be wrong, and are corrected here.**
+
+A listed fund's fee comes out of its net asset value daily, so a price series already
+carries it. Charging an expense ratio on top of that was double counting, and the
+default is now zero. The field remains for costs a price cannot contain — an advisory
+fee, or a synthetic series built from an index, as in the leverage study.
+
+And the distributions were never missing. On 2026-09-24 the KIS series (requested with
+`FID_ORG_ADJ_PRC=0`, 수정주가) was checked against Yahoo's dividend-adjusted close for
+069500, 148070, 114260, 132030 and 133690 over eleven years:
+
+| Ticker | KIS vs Yahoo adjusted | KIS vs Yahoo raw |
+|---|---|---|
+| 069500 KODEX 200 | 0.12% | 20.4% |
+| 148070 KOSEF 국고채10년 | 0.00% | 19.1% |
+| 114260 KODEX 국고채3년 | 1.25% | 7.6% |
+| 132030 KODEX 골드선물 | 0.01% | 0.5% |
+| 133690 TIGER 미국나스닥100 | 0.12% | 4.0% |
+
+KIS tracks the adjusted series, not the raw one. So KRX figures are total returns, they
+are not understated, and they are directly comparable to the dividend-adjusted US ones.
+The gold fund makes a useful control: it distributes nothing, and there the raw and
+adjusted series agree with each other anyway.
+
+Yahoo's US prices, by contrast, genuinely were unadjusted until the fetch started asking
+for `events=div|split`. That mattered most where it was least visible: on price alone TLT
+compounded at -0.14% a year and SHY at -0.05%, because a bond fund pays out nearly
+everything it earns.
 
 ---
 

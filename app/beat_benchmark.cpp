@@ -607,11 +607,11 @@ int main(int argc, char* argv[]) {
               << "-year holding periods whose annualised return beat\n"
               << " QQQ's over the same stretch; med exc is that difference in points a year. Windows\n"
               << " overlap heavily, so those counts are not independent trials.\n\n"
-              << " US rows are in USD, include distributions, and carry no tax. KRX rows are in KRW\n"
-              << " and their prices are NOT adjusted for distributions, so they are understated by\n"
-              << " roughly each fund's yield — a point or two a year for equity, most of the return\n"
-              << " for the bond funds. Comparing a KRX row against a US one therefore flatters the\n"
-              << " US one, before any currency effect, which is also not modelled.\n";
+              << " US rows are in USD and KRX rows in KRW. Both include distributions — Yahoo's\n"
+              << " adjusted series for the US funds, and KIS's 수정주가, which was checked against\n"
+              << " Yahoo's dividend-adjusted close on five KRX funds and matched to within 1.25%\n"
+              << " over eleven years. So the two sides are comparable on return. Neither carries\n"
+              << " tax, and the currency effect between them is not modelled.\n";
 
     return 0;
 }

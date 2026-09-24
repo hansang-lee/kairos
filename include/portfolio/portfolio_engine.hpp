@@ -54,10 +54,11 @@ struct PortfolioConfigBt {
      * costs a price cannot contain — an advisory fee, a wrap charge, or a synthetic
      * series built from an index rather than from a fund.
      *
-     * The real omission in these backtests runs the other way: KRX prices from KIS
-     * are not adjusted for distributions, so a fund's payouts are missing entirely.
-     * On US data that is now fixed by using the adjusted series; on KRX it is not,
-     * and every KRX figure is understated by roughly its distribution yield.
+     * Both markets' price series are total returns, so neither needs a fee here and
+     * neither is missing its payouts. Yahoo supplies the adjusted series for the US
+     * funds, and KIS's 수정주가 turned out to carry 분배금 already — checked against
+     * Yahoo's dividend-adjusted close on five KRX funds over eleven years, matching
+     * to within 1.25% while the raw series differed by up to 19%.
      *
      * Indexed by asset, in the order of PortfolioData::tickers. Entries past the
      * end of the vector use `defaultExpenseRatio`.
