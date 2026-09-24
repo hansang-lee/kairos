@@ -156,13 +156,20 @@ std::vector<notify::BotTrade> recentTrades() {
 }  // namespace
 
 int main(int argc, char* argv[]) {
+    // Silence is the normal outcome — nothing arrived — and it is also what every
+    // failure looks like from the outside. --verbose is the difference.
+    bool verbose = false;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
+        if (a == "--verbose" || a == "-v") {
+            verbose = true;
+        }
         if (a == "--help" || a == "-h") {
-            std::cout << "Usage:\n  bot [--live-config <path>]\n\n"
+            std::cout << "Usage:\n  bot [--verbose]\n\n"
                       << "  Answers Telegram commands about the account, once, then exits.\n"
                       << "  Meant to run from a short-interval timer. Only the configured\n"
-                      << "  TELEGRAM_CHAT_ID is answered; anyone else is ignored.\n";
+                      << "  TELEGRAM_CHAT_ID is answered; anyone else is ignored.\n"
+                      << "  --verbose prints what arrived and what was done with it.\n";
             return 0;
         }
     }
@@ -175,6 +182,10 @@ int main(int argc, char* argv[]) {
 
     const int64_t offset  = loadOffset();
     const auto    updates = telegram.getUpdates(offset);
+    if (verbose) {
+        std::cerr << "[v] offset " << offset << ", " << updates.size() << " update(s), configured chat ["
+                  << telegram.chatId() << "]" << std::endl;
+    }
     if (updates.empty()) {
         return 0;
     }
@@ -196,6 +207,10 @@ int main(int argc, char* argv[]) {
         }
 
         const std::string cmd = notify::commandOf(u.text);
+        if (verbose) {
+            std::cerr << "[v] id " << u.updateId << " from [" << u.chatId << "] text [" << u.text << "] cmd [" << cmd
+                      << "]" << std::endl;
+        }
         std::string       reply;
         if (cmd == "/status" || cmd == "/start") {
             reply = notify::formatStatus(snapshot(live ? *live : nlohmann::json::object()));
@@ -212,7 +227,16 @@ int main(int argc, char* argv[]) {
             reply = "모르는 명령입니다\n\n" + notify::helpText();
         }
 
-        if (!reply.empty() && !telegram.send(reply)) {
+        if (reply.empty()) {
+            if (verbose) {
+                std::cerr << "[v] no reply for [" << cmd << "]" << std::endl;
+            }
+            continue;
+        }
+        if (verbose) {
+            std::cerr << "[v] replying " << reply.size() << " bytes" << std::endl;
+        }
+        if (!telegram.send(reply)) {
             std::cerr << "[!] Reply to " << cmd << " could not be delivered." << std::endl;
         }
     }
