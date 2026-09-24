@@ -7,4 +7,6 @@ Type=oneshot
 WorkingDirectory=__ROOT__
 ExecStart=__ROOT__/build/Release/app/bot
 # A poll that hangs must not pile up behind the next one.
-TimeoutStartSec=60
+# A slow command must not be killed half-answered. The poll itself is quick; it is
+# the balance and signal queries behind it that take time.
+TimeoutStartSec=300

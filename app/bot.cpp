@@ -12,7 +12,7 @@
 
 #include "broker/kis_trader.hpp"
 #include "common/util.hpp"
-#include "data/kis_provider.hpp"
+#include "portfolio/price_cache.hpp"
 #include "notify/bot_commands.hpp"
 #include "notify/telegram.hpp"
 #include "strategy/strategy_catalog.hpp"
@@ -80,13 +80,19 @@ notify::BotSnapshot snapshot(const nlohmann::json& live) {
     return s;
 }
 
-std::vector<notify::BotSignal> currentSignals(const nlohmann::json& live, const StrategyCatalog& catalog) {
+std::vector<notify::BotSignal> currentSignals(const nlohmann::json& live, const StrategyCatalog& catalog,
+                                             std::string* staleness) {
     std::vector<notify::BotSignal> out;
     if (!live.contains("positions")) {
         return out;
     }
     const auto balance = KisTrader::getBalance();
-    KisProvider provider;
+
+    // History comes from the cache rather than the broker. Fetching 400 days for
+    // three tickers takes about two and a half minutes of paged requests, which is
+    // longer than the service is allowed to run and far longer than anyone waits on
+    // a phone. The signal only needs bars up to yesterday, and those do not change.
+    int64_t oldestBar = 0;
 
     for (const auto& pos : live["positions"]) {
         if (!pos.value("enabled", false)) {
@@ -99,10 +105,15 @@ std::vector<notify::BotSignal> currentSignals(const nlohmann::json& live, const 
         StrategyProfile prof;
         prof.type    = def->type;
         prof.params  = def->params;
-        auto strat   = prof.createStrategy();
-        const auto data = provider.getStockInfo(pos.value("ticker", ""), kstDate(400), kstDate(0));
+        auto       strat = prof.createStrategy();
+        const auto data  = portfolio::loadCachedDaily(pos.value("ticker", ""));
         if (!strat || !data || data->close.size() <= strat->warmupPeriod()) {
             continue;
+        }
+        // The oldest last-bar across the tickers, so the reply can say how fresh the
+        // answer is instead of quietly speaking from a stale cache.
+        if (!data->timestamps.empty() && (oldestBar == 0 || data->timestamps.back() < oldestBar)) {
+            oldestBar = data->timestamps.back();
         }
         strat->init(*data);
 
@@ -120,6 +131,13 @@ std::vector<notify::BotSignal> currentSignals(const nlohmann::json& live, const 
             }
         }
         out.push_back(std::move(s));
+    }
+
+    if (staleness != nullptr && oldestBar > 0) {
+        const std::time_t t = static_cast<std::time_t>(oldestBar);
+        char              buf[16];
+        std::strftime(buf, sizeof(buf), "%Y-%m-%d", std::gmtime(&t));
+        *staleness = buf;
     }
     return out;
 }
@@ -207,6 +225,15 @@ int main(int argc, char* argv[]) {
         }
 
         const std::string cmd = notify::commandOf(u.text);
+
+        // Confirm receipt before doing the work. It cannot arrive any earlier than
+        // the answer would — the bot does not know a message exists until it polls —
+        // but /status spends nine seconds in the balance query and /signals longer
+        // still, and silence through that reads as "it never got there".
+        const bool slow = (cmd == "/status" || cmd == "/start" || cmd == "/positions" || cmd == "/signals");
+        if (slow) {
+            telegram.send("확인했습니다. 조회 중...");
+        }
         if (verbose) {
             std::cerr << "[v] id " << u.updateId << " from [" << u.chatId << "] text [" << u.text << "] cmd [" << cmd
                       << "]" << std::endl;
@@ -217,8 +244,12 @@ int main(int argc, char* argv[]) {
         } else if (cmd == "/positions") {
             reply = notify::formatPositions(snapshot(live ? *live : nlohmann::json::object()));
         } else if (cmd == "/signals") {
-            reply = catalog.loaded() && live ? notify::formatSignals(currentSignals(*live, catalog))
+            std::string asOf;
+            reply = catalog.loaded() && live ? notify::formatSignals(currentSignals(*live, catalog, &asOf))
                                              : "설정을 읽지 못했습니다";
+            if (!asOf.empty()) {
+                reply += "\n\n(" + asOf + " 종가 기준)";
+            }
         } else if (cmd == "/trades") {
             reply = notify::formatTrades(recentTrades(), 10);
         } else if (cmd == "/help") {
