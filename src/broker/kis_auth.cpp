@@ -10,6 +10,8 @@
 #include <curl/curl.h>
 #include <nlohmann/json.hpp>
 
+#include "common/util.hpp"
+
 KisAuth& KisAuth::instance() {
     static KisAuth inst;
     return inst;
@@ -94,7 +96,8 @@ std::size_t KisAuth::writeCallback(void* contents, std::size_t size, std::size_t
 }
 
 bool KisAuth::loadTokenFromCache() {
-    const std::string cachePath = isPaper_ ? "cache/kis_token_paper.json" : "cache/kis_token_real.json";
+    const std::string cachePath =
+        util::resolveFromExe(isPaper_ ? "cache/kis_token_paper.json" : "cache/kis_token_real.json");
     if (!std::filesystem::exists(cachePath)) {
         return false;
     }
@@ -122,7 +125,7 @@ bool KisAuth::loadTokenFromCache() {
 
 bool KisAuth::saveTokenToCache(const std::string& token, int64_t expiresIn) {
     try {
-        std::filesystem::create_directories("cache");
+        std::filesystem::create_directories(util::resolveFromExe("cache"));
         const auto now =
             std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
                 .count();
@@ -131,8 +134,9 @@ bool KisAuth::saveTokenToCache(const std::string& token, int64_t expiresIn) {
         j["token"]      = token;
         j["expires_at"] = now + expiresIn;
 
-        const std::string cachePath = isPaper_ ? "cache/kis_token_paper.json" : "cache/kis_token_real.json";
-        std::ofstream     file(cachePath);
+        const std::string cachePath =
+            util::resolveFromExe(isPaper_ ? "cache/kis_token_paper.json" : "cache/kis_token_real.json");
+        std::ofstream file(cachePath);
         file << j.dump(2);
         return true;
     } catch (const std::exception& e) {

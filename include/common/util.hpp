@@ -25,8 +25,8 @@ namespace util {
  */
 struct Defer {
     std::function<void()> f;
-    explicit Defer(std::function<void()> f)
-        : f(std::move(f)) {}
+    explicit Defer(std::function<void()> fn)
+        : f(std::move(fn)) {}
     ~Defer() {
         if (f)
             f();
@@ -84,7 +84,7 @@ struct Defer {
  * Returns an empty string when the key is absent or blank, which callers treat as
  * "feature not configured" rather than an error.
  */
-[[nodiscard]] inline std::string envValue(const std::string& key, const std::string& envPath = ".env") {
+[[nodiscard]] inline std::string envValue(const std::string& key, const std::string& envPath = resolveFromExe(".env")) {
     static std::map<std::string, std::map<std::string, std::string>> cache;
 
     auto it = cache.find(envPath);

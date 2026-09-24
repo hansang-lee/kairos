@@ -1,5 +1,7 @@
 #pragma once
 
+#include "common/util.hpp"
+
 #include <string>
 
 class KisAuth {
@@ -7,7 +9,14 @@ class KisAuth {
     static KisAuth& instance();
 
     void init(const std::string& appKey, const std::string& appSecret, bool isPaper = true);
-    void loadFromEnv(const std::string& envPath = ".env");
+    /**
+     * @param envPath Defaults to <project-root>/.env, resolved from the executable
+     *        like every other file this program touches. It was ".env" relative to
+     *        the working directory, which meant a run started from anywhere else
+     *        found no credentials and requested a fresh token — and KIS limits how
+     *        often that may happen.
+     */
+    void loadFromEnv(const std::string& envPath = util::resolveFromExe(".env"));
 
     [[nodiscard]] std::string getAccessToken();
     [[nodiscard]] std::string getAppKey() const { return appKey_; }
