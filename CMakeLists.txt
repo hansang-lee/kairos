@@ -150,6 +150,7 @@ add_executable(kairos_tests
   tests/test_portfolio_leverage.cpp
   tests/test_portfolio_allocation.cpp
   tests/test_session.cpp
+  tests/test_agreement.cpp
 )
 target_link_libraries(kairos_tests PRIVATE ${PROJECT_NAME})
 target_compile_options(kairos_tests PRIVATE ${KAIROS_WARNINGS})
