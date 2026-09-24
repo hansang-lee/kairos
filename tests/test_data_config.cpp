@@ -440,6 +440,16 @@ TEST(config, bollinger_accepts_both_spellings_of_the_width) {
 
 /* ---------------------------------- util ---------------------------------- */
 
+TEST(util, resolve_from_exe_finds_the_project_root_by_what_it_contains) {
+    // This binary sits at build/Release/kairos_tests — three levels down, where a
+    // fixed four-level walk used to land one directory too high.
+    const std::string root = util::resolveFromExe("");
+    CHECK(std::filesystem::exists(root + "/CMakeLists.txt"));
+    CHECK(std::filesystem::is_directory(root + "/config"));
+    CHECK(std::filesystem::exists(util::resolveFromExe("config/live.json")));
+    CHECK(root.find("/build") == std::string::npos);
+}
+
 TEST(util, kst_dates_are_utc_plus_nine_and_cross_midnight_where_seoul_does) {
     // Epoch zero is 1970-01-01 00:00 UTC, which is 09:00 the same day in Seoul.
     CHECK_EQ(util::kstDateOf(0), std::string("1970-01-01"));

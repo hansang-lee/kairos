@@ -70,11 +70,25 @@ struct Defer {
  */
 [[nodiscard]] inline std::string resolveFromExe(const std::string& relativePath) {
     namespace fs = std::filesystem;
-    // The executable is typically at build/Release/app/<name>,
-    // so we go up 4 levels (app -> Release -> build -> project root).
-    auto exePath    = fs::read_symlink("/proc/self/exe");
-    auto projectDir = exePath.parent_path().parent_path().parent_path().parent_path();
-    return (projectDir / relativePath).string();
+    // Walk up from the executable until the project root is recognised by what it
+    // contains, rather than counting a fixed number of levels. Counting was wrong
+    // for the test binary (three levels down, not four) and became wrong for every
+    // research tool the moment they moved one directory deeper; either way the
+    // symptom was a tool quietly reading cache/ or config/ from the wrong place.
+    static const std::string root = [] {
+        std::error_code ec;
+        fs::path        dir = fs::read_symlink("/proc/self/exe", ec).parent_path();
+        for (int i = 0; i < 8 && !dir.empty() && dir != dir.root_path(); ++i) {
+            if (fs::exists(dir / "CMakeLists.txt", ec) && fs::is_directory(dir / "config", ec)) {
+                return dir.string();
+            }
+            dir = dir.parent_path();
+        }
+        // No marker found: the historical layout, so an unusual install degrades to
+        // the old behaviour rather than to an empty path.
+        return fs::read_symlink("/proc/self/exe", ec).parent_path().parent_path().parent_path().parent_path().string();
+    }();
+    return (fs::path(root) / relativePath).string();
 }
 
 /**
