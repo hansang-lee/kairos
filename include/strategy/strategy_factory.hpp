@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -47,7 +48,51 @@ struct StrategyProfile {
      */
     bool enabled = true;
 
-    [[nodiscard]] std::unique_ptr<IStrategy> createStrategy() const;
+    /**
+     * @param unused When given, receives every key in `params` that the strategy
+     *        never read. nlohmann's value(key, fallback) returns the fallback for a
+     *        missing key, so a misspelled parameter is silently ignored and the
+     *        strategy runs on defaults — which looks like the parameter having no
+     *        effect rather than like an error. That cost a whole parameter sweep
+     *        before it was noticed. The warning is always printed; this lets a
+     *        test see it.
+     */
+    [[nodiscard]] std::unique_ptr<IStrategy> createStrategy(std::vector<std::string>* unused = nullptr) const;
+};
+
+/**
+ * @brief Reads strategy parameters and remembers which keys were asked for.
+ *
+ * Replaces a hand-maintained list of known keys per strategy type, which covered
+ * three of twenty-four types when it was checked and would have kept drifting as
+ * parameters were added. A reader that records what was read cannot fall out of
+ * step with the code that reads.
+ */
+class ParamReader {
+   public:
+    explicit ParamReader(const nlohmann::json& params)
+        : params_(params) {}
+
+    template<class T>
+    [[nodiscard]] T value(const std::string& key, T fallback) const {
+        seen_.insert(key);
+        return params_.is_object() ? params_.value(key, fallback) : fallback;
+    }
+
+    [[nodiscard]] bool contains(const std::string& key) const {
+        seen_.insert(key);
+        return params_.is_object() && params_.contains(key);
+    }
+
+    /** @brief Keys present in the params that nothing read. */
+    [[nodiscard]] std::vector<std::string> unusedKeys() const;
+
+    /** @brief Whether any key was read at all — false when no strategy type matched. */
+    [[nodiscard]] bool touched() const { return !seen_.empty(); }
+
+   private:
+    const nlohmann::json&         params_;
+    mutable std::set<std::string> seen_;
 };
 
 class PortfolioConfig {

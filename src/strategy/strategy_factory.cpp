@@ -32,187 +32,178 @@
 #include "volume_breakout.hpp"
 #include "williams_r_strategy.hpp"
 
-namespace {
+namespace {}  // namespace
 
-/**
- * @brief Warn about parameter keys the strategy does not read.
- *
- * nlohmann's params.value(key, fallback) returns the fallback for a missing key,
- * so a mistyped parameter is silently ignored and the strategy runs on defaults
- * — which looks like the parameter having no effect rather than like an error.
- * That cost a whole parameter sweep before it was noticed, so unknown keys are
- * now reported.
- */
-void warnUnknownParams(const nlohmann::json& params, const std::string& type, const std::vector<std::string>& known) {
-    if (!params.is_object()) {
-        return;
-    }
-    for (const auto& [key, value] : params.items()) {
-        if (std::find(known.begin(), known.end(), key) == known.end()) {
-            std::cerr << "StrategyProfile: '" << type << "' does not use parameter '" << key
-                      << "' — it will be ignored." << std::endl;
+std::unique_ptr<IStrategy> StrategyProfile::createStrategy(std::vector<std::string>* unused) const {
+    const ParamReader pr(params);
+    // Runs on every return path below, so no strategy type can be left out.
+    struct Report {
+        const ParamReader&        pr;
+        const std::string&        type;
+        std::vector<std::string>* out;
+        ~Report() {
+            if (!pr.touched()) {
+                return;  // no type matched; the unknown-type message covers it
+            }
+            const auto keys = pr.unusedKeys();
+            if (out != nullptr) {
+                *out = keys;
+            }
+            for (const auto& k : keys) {
+                std::cerr << "StrategyProfile: '" << type << "' does not use parameter '" << k
+                          << "' — it will be ignored." << std::endl;
+            }
         }
-    }
-}
+    } report{pr, type, unused};
 
-}  // namespace
-
-std::unique_ptr<IStrategy> StrategyProfile::createStrategy() const {
     if (type == "rsi") {
-        const std::size_t period     = params.value("period", 14);
-        const double      oversold   = params.value("oversold", 30.0);
-        const double      overbought = params.value("overbought", 70.0);
+        const std::size_t period     = pr.value("period", 14);
+        const double      oversold   = pr.value("oversold", 30.0);
+        const double      overbought = pr.value("overbought", 70.0);
         return std::make_unique<RsiStrategy>(period, oversold, overbought);
     }
     if (type == "macd") {
-        const std::size_t fast   = params.value("fast", 12);
-        const std::size_t slow   = params.value("slow", 26);
-        const std::size_t signal = params.value("signal", 9);
+        const std::size_t fast   = pr.value("fast", 12);
+        const std::size_t slow   = pr.value("slow", 26);
+        const std::size_t signal = pr.value("signal", 9);
         return std::make_unique<MacdStrategy>(fast, slow, signal);
     }
     if (type == "bollinger") {
-        warnUnknownParams(params, type, {"period", "std_dev", "std_devs"});
-        const std::size_t period = params.value("period", 20);
+        const std::size_t period = pr.value("period", 20);
         // Both spellings are accepted: "std_dev" is what the original config used,
         // "std_devs" is what every other band strategy and the docs use.
-        const double numStdDev =
-            params.contains("std_devs") ? params.value("std_devs", 2.0) : params.value("std_dev", 2.0);
+        const double numStdDev = pr.contains("std_devs") ? pr.value("std_devs", 2.0) : pr.value("std_dev", 2.0);
         return std::make_unique<BollingerStrategy>(period, numStdDev);
     }
     if (type == "sma_crossover" || type == "sma") {
-        const std::size_t shortWin = params.value("short_window", 20);
-        const std::size_t longWin  = params.value("long_window", 50);
+        const std::size_t shortWin = pr.value("short_window", 20);
+        const std::size_t longWin  = pr.value("long_window", 50);
         return std::make_unique<SmaCrossover>(shortWin, longWin);
     }
     if (type == "stochastic_reversal" || type == "stochastic") {
-        const std::size_t kPeriod    = params.value("k_period", 14);
-        const std::size_t dPeriod    = params.value("d_period", 3);
-        const double      oversold   = params.value("oversold", 20.0);
-        const double      overbought = params.value("overbought", 80.0);
+        const std::size_t kPeriod    = pr.value("k_period", 14);
+        const std::size_t dPeriod    = pr.value("d_period", 3);
+        const double      oversold   = pr.value("oversold", 20.0);
+        const double      overbought = pr.value("overbought", 80.0);
         return std::make_unique<StochasticReversal>(kPeriod, dPeriod, oversold, overbought);
     }
     if (type == "williams_r") {
-        const std::size_t period     = params.value("period", 14);
-        const double      oversold   = params.value("oversold", -80.0);
-        const double      overbought = params.value("overbought", -20.0);
+        const std::size_t period     = pr.value("period", 14);
+        const double      oversold   = pr.value("oversold", -80.0);
+        const double      overbought = pr.value("overbought", -20.0);
         return std::make_unique<WilliamsRStrategy>(period, oversold, overbought);
     }
     if (type == "cci_reversal" || type == "cci") {
-        const std::size_t period     = params.value("period", 20);
-        const double      oversold   = params.value("oversold", -100.0);
-        const double      overbought = params.value("overbought", 100.0);
+        const std::size_t period     = pr.value("period", 20);
+        const double      oversold   = pr.value("oversold", -100.0);
+        const double      overbought = pr.value("overbought", 100.0);
         return std::make_unique<CciReversal>(period, oversold, overbought);
     }
     if (type == "mfi_reversal" || type == "mfi") {
-        const std::size_t period     = params.value("period", 14);
-        const double      oversold   = params.value("oversold", 20.0);
-        const double      overbought = params.value("overbought", 80.0);
+        const std::size_t period     = pr.value("period", 14);
+        const double      oversold   = pr.value("oversold", 20.0);
+        const double      overbought = pr.value("overbought", 80.0);
         return std::make_unique<MfiReversal>(period, oversold, overbought);
     }
     if (type == "adx_trend" || type == "adx") {
-        const std::size_t period       = params.value("period", 14);
-        const double      adxThreshold = params.value("adx_threshold", 25.0);
+        const std::size_t period       = pr.value("period", 14);
+        const double      adxThreshold = pr.value("adx_threshold", 25.0);
         return std::make_unique<AdxTrend>(period, adxThreshold);
     }
     if (type == "supertrend") {
-        const std::size_t period     = params.value("period", 10);
-        const double      multiplier = params.value("multiplier", 3.0);
+        const std::size_t period     = pr.value("period", 10);
+        const double      multiplier = pr.value("multiplier", 3.0);
         return std::make_unique<SuperTrendFollow>(period, multiplier);
     }
     if (type == "aroon_trend" || type == "aroon") {
-        warnUnknownParams(params, type, {"period", "strength_threshold"});
-        const std::size_t period            = params.value("period", 25);
-        const double      strengthThreshold = params.value("strength_threshold", 70.0);
+        const std::size_t period            = pr.value("period", 25);
+        const double      strengthThreshold = pr.value("strength_threshold", 70.0);
         return std::make_unique<AroonTrend>(period, strengthThreshold);
     }
     if (type == "psar_trend" || type == "psar") {
-        const double afStep = params.value("af_step", 0.02);
-        const double afMax  = params.value("af_max", 0.2);
+        const double afStep = pr.value("af_step", 0.02);
+        const double afMax  = pr.value("af_max", 0.2);
         return std::make_unique<PsarTrend>(afStep, afMax);
     }
     if (type == "donchian_breakout" || type == "donchian") {
-        const std::size_t period = params.value("period", 20);
+        const std::size_t period = pr.value("period", 20);
         return std::make_unique<DonchianBreakout>(period);
     }
     if (type == "obv_trend" || type == "obv") {
-        const std::size_t smaPeriod = params.value("sma_period", 20);
+        const std::size_t smaPeriod = pr.value("sma_period", 20);
         return std::make_unique<ObvTrendConfirm>(smaPeriod);
     }
     if (type == "keltner_breakout" || type == "keltner") {
-        const std::size_t emaPeriod  = params.value("ema_period", 20);
-        const std::size_t atrPeriod  = params.value("atr_period", 10);
-        const double      multiplier = params.value("multiplier", 2.0);
+        const std::size_t emaPeriod  = pr.value("ema_period", 20);
+        const std::size_t atrPeriod  = pr.value("atr_period", 10);
+        const double      multiplier = pr.value("multiplier", 2.0);
         return std::make_unique<KeltnerBreakout>(emaPeriod, atrPeriod, multiplier);
     }
     if (type == "ma_slope_trend" || type == "slope_trend") {
-        const std::size_t maPeriod       = params.value("ma_period", 20);
-        const std::size_t slopeWindow    = params.value("slope_window", 10);
-        const double      entryThreshold = params.value("entry_threshold", 0.15);
-        const double      exitThreshold  = params.value("exit_threshold", -0.05);
-        const std::size_t adxPeriod      = params.value("adx_period", 14);
-        const double      adxThreshold   = params.value("adx_threshold", 20.0);
+        const std::size_t maPeriod       = pr.value("ma_period", 20);
+        const std::size_t slopeWindow    = pr.value("slope_window", 10);
+        const double      entryThreshold = pr.value("entry_threshold", 0.15);
+        const double      exitThreshold  = pr.value("exit_threshold", -0.05);
+        const std::size_t adxPeriod      = pr.value("adx_period", 14);
+        const double      adxThreshold   = pr.value("adx_threshold", 20.0);
         return std::make_unique<MaSlopeTrend>(maPeriod, slopeWindow, entryThreshold, exitThreshold, adxPeriod,
                                               adxThreshold);
     }
 
     if (type == "regime_rsi" || type == "regime_filter_rsi") {
-        const std::size_t regimePeriod = params.value("regime_period", 200);
-        const std::size_t rsiPeriod    = params.value("rsi_period", 14);
-        const double      oversold     = params.value("oversold", 35.0);
-        const double      exitLevel    = params.value("exit_level", 65.0);
+        const std::size_t regimePeriod = pr.value("regime_period", 200);
+        const std::size_t rsiPeriod    = pr.value("rsi_period", 14);
+        const double      oversold     = pr.value("oversold", 35.0);
+        const double      exitLevel    = pr.value("exit_level", 65.0);
         return std::make_unique<RegimeRsi>(regimePeriod, rsiPeriod, oversold, exitLevel);
     }
 
     if (type == "volume_breakout") {
-        const std::size_t period       = params.value("period", 20);
-        const std::size_t volumePeriod = params.value("volume_period", 20);
-        const double      volumeRatio  = params.value("volume_ratio", 1.5);
+        const std::size_t period       = pr.value("period", 20);
+        const std::size_t volumePeriod = pr.value("volume_period", 20);
+        const double      volumeRatio  = pr.value("volume_ratio", 1.5);
         return std::make_unique<VolumeBreakout>(period, volumePeriod, volumeRatio);
     }
 
     if (type == "squeeze_breakout" || type == "squeeze") {
-        const std::size_t period          = params.value("period", 20);
-        const double      stdDevs         = params.value("std_devs", 2.0);
-        const std::size_t squeezeLookback = params.value("squeeze_lookback", 60);
-        const double      squeezePercent  = params.value("squeeze_percent", 0.25);
+        const std::size_t period          = pr.value("period", 20);
+        const double      stdDevs         = pr.value("std_devs", 2.0);
+        const std::size_t squeezeLookback = pr.value("squeeze_lookback", 60);
+        const double      squeezePercent  = pr.value("squeeze_percent", 0.25);
         return std::make_unique<SqueezeBreakout>(period, stdDevs, squeezeLookback, squeezePercent);
     }
 
     if (type == "ichimoku_trend" || type == "ichimoku") {
-        const std::size_t conversion = params.value("conversion", 9);
-        const std::size_t base       = params.value("base", 26);
-        const std::size_t spanB      = params.value("span_b", 52);
+        const std::size_t conversion = pr.value("conversion", 9);
+        const std::size_t base       = pr.value("base", 26);
+        const std::size_t spanB      = pr.value("span_b", 52);
         return std::make_unique<IchimokuTrend>(conversion, base, spanB);
     }
 
     if (type == "ma_timing") {
-        const std::size_t period    = params.value("period", 200);
-        const double      bufferPct = params.value("buffer_pct", 0.0);
-        warnUnknownParams(params, type, {"period", "buffer_pct"});
+        const std::size_t period    = pr.value("period", 200);
+        const double      bufferPct = pr.value("buffer_pct", 0.0);
         return std::make_unique<MaTiming>(period, bufferPct);
     }
 
     if (type == "absolute_momentum") {
-        const std::size_t lookback  = params.value("lookback", 252);
-        const double      threshold = params.value("threshold", 0.0);
-        warnUnknownParams(params, type, {"lookback", "threshold"});
+        const std::size_t lookback  = pr.value("lookback", 252);
+        const double      threshold = pr.value("threshold", 0.0);
         return std::make_unique<AbsoluteMomentum>(lookback, threshold);
     }
 
     if (type == "dual_momentum") {
-        const std::size_t maPeriod  = params.value("ma_period", 200);
-        const std::size_t lookback  = params.value("lookback", 252);
-        const double      threshold = params.value("threshold", 0.0);
-        warnUnknownParams(params, type, {"ma_period", "lookback", "threshold"});
+        const std::size_t maPeriod  = pr.value("ma_period", 200);
+        const std::size_t lookback  = pr.value("lookback", 252);
+        const double      threshold = pr.value("threshold", 0.0);
         return std::make_unique<DualMomentum>(maPeriod, lookback, threshold);
     }
 
     if (type == "relative_momentum") {
-        warnUnknownParams(params, type, {"reference", "lookback", "margin_pct", "cache_dir"});
-        const std::string reference = params.value("reference", std::string("148070"));
-        const std::size_t lookback  = params.value("lookback", 126);
-        const double      marginPct = params.value("margin_pct", 0.0);
-        const std::string cacheDir  = params.value("cache_dir", std::string());
+        const std::string reference = pr.value("reference", std::string("148070"));
+        const std::size_t lookback  = pr.value("lookback", 126);
+        const double      marginPct = pr.value("margin_pct", 0.0);
+        const std::string cacheDir  = pr.value("cache_dir", std::string());
         return std::make_unique<RelativeMomentum>(reference, lookback, marginPct, cacheDir);
     }
 
@@ -338,4 +329,17 @@ PortfolioConfig PortfolioConfig::loadFromFile(const std::string& configPath, con
     }
 
     return cfg;
+}
+
+std::vector<std::string> ParamReader::unusedKeys() const {
+    std::vector<std::string> out;
+    if (!params_.is_object()) {
+        return out;
+    }
+    for (const auto& [key, value] : params_.items()) {
+        if (seen_.count(key) == 0) {
+            out.push_back(key);
+        }
+    }
+    return out;
 }

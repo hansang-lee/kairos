@@ -363,6 +363,65 @@ TEST(config, an_unknown_strategy_type_returns_null) {
     CHECK(p.createStrategy() == nullptr);
 }
 
+TEST(config, the_param_reader_reports_exactly_the_keys_nothing_read) {
+    const nlohmann::json p = {{"period", 14}, {"oversold", 30.0}, {"overbougth", 70.0}};
+    const ParamReader    pr(p);
+    CHECK_EQ(pr.value("period", 0), 14);
+    CHECK_NEAR(pr.value("oversold", 0.0), 30.0, 1e-9);
+    CHECK_NEAR(pr.value("overbought", 70.0), 70.0, 1e-9);  // absent: the fallback, and a typo left behind
+    const auto unused = pr.unusedKeys();
+    CHECK_EQ(unused.size(), std::size_t{1});
+    CHECK_EQ(unused[0], std::string("overbougth"));
+}
+
+TEST(config, every_strategy_type_reports_a_misspelled_parameter) {
+    // The old guard was a hand-kept list per type and covered three of twenty-four.
+    // This is the property that mattered: no type, present or future, silently
+    // swallows a key it never read.
+    const std::vector<std::string> types = {"rsi",
+                                            "macd",
+                                            "bollinger",
+                                            "sma_crossover",
+                                            "stochastic_reversal",
+                                            "williams_r",
+                                            "cci_reversal",
+                                            "mfi_reversal",
+                                            "adx_trend",
+                                            "supertrend",
+                                            "aroon_trend",
+                                            "psar_trend",
+                                            "donchian_breakout",
+                                            "obv_trend",
+                                            "keltner_breakout",
+                                            "ma_slope_trend",
+                                            "regime_rsi",
+                                            "volume_breakout",
+                                            "squeeze_breakout",
+                                            "ichimoku_trend",
+                                            "ma_timing",
+                                            "absolute_momentum",
+                                            "dual_momentum",
+                                            "relative_momentum"};
+    for (const auto& type : types) {
+        StrategyProfile p;
+        p.type   = type;
+        p.params = {{"definitely_not_a_parameter", 1}};
+        std::vector<std::string> unused;
+        const auto               strat = p.createStrategy(&unused);
+        CHECK_MSG(strat != nullptr, type + " failed to construct");
+        CHECK_MSG(unused.size() == 1 && unused[0] == "definitely_not_a_parameter", type + " did not report the typo");
+    }
+}
+
+TEST(config, a_fully_used_parameter_set_reports_nothing) {
+    StrategyProfile p;
+    p.type                          = "rsi";
+    p.params                        = {{"period", 14}, {"oversold", 30.0}, {"overbought", 70.0}};
+    std::vector<std::string> unused = {"stale"};
+    CHECK(p.createStrategy(&unused) != nullptr);
+    CHECK(unused.empty());
+}
+
 TEST(config, bollinger_accepts_both_spellings_of_the_width) {
     // "std_dev" is what the original config shipped; "std_devs" is what the docs
     // and every other band strategy use. Reading only one silently ignored the other.
