@@ -5,6 +5,7 @@
 #include <string>
 
 #include "backtest/backtest_engine.hpp"
+#include "common/kst_time.hpp"
 #include "data/bar_recorder.hpp"
 #include "strategy/strategy_factory.hpp"
 
@@ -17,13 +18,6 @@
  * without that context would be read as if they were.
  */
 namespace {
-
-std::string kstDate(int daysAgo) {
-    const std::time_t  kst = std::time(nullptr) + 9 * 3600 - static_cast<std::time_t>(daysAgo) * 86400;
-    std::ostringstream oss;
-    oss << std::put_time(std::gmtime(&kst), "%Y-%m-%d");
-    return oss.str();
-}
 
 void printUsage() {
     std::cout << "Usage:\n"
@@ -42,7 +36,7 @@ int main(int argc, char* argv[]) {
     int         targetId   = -1;
     std::string startDate  = "2000-01-01";
     bool        gross      = false;
-    std::string endDate    = kstDate(0);
+    std::string endDate    = util::kstDate(0);
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];

@@ -10,6 +10,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "common/kst_time.hpp"
 #include "common/util.hpp"
 
 namespace trade {
@@ -17,13 +18,6 @@ namespace trade {
 namespace {
 
 /** KST wall-clock "YYYY-MM-DD HH:MM:SS" (UTC+9 shift then gmtime — no TZ database needed). */
-std::string kstTimestamp(std::time_t utc) {
-    const std::time_t  kst = utc + 9 * 3600;
-    std::ostringstream oss;
-    oss << std::put_time(std::gmtime(&kst), "%Y-%m-%d %H:%M:%S");
-    return oss.str();
-}
-
 }  // namespace
 
 TradeJournal::TradeJournal(const std::string& path)
@@ -37,7 +31,7 @@ bool TradeJournal::append(const JournalEntry& entry) const {
 
     nlohmann::json j;
     j["ts"]          = static_cast<int64_t>(now);
-    j["time"]        = kstTimestamp(now);
+    j["time"]        = util::kstTimestamp(now);
     j["event"]       = entry.event;
     j["mode"]        = entry.mode;
     j["dry_run"]     = entry.dryRun;

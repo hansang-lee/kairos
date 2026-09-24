@@ -8,6 +8,7 @@
 #include <map>
 #include <sstream>
 
+#include "common/kst_time.hpp"
 #include "common/util.hpp"
 
 namespace data {
@@ -15,13 +16,6 @@ namespace data {
 namespace {
 
 /** KST calendar date of a bar timestamp, "YYYY-MM-DD". */
-std::string kstDateOf(int64_t ts) {
-    const std::time_t  t = static_cast<std::time_t>(ts) + 9 * 3600;
-    std::ostringstream oss;
-    oss << std::put_time(std::gmtime(&t), "%Y-%m-%d");
-    return oss.str();
-}
-
 struct Bar {
     double  open = 0.0, high = 0.0, low = 0.0, close = 0.0;
     int64_t volume = 0;
@@ -111,12 +105,12 @@ int BarRecorder::record(const std::string& ticker, const StockInfo& bars, const 
     std::map<std::string, std::map<int64_t, Bar>> byDate;
     for (std::size_t i = 0; i < n; ++i) {
         Bar b;
-        b.open                                                    = i < bars.open.size() ? bars.open[i] : bars.close[i];
-        b.high                                                    = i < bars.high.size() ? bars.high[i] : bars.close[i];
-        b.low                                                     = i < bars.low.size() ? bars.low[i] : bars.close[i];
-        b.close                                                   = bars.close[i];
-        b.volume                                                  = i < bars.volume.size() ? bars.volume[i] : 0;
-        byDate[kstDateOf(bars.timestamps[i])][bars.timestamps[i]] = b;
+        b.open   = i < bars.open.size() ? bars.open[i] : bars.close[i];
+        b.high   = i < bars.high.size() ? bars.high[i] : bars.close[i];
+        b.low    = i < bars.low.size() ? bars.low[i] : bars.close[i];
+        b.close  = bars.close[i];
+        b.volume = i < bars.volume.size() ? bars.volume[i] : 0;
+        byDate[util::kstDateOf(bars.timestamps[i])][bars.timestamps[i]] = b;
     }
 
     int added = 0;

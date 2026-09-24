@@ -9,21 +9,12 @@
 
 #include <nlohmann/json.hpp>
 
+#include "common/kst_time.hpp"
 #include "common/util.hpp"
 
 namespace trade {
 
-namespace {
-
-/** KST calendar date, "YYYY-MM-DD" (UTC+9 shift then gmtime — no TZ database needed). */
-std::string kstToday() {
-    const std::time_t  kst = std::time(nullptr) + 9 * 3600;
-    std::ostringstream oss;
-    oss << std::put_time(std::gmtime(&kst), "%Y-%m-%d");
-    return oss.str();
-}
-
-}  // namespace
+namespace {}  // namespace
 
 RiskGuard::RiskGuard(const RiskLimits& limits, const std::string& path)
     : limits_(limits)
@@ -34,7 +25,7 @@ RiskGuard::RiskGuard(const RiskLimits& limits, const std::string& path)
 }
 
 void RiskGuard::load() {
-    date_ = kstToday();
+    date_ = util::kstToday();
 
     std::ifstream in(path_);
     if (!in.is_open()) {
@@ -83,7 +74,7 @@ void RiskGuard::observe(const AccountBalance& balance) {
 
     // A day boundary crossed while the process was running still rolls over, and
     // today's last equity becomes tomorrow's reference.
-    if (const std::string today = kstToday(); today != date_) {
+    if (const std::string today = util::kstToday(); today != date_) {
         date_           = today;
         previousEquity_ = lastEquity_;
         openingEquity_  = 0.0;

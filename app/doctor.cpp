@@ -13,6 +13,7 @@
 
 #include "broker/kis_auth.hpp"
 #include "broker/kis_trader.hpp"
+#include "common/kst_time.hpp"
 #include "common/util.hpp"
 #include "data/kis_provider.hpp"
 #include "data/krx_calendar.hpp"
@@ -49,21 +50,10 @@ void section(const std::string& title) {
     std::cout << "\n" << title << "\n" << std::string(title.size(), '-') << "\n";
 }
 
-std::string kstNowString() {
-    const std::time_t  kst = std::time(nullptr) + 9 * 3600;
-    std::ostringstream oss;
-    oss << std::put_time(std::gmtime(&kst), "%Y-%m-%d %H:%M:%S");
-    return oss.str();
-}
-
-std::string kstToday() {
-    return kstNowString().substr(0, 10);
-}
-
 void checkEnvironment() {
     section("Environment");
 
-    std::cout << "  KST now: " << kstNowString() << "\n";
+    std::cout << "  KST now: " << util::kstTimestamp(std::time(nullptr)) << "\n";
 
     // The timer and every market-hours gate read wall-clock time.
     const char*   tz = std::getenv("TZ");
@@ -148,8 +138,9 @@ void checkMarketData(const PortfolioConfig& config) {
     } else {
         warn("No holiday calendar", "only weekends will be treated as closed");
     }
-    const std::string closed = calendar.closedReason(kstToday());
-    std::cout << "  today (" << kstToday() << "): " << (closed.empty() ? "trading day" : "closed — " + closed) << "\n";
+    const std::string closed = calendar.closedReason(util::kstToday());
+    std::cout << "  today (" << util::kstToday() << "): " << (closed.empty() ? "trading day" : "closed — " + closed)
+              << "\n";
 
     // One KRX profile is enough to prove the data path; fetching all of them would
     // spend the rate limit to learn the same thing.
@@ -166,7 +157,7 @@ void checkMarketData(const PortfolioConfig& config) {
     }
 
     KisProvider provider;
-    const auto  daily = provider.getStockInfo(sample->ticker, "2026-01-01", kstToday());
+    const auto  daily = provider.getStockInfo(sample->ticker, "2026-01-01", util::kstToday());
     if (!daily || daily->close.empty()) {
         fail("Daily bars unavailable", "ticker " + sample->ticker);
     } else {
@@ -309,7 +300,7 @@ void checkLocalState() {
     } else {
         int               lines = 0, malformed = 0, today = 0;
         std::string       line;
-        const std::string todayStr = kstToday();
+        const std::string todayStr = util::kstToday();
         while (std::getline(in, line)) {
             if (line.empty()) {
                 continue;

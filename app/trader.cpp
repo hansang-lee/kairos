@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "broker/kis_trader.hpp"
+#include "common/kst_time.hpp"
 #include "common/process_lock.hpp"
 #include "common/run_log.hpp"
 #include "common/util.hpp"
@@ -56,32 +57,18 @@ void interruptibleSleep(int seconds) {
     }
 }
 
-/** Current KST time as {weekday(0=Sun), HHMM}; UTC+9 shift then gmtime, no TZ database. */
-std::pair<int, int> kstNow() {
-    const std::time_t kst   = std::time(nullptr) + 9 * 3600;
-    const std::tm*    tmPtr = std::gmtime(&kst);
-    return {tmPtr->tm_wday, tmPtr->tm_hour * 100 + tmPtr->tm_min};
-}
-
-std::string kstDate(int daysAgo = 0) {
-    const std::time_t  kst = std::time(nullptr) + 9 * 3600 - static_cast<std::time_t>(daysAgo) * 86400;
-    std::ostringstream oss;
-    oss << std::put_time(std::gmtime(&kst), "%Y-%m-%d");
-    return oss.str();
-}
-
 std::string nowLabel() {
     std::ostringstream oss;
-    oss << std::setfill('0') << std::setw(4) << kstNow().second;
+    oss << std::setfill('0') << std::setw(4) << util::kstNow().second;
     return oss.str();
 }
 
 /** @return empty if KRX is open right now, otherwise why it is not. */
 std::string krxClosedReason(const data::KrxCalendar& calendar) {
-    if (const std::string why = calendar.closedReason(kstDate()); !why.empty()) {
+    if (const std::string why = calendar.closedReason(util::kstDate()); !why.empty()) {
         return why;
     }
-    const int hm = kstNow().second;
+    const int hm = util::kstNow().second;
     return (hm >= 900 && hm <= 1530) ? "" : "outside 09:00-15:30 KST";
 }
 
@@ -162,7 +149,11 @@ void printUsage() {
 int main(int argc, char* argv[]) {
     std::setvbuf(stdout, nullptr, _IOLBF, 0);  // line-buffer stdout even when piped
 
-    std::string configPath   = "config/live.json";
+    // Resolved from the executable, not the working directory: the catalog and
+    // every state file already are, and this one being the exception meant a run
+    // started from anywhere but the repo root found no config and exited before
+    // printing its own header.
+    std::string configPath   = util::resolveFromExe("config/live.json");
     int         intervalSec  = 60;
     int         dailyAtHhmm  = 1515;
     int         maxTrades    = 10;
@@ -250,8 +241,8 @@ int main(int argc, char* argv[]) {
     // happens at the start of a run rather than straight after an order goes out.
     // Several days back, so a long weekend or a holiday week does not lose a fill.
     if (live) {
-        const auto from = kstDate(7);
-        const auto hist = ctx.broker->getDailyFills(from, kstDate(0), true);
+        const auto from = util::kstDate(7);
+        const auto hist = ctx.broker->getDailyFills(from, util::kstDate(0), true);
         if (!hist.success) {
             std::cout << "[!] Fill history unavailable (" << hist.message << "); nothing reconciled.\n";
         } else {
@@ -319,8 +310,8 @@ int main(int argc, char* argv[]) {
         }
         ctx.risk->observe(balance);
 
-        const std::string        today   = kstDate();
-        const int                nowHhmm = kstNow().second;
+        const std::string        today   = util::kstDate();
+        const int                nowHhmm = util::kstNow().second;
         std::vector<std::string> notable;
         bool                     ranDaily = false;
         // Every date any daily series carried a bar for. One bar on a date proves
@@ -353,7 +344,7 @@ int main(int argc, char* argv[]) {
                 // The last bar is the minute still forming, so it is "now".
                 evalIdx = data->close.size() - 1;
             } else {
-                data = provider.getStockInfo(p.ticker, kstDate(lookbackDays), today);
+                data = provider.getStockInfo(p.ticker, util::kstDate(lookbackDays), today);
                 if (!data || data->close.empty()) {
                     std::cerr << "[" << nowLabel() << "] #" << p.id << " no daily data for " << p.ticker << ".\n";
                     notable.push_back("#" + std::to_string(p.id) + " " + p.ticker + " 데이터 없음");
@@ -444,7 +435,7 @@ int main(int argc, char* argv[]) {
         // sent orders against a stale close. Yesterday is the latest day judged,
         // since today's bar may simply not be published yet.
         if (!observedBarDates.empty()) {
-            for (const auto& d : calendar.audit(observedBarDates, kstDate(14), kstDate(1))) {
+            for (const auto& d : calendar.audit(observedBarDates, util::kstDate(14), util::kstDate(1))) {
                 std::cout << "[!] Calendar disagreement on " << d.date << ": expected " << d.expected << ", "
                           << d.observed << ".\n";
                 notable.push_back("달력 불일치 " + d.date + ": " + d.expected + " / " + d.observed);

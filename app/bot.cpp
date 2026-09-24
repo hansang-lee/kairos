@@ -11,6 +11,7 @@
 #include <nlohmann/json.hpp>
 
 #include "broker/kis_trader.hpp"
+#include "common/kst_time.hpp"
 #include "common/util.hpp"
 #include "notify/bot_commands.hpp"
 #include "notify/telegram.hpp"
@@ -31,14 +32,6 @@
  * would be answered once a minute forever.
  */
 namespace {
-
-/** KST calendar date, `daysAgo` days back, as "YYYY-MM-DD". */
-std::string kstDate(int daysAgo = 0) {
-    const std::time_t  kst = std::time(nullptr) + 9 * 3600 - static_cast<std::time_t>(daysAgo) * 86400;
-    std::ostringstream oss;
-    oss << std::put_time(std::gmtime(&kst), "%Y-%m-%d");
-    return oss.str();
-}
 
 std::string offsetPath() {
     return util::resolveFromExe("data/telegram_offset.json");
@@ -208,7 +201,7 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    const auto live    = util::loadJsonConfig("config/live.json");
+    const auto live    = util::loadJsonConfig(util::resolveFromExe("config/live.json"));
     const auto catalog = StrategyCatalog::loadFromFile();
 
     int64_t highest = offset - 1;

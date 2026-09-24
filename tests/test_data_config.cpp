@@ -2,6 +2,7 @@
 #include <filesystem>
 #include <fstream>
 
+#include "common/kst_time.hpp"
 #include "common/util.hpp"
 #include "data/bar_recorder.hpp"
 #include "data/krx_calendar.hpp"
@@ -438,6 +439,27 @@ TEST(config, bollinger_accepts_both_spellings_of_the_width) {
 }
 
 /* ---------------------------------- util ---------------------------------- */
+
+TEST(util, kst_dates_are_utc_plus_nine_and_cross_midnight_where_seoul_does) {
+    // Epoch zero is 1970-01-01 00:00 UTC, which is 09:00 the same day in Seoul.
+    CHECK_EQ(util::kstDateOf(0), std::string("1970-01-01"));
+    CHECK_EQ(util::kstTimestamp(0), std::string("1970-01-01 09:00:00"));
+    // 15:00 UTC is midnight in Seoul: the KST date has already rolled over while
+    // the UTC one has not. This is the case a naive local-time read gets wrong.
+    CHECK_EQ(util::kstDateOf(15 * 3600), std::string("1970-01-02"));
+    CHECK_EQ(util::kstDateOf(15 * 3600 - 1), std::string("1970-01-01"));
+    // A KRX daily bar is stamped 09:00 UTC on its own date; that must read back as
+    // that date, not the next one.
+    CHECK_EQ(util::kstDateOf(1420189200), std::string("2015-01-02"));
+}
+
+TEST(util, kst_today_and_days_ago_agree_with_each_other) {
+    CHECK_EQ(util::kstToday(), util::kstDate(0));
+    CHECK(util::kstDate(1) < util::kstDate(0));
+    CHECK_EQ(util::kstDate(0).size(), std::size_t{10});
+    const auto hhmm = util::kstNow().second;
+    CHECK(hhmm >= 0 && hhmm <= 2359);
+}
 
 TEST(util, env_value_reads_a_file_and_falls_back_to_the_environment) {
     const std::string path = tmp("env_file");
