@@ -38,6 +38,7 @@ add_library(${PROJECT_NAME} SHARED
   src/trade/schedule_state.cpp
   src/trade/position_store.cpp
   src/notify/telegram.cpp
+  src/notify/bot_commands.cpp
   lib/sma_crossover/sma_crossover.cpp
   lib/rsi/rsi_strategy.cpp
   lib/macd/macd_strategy.cpp

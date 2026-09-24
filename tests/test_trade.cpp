@@ -8,6 +8,7 @@
 #include "trade/risk_guard.hpp"
 #include "trade/schedule_state.hpp"
 #include "trade/signal_executor.hpp"
+#include "notify/bot_commands.hpp"
 #include "trade/fill_reconciler.hpp"
 #include "trade/trade_journal.hpp"
 
@@ -725,4 +726,78 @@ TEST(schedule, profiles_are_tracked_independently) {
     CHECK(!trade::isDailyProfileDue(s.lastEvaluated(30), "2026-09-21", 1600, 1515));
     // #31 has not run; it must still be due.
     CHECK(trade::isDailyProfileDue(s.lastEvaluated(31), "2026-09-21", 1600, 1515));
+}
+
+/* ------------------------------- Bot commands ------------------------------ */
+
+TEST(bot, only_the_configured_chat_is_answered) {
+    CHECK(notify::isAuthorised("123456789", "123456789"));
+    CHECK(!notify::isAuthorised("987654321", "123456789"));
+    // An unconfigured bot answering everyone would be worse than answering nobody.
+    CHECK(!notify::isAuthorised("123456789", ""));
+    CHECK(!notify::isAuthorised("", ""));
+}
+
+TEST(bot, a_command_is_read_without_its_botname_suffix_or_arguments) {
+    CHECK_EQ(notify::commandOf("/status"), std::string{"/status"});
+    // Telegram appends the bot's name in a group chat.
+    CHECK_EQ(notify::commandOf("/status@kairos_bot"), std::string{"/status"});
+    CHECK_EQ(notify::commandOf("/Trades 20"), std::string{"/trades"});
+    CHECK_EQ(notify::commandOf(""), std::string{""});
+    CHECK_EQ(notify::commandOf("hello there"), std::string{"hello"});
+}
+
+TEST(bot, status_reports_the_split_between_stock_and_cash) {
+    notify::BotSnapshot s;
+    s.ok             = true;
+    s.initialCapital = 10000000.0;
+    s.cashBalance    = 4000000.0;
+    s.totalEval      = 11000000.0;
+    StockHolding h;
+    h.ticker     = "133690";
+    h.name       = "TIGER 미국나스닥100";
+    h.quantity   = 38;
+    h.avgPrice   = 180000.0;
+    h.evalAmount = 7000000.0;
+    s.holdings.push_back(h);
+
+    const auto text = notify::formatStatus(s);
+    CHECK(text.find("11,000,000") != std::string::npos);  // thousands separators, read on a phone
+    CHECK(text.find("+10.00%") != std::string::npos);     // return against principal
+    CHECK(text.find("63.6%") != std::string::npos);       // 7M of 11M in stock
+    CHECK(text.find("36.4%") != std::string::npos);       // and the rest in cash
+}
+
+TEST(bot, a_failed_balance_fetch_says_so_rather_than_reporting_zero) {
+    notify::BotSnapshot s;
+    s.ok      = false;
+    s.message = "token expired";
+    // Printing a zero balance would read as a wiped-out account.
+    CHECK(notify::formatStatus(s).find("token expired") != std::string::npos);
+    CHECK(notify::formatPositions(s).find("token expired") != std::string::npos);
+}
+
+TEST(bot, an_empty_account_and_an_empty_journal_say_which_is_which) {
+    notify::BotSnapshot s;
+    s.ok = true;
+    CHECK_EQ(notify::formatPositions(s), std::string{"보유 종목 없음"});
+    CHECK_EQ(notify::formatTrades({}, 10), std::string{"거래 기록 없음"});
+    CHECK_EQ(notify::formatSignals({}), std::string{"활성 전략 없음"});
+}
+
+TEST(bot, trades_are_listed_newest_first_and_capped) {
+    std::vector<notify::BotTrade> t;
+    for (int i = 0; i < 5; ++i) {
+        notify::BotTrade x;
+        x.time     = "1" + std::to_string(i) + ":00";
+        x.event    = "order";
+        x.ticker   = "00000" + std::to_string(i);
+        x.side     = "BUY";
+        x.quantity = 1;
+        t.push_back(x);
+    }
+    const auto text = notify::formatTrades(t, 2);
+    // The last thing that happened is what someone checking their phone wants first.
+    CHECK(text.find("000004") < text.find("000003"));
+    CHECK(text.find("000002") == std::string::npos);
 }

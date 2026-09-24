@@ -1,0 +1,14 @@
+[Unit]
+Description=Answer kairos telegram commands
+
+[Timer]
+# Every minute while the machine is up. Each run is milliseconds when nothing has
+# arrived, which is the trade for not keeping a daemon alive just to be reachable.
+OnBootSec=1min
+OnUnitActiveSec=1min
+AccuracySec=15s
+# No Persistent=true: a question asked while the machine was off is stale by the
+# time it comes back, and answering it then is worse than not answering.
+
+[Install]
+WantedBy=timers.target

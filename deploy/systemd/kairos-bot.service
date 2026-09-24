@@ -1,0 +1,10 @@
+[Unit]
+Description=kairos telegram bot (one poll)
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=__ROOT__
+ExecStart=__ROOT__/build/Release/app/bot
+# A poll that hangs must not pile up behind the next one.
+TimeoutStartSec=60

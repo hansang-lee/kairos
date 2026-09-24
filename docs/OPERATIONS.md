@@ -134,12 +134,44 @@ that stopped it in `message`, so nothing disappears silently.
 
 ---
 
+## Asking the account questions from a phone
+
+`kairos-bot` polls Telegram once a minute and answers, then exits. It is a timer
+rather than a daemon for the same reason the trader is: nothing here needs to be
+resident, and a one-shot cannot leak a connection overnight.
+
+| Command | Answers |
+|---|---|
+| `/status` | Valuation, return against principal, the stock/cash split |
+| `/positions` | Each holding's quantity, average price and unrealised P/L |
+| `/signals` | What each live strategy says right now, and what is held |
+| `/trades` | The last ten journal rows — orders and fills |
+| `/help` | The list above |
+
+**It answers only `TELEGRAM_CHAT_ID`.** A bot's username is searchable, so anyone
+who finds it can message it; without that check the first stranger to type
+`/status` reads the account. Everyone else gets silence rather than a refusal,
+because a refusal confirms the bot is live and worth probing. Ignored attempts are
+logged.
+
+The bot never places an order. It reads the broker and the journal, nothing else.
+
+`data/telegram_offset.json` holds the last update id handled. Telegram redelivers a
+message until it is acknowledged, so deleting that file makes the bot answer the
+whole backlog again. It is written after a batch rather than during it, so a crash
+mid-batch leaves the unanswered messages to come back instead of losing them.
+
+If replies stop arriving: `systemctl --user status kairos-bot` first, then
+`./build/Release/app/bot` by hand — it prints why it gave up.
+
+---
+
 ## What the systemd units control
 
 Edit them with `systemctl --user edit --full <unit>`, not by hand in
 `deploy/systemd/` — that directory holds the templates the installer copies from.
 
-There are three, and only one of them can move money.
+There are four, and only one of them can move money.
 
 | Unit | Runs | Nature |
 |---|---|---|
@@ -147,6 +179,7 @@ There are three, and only one of them can move money.
 | `kairos-trader.service` | `trader --once --daily-at 1515` | One-shot; reads `inactive (dead)` between runs — that is normal |
 | `kairos-dashboard.service` | `scripts/dashboard_server.py --port 8800` | Reads the account; places no orders |
 | `kairos-collector.timer` | `bar_collect --interval 5m --range 1mo`, Sundays | Public price data only; independent of trading |
+| `kairos-bot.timer` | every minute | Answers Telegram commands. Reads only. |
 
 There is one trader because a strategy's bar size is a property of the strategy,
 not a reason for a second service — and because two trading processes would
