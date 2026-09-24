@@ -298,7 +298,8 @@ Re-running the sync adds nothing, since fills are keyed on order number + filled
 systemd **user** units (no root, nothing installed system-wide):
 
 ```bash
-./scripts/install_systemd.sh           # dashboard + daily timer
+./scripts/install_systemd.sh           # dashboard, daily trader timer, collector, telegram bot
+./scripts/install_systemd.sh --live    # the same, with the trader placing real orders
 ./scripts/install_systemd.sh --scalp   # also the intraday loop
 ./scripts/install_systemd.sh --uninstall
 ```
@@ -309,7 +310,7 @@ systemd **user** units (no root, nothing installed system-wide):
 | `kairos-trader.timer` | Fires `trader --once` at 15:15 on weekdays — **the only unit that places orders** |
 | `kairos-collector.timer` | Collects 5-minute bars weekly — places no orders, runs regardless of trading |
 
-They install in **dry-run**: no orders are placed until `--live` is added to the `ExecStart` line. The installer warns if the system timezone is not `Asia/Seoul`, since `OnCalendar` is wall-clock — `15:15` on a UTC host is not 15:15 KST. User services stop at logout unless lingering is enabled (`sudo loginctl enable-linger $USER`), which the installer also checks.
+They install in **dry-run**: no orders are placed unless the installer is given `--live`, which is a flag rather than a hand edit so that rebuilding a machine from the repository reproduces the setting. Editing the installed unit instead works, but a later reinstall drops silently back to dry-run and says so only in a log line nobody reads. The installer warns if the system timezone is not `Asia/Seoul`, since `OnCalendar` is wall-clock — `15:15` on a UTC host is not 15:15 KST. User services stop at logout unless lingering is enabled (`sudo loginctl enable-linger $USER`), which the installer also checks.
 
 ```bash
 systemctl --user list-timers 'kairos*'
