@@ -120,7 +120,12 @@ Enforced by `trade::RiskGuard` on every order, in both apps:
 
 - `daily_loss_limit_pct` — once account equity falls this far below the day's
   opening equity, **buys** are blocked for the rest of the day.
-- `max_orders_per_day` — cap on orders actually sent per calendar day.
+- `max_orders_per_day` — cap on orders the broker accepted per calendar day. An
+  order KIS rejects outright is not counted: it moved nothing, and a broker outage
+  that refuses everything must not spend the allowance so that buys are blocked
+  once it recovers. An order whose response was lost *is* counted, since it may
+  have filled; the next session's fill reconciliation settles it. The right value
+  depends on the strategy; what it counts does not.
 
 State lives in `data/risk_state.json` (`date`, `opening_equity`, `orders`), so
 restarting a process does **not** reset the count. It re-baselines on the first
@@ -392,8 +397,8 @@ built up as you go, and it is the only route to ever backtesting a scalper.
 
 ```bash
 ./build/Release/app/bar_collect --interval 1m --range 5d   # seed from Yahoo
-./build/Release/app/scalp_backtest --id 18                 # net of real costs
-./build/Release/app/scalp_backtest --id 18 --gross         # costs zeroed
+./build/Release/app/research/scalp_backtest --id 18                 # net of real costs
+./build/Release/app/research/scalp_backtest --id 18 --gross         # costs zeroed
 ```
 
 `trader` saves every poll's bars automatically, so the archive grows a day
@@ -456,9 +461,9 @@ test that hits a broker is not a test. Everything up to the send is covered.
 ## Finding a strategy
 
 ```bash
-./build/Release/app/sweep                                   # all strategies x universe
-./build/Release/app/sweep --strategy bollinger               # one strategy's parameter grid
-./build/Release/app/sweep --split 2022-01-01 --end 2022-12-31 --start 2019-01-01
+./build/Release/app/research/sweep                                   # all strategies x universe
+./build/Release/app/research/sweep --strategy bollinger               # one strategy's parameter grid
+./build/Release/app/research/sweep --split 2022-01-01 --end 2022-12-31 --start 2019-01-01
 ```
 
 Selection happens on the period before `--split`; everything after it is reported
@@ -487,8 +492,8 @@ them did. A strategy picked from one window alone is picked for that window.
 ./build/Release/app/trader --once     # one cycle, ignores market hours
 
 # backtest instead of trade
-./build/Release/app/run_strategy --list
-./build/Release/app/run_strategy --id 18 --start 2021-01-01 --end 2026-09-18
+./build/Release/app/research/run_strategy --list
+./build/Release/app/research/run_strategy --id 18 --start 2021-01-01 --end 2026-09-18
 ```
 
 `run_strategy` never places orders — it is the backtest path. `trader` is

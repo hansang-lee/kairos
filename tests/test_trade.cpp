@@ -621,6 +621,10 @@ TEST(executor, a_rejected_order_is_journaled_as_failed_and_opens_no_position) {
     // The broker said no, so nothing was opened — a tranche recorded here would
     // make the next HOLD buy the remainder of a position that does not exist.
     CHECK_EQ(ctx.positions->get("005930").entryTranches, 0);
+    // And nothing moved, so neither cap is spent: twenty rejections in an outage
+    // must not lock the account out of the rest of the day.
+    CHECK_EQ(ctx.risk->ordersToday(), 0);
+    CHECK_EQ(ex.ordersSent(), 0);
     const auto j = lastJournalLine(*ctx.journal);
     CHECK_EQ(j.value("event", ""), std::string{"order"});
     CHECK(!j.value("success", true));
@@ -642,6 +646,10 @@ TEST(executor, a_lost_response_is_journaled_as_unknown_not_as_a_rejection) {
     // reconciliation can find, and must not open a position it cannot confirm.
     CHECK_EQ(lastJournalLine(*ctx.journal).value("event", ""), std::string{"order_unknown"});
     CHECK_EQ(ctx.positions->get("005930").entryTranches, 0);
+    // But it is counted against the caps: an order that may have filled is treated
+    // as one that did until the reconciliation says otherwise.
+    CHECK_EQ(ctx.risk->ordersToday(), 1);
+    CHECK_EQ(ex.ordersSent(), 1);
 }
 
 TEST(executor, the_session_cap_stops_the_call_before_it_reaches_the_broker) {

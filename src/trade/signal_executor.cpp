@@ -254,8 +254,17 @@ Decision SignalExecutor::execute(Signal signal, double price, const AccountBalan
     } else if (live_) {
         d.order = ctx_.broker->placeOrder(side, profile_.ticker, d.quantity);
         d.sent  = true;
-        ++ordersSent_;
-        ctx_.risk->recordOrder();
+        // The caps count orders that moved money, or may have. An explicit
+        // rejection moved nothing and is not counted — a broker outage that
+        // refuses everything must not spend the day's allowance so that legitimate
+        // buys are blocked once it recovers. A lost response is counted, because
+        // the order may well exist; the fill reconciliation settles it later.
+        // Decided 2026-09-25: the right value for the cap depends on the strategy,
+        // but what it counts should not.
+        if (d.order.success || d.order.indeterminate) {
+            ++ordersSent_;
+            ctx_.risk->recordOrder();
+        }
         if (d.order.success) {
             if (isBuy) {
                 ctx_.positions->recordEntryTranche(profile_.ticker);
