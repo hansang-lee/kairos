@@ -12,7 +12,7 @@ kairos is a C++17 automated trading system: strategies are backtested, then exec
 
 **Core features:**
 - **25 technical indicators** — trend (SMA/EMA/WMA/ADX/Parabolic SAR/SuperTrend/Aroon), momentum (RSI/MACD/ROC/CCI/Williams %R/TRIX/Stochastic/MA slope), volume (VWAP/OBV/MFI/CMF/A-D Line), volatility (Bollinger/ATR/StdDev/Keltner/Donchian)
-- **16 trading strategies** — grouped by category (swing / trend / position / scalp); see [Strategy categories](#-strategy-categories)
+- **24 trading strategies** — single-ticker signals grouped by category (swing / trend / position / scalp), plus portfolio-level allocation rules (group parity, risk parity, momentum rotation, trend and momentum filters); see [Strategy categories](#-strategy-categories)
 - **Live order execution** — one `trader` process runs every enabled profile, on minute bars or daily ones as each profile requires
 - **Trade journal** — every decision, including dry runs, is appended to `data/trades.jsonl` with the strategy that produced it
 - **Backtest engine** — models commission, slippage and stop-loss; reports a 0–100 composite score
@@ -35,36 +35,72 @@ kairos/
 │   ├── fred_info.hpp            # FredSeriesInfo struct
 │   ├── macro_scorer.hpp         # 5-axis macro score + 4-regime classification
 │   ├── strategy/
-│   │   ├── istrategy.hpp        # IStrategy pure virtual interface
-│   │   └── strategy_factory.hpp # JSON-driven strategy factory (incl. category field)
+│   │   ├── istrategy.hpp        # IStrategy: evaluate(i) reads bars up to i-1, fills at bar i
+│   │   ├── strategy_factory.hpp # JSON-driven factory; ParamReader reports keys nothing read
+│   │   └── strategy_catalog.hpp # config/strategies.json: definitions and parameter grids
 │   ├── backtest/
-│   │   └── backtest_engine.hpp  # Single-ticker backtest engine
+│   │   └── backtest_engine.hpp  # Single-ticker engine: costs, stops, tranches, whole shares
+│   ├── portfolio/               # Allocation across several assets at once
+│   │   ├── iportfolio_strategy.hpp  # targetWeights(i), same index convention
+│   │   ├── strategies.hpp       # GroupParity, RiskParity, MomentumRotation, filters, Levered
+│   │   ├── portfolio_engine.hpp # Rebalancing, fees, borrowing and its interest
+│   │   └── price_cache.hpp      # cache/daily/ loading shared by the research tools
+│   ├── trade/                   # The live path
+│   │   ├── session.hpp          # Which bar, is the market open, which price, summary due
+│   │   ├── signal_executor.hpp  # One signal → at most one order, through IBroker
+│   │   ├── risk_guard.hpp       # Daily loss limit and order cap, persisted per day
+│   │   ├── position_store.hpp   # Peaks, tranches, last exit — reconciled with the broker
+│   │   ├── schedule_state.hpp   # Which profile already ran today
+│   │   ├── trade_journal.hpp    # Append-only JSONL of every decision, sent or not
+│   │   └── fill_reconciler.hpp  # Writes what actually filled back into the journal
+│   ├── broker/
+│   │   ├── ibroker.hpp          # The seam: place, balance, fills, mode — KIS or a fake
+│   │   ├── broker_types.hpp     # OrderResult, AccountBalance, Fill — no broker named
+│   │   ├── kis_auth.hpp         # KIS OpenAPI OAuth2 authentication
+│   │   └── kis_trader.hpp       # KIS paper/live orders, balance, daily fills
+│   ├── data/
+│   │   ├── idata_provider.hpp   # Quotes interface: history and a live price
+│   │   ├── kis_provider.hpp     # KIS daily, intraday minute bars, current price
+│   │   ├── krx_calendar.hpp     # Holidays, and an audit of them against real bars
+│   │   └── bar_recorder.hpp     # Archives the bars a decision was made on
+│   ├── notify/
+│   │   ├── telegram.hpp         # Push, and polling for commands
+│   │   └── bot_commands.hpp     # /status /positions /signals /trades, access check
 │   ├── macro/
 │   │   └── macro_backtester.hpp # Macro portfolio backtester
-│   ├── broker/
-│   │   ├── kis_auth.hpp         # KIS OpenAPI OAuth2 authentication
-│   │   └── kis_trader.hpp       # KIS paper/live orders + balance inquiry
-│   └── data/
-│       ├── idata_provider.hpp   # Data source interface
-│       └── kis_provider.hpp     # KIS market data (daily + intraday minute bars)
+│   └── common/
+│       ├── util.hpp             # resolveFromExe, .env, JSON config
+│       ├── kst_time.hpp         # The one KST clock
+│       └── process_lock.hpp     # flock: one trading process at a time
 │
-├── src/                         # C++ implementations
-├── lib/                         # Strategy implementations (16, one hpp/cpp dir each)
-│   │                             # swing:    rsi, bollinger, stochastic_reversal, williams_r, cci_reversal, mfi_reversal
-│   │                             # trend:    sma_crossover, macd, adx_trend, supertrend_follow, aroon_trend, psar_trend, ma_slope_trend
-│   │                             # position: donchian_breakout, obv_trend, keltner_breakout
+├── src/                         # C++ implementations, mirroring include/
+├── lib/                         # Single-ticker strategies (24, one hpp/cpp dir each)
+│   │                             # swing:    rsi, bollinger, stochastic_reversal, williams_r, cci_reversal, mfi_reversal, regime_rsi
+│   │                             # trend:    sma_crossover, macd, adx_trend, supertrend_follow, aroon_trend, psar_trend, ma_slope_trend,
+│   │                             #           ichimoku_trend, ma_timing, absolute_momentum, dual_momentum, relative_momentum
+│   │                             # position: donchian_breakout, obv_trend, keltner_breakout, volume_breakout, squeeze_breakout
 │
-├── app/                         # CLI executables (16)
-├── scripts/                     # dashboard_server.py (local dashboard)
+├── app/                         # CLI executables (28)
+│   │                             # product:  trader, bot, doctor, portfolio_report, fetch_universe
+│   │                             # research: backtest, sweep, portfolio_sweep, portfolio_robustness,
+│   │                             #           beat_benchmark, leverage_study, dca_backtest, macro*, ...
+├── scripts/                     # install_systemd.sh, dashboard_server.py
 ├── config/                      # JSON configuration
 │   ├── strategies.json          # Strategy definitions and parameter grids (no tickers)
 │   ├── live.json                # Which strategy trades which ticker, plus risk limits
-│   ├── universe.json            # Tickers the sweep crosses strategies with
+│   ├── universe.json            # 30 KRX stocks
+│   ├── universe_index.json      # 34 KRX ETFs, duplicates and all (3.0 independent bets)
+│   ├── universe_core.json       # 24 KRX ETFs, one per bet, tagged by asset class
+│   ├── universe_wide.json       # core + 5 genuine diversifiers
+│   ├── universe_us.json         # 10 US ETFs, total-return prices
+│   ├── krx_holidays.json        # Closures; projections are marked and audited
 │   ├── macro_allocation.json    # Macro allocation settings
 │   └── strategies/              # Macro strategy profiles (aggressive/balanced/defensive)
 │
-├── docs/                        # API docs + GitHub Pages dashboard
-└── .github/workflows/           # CI/CD (daily macro report)
+├── deploy/systemd/              # Unit templates: trader, collector, dashboard, bot
+├── tests/                       # In-tree framework, no network, ~1 s
+├── docs/                        # OPERATIONS, BACKTEST_RESULTS, REVIEW, GLOSSARY, dashboard
+└── .github/workflows/           # ci.yml (build, test, format) + daily macro report
 ```
 
 ---
@@ -215,9 +251,9 @@ Strategies are defined in JSON, so tickers and parameters can be added or change
 
 | Category | Holding period | Character | Strategies | Runner |
 |---|---|---|---|---|
-| **swing** | days to 1–2 weeks | mean reversion (overbought/oversold) | rsi, bollinger, stochastic_reversal, williams_r, cci_reversal, mfi_reversal | `trader`, once a day |
-| **trend** | 1 week to several weeks | trend following | sma_crossover, macd, adx_trend, supertrend, aroon_trend, psar_trend, ma_slope_trend | `trader`, once a day |
-| **position** | weeks to months | volatility breakout / volume confirmation | donchian_breakout, obv_trend, keltner_breakout | `trader`, once a day |
+| **swing** | days to 1–2 weeks | mean reversion (overbought/oversold) | rsi, bollinger, stochastic_reversal, williams_r, cci_reversal, mfi_reversal, regime_rsi | `trader`, once a day |
+| **trend** | 1 week to months | trend following, and index timing by moving average or momentum | sma_crossover, macd, adx_trend, supertrend, aroon_trend, psar_trend, ma_slope_trend, ichimoku_trend, ma_timing, absolute_momentum, dual_momentum, relative_momentum | `trader`, once a day |
+| **position** | weeks to months | volatility breakout / volume confirmation | donchian_breakout, obv_trend, keltner_breakout, volume_breakout, squeeze_breakout | `trader`, once a day |
 | **scalp** | minutes | minute-bar polling, intraday live trading | sma_crossover (short parameters) | `trader`, each interval |
 
 Every profile in `config/live.json` carries a `category` field, visible directly in `run_strategy --list`.

@@ -7,10 +7,9 @@ To verify the dashboard and macro scoring locally, follow these steps:
 ### 1. Build the project (if C++ logic changed)
 Make sure you have built the latest binary:
 ```zsh
-mkdir -p build && cd build
-cmake -DCMAKE_BUILD_TYPE=Release ..
-make -j$(nproc)
-cd ..
+cmake -S . -B build/Release -DCMAKE_BUILD_TYPE=Release -G Ninja
+cmake --build build/Release -j
+./build/Release/kairos_tests
 ```
 
 ### 2. Generate updated data.json
@@ -18,7 +17,6 @@ Run the macro tool with your FRED API key to get the latest real-world data:
 // turbo
 ```zsh
 export FRED_API_KEY=<your_fred_api_key>
-export LD_LIBRARY_PATH=$(pwd)/build/Release
 ./build/Release/app/macro --json config/macro_allocation.json > docs/data.json
 ```
 
