@@ -69,8 +69,8 @@ std::vector<Telegram::Update> Telegram::getUpdates(int64_t offset) const {
         return out;
     }
 
-    const std::string url = "https://api.telegram.org/bot" + token_ + "/getUpdates?timeout=0&offset="
-                          + std::to_string(offset);
+    const std::string url =
+        "https://api.telegram.org/bot" + token_ + "/getUpdates?timeout=0&offset=" + std::to_string(offset);
     std::string body;
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, collectBody);

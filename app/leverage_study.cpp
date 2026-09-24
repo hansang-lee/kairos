@@ -81,11 +81,11 @@ std::string dayOf(int64_t ts) {
 }
 
 struct Stats {
-    double cagr    = 0.0;
-    double mddPct  = 0.0;
-    double sharpe  = 0.0;
-    double finalX  = 1.0;   ///< multiple of the starting sum
-    double worstYr = 0.0;
+    double cagr     = 0.0;
+    double mddPct   = 0.0;
+    double sharpe   = 0.0;
+    double finalX   = 1.0;  ///< multiple of the starting sum
+    double worstYr  = 0.0;
     int    switches = 0;
 };
 
@@ -129,7 +129,7 @@ Stats measure(const std::vector<double>& equity, const std::vector<int64_t>& ts)
     // Worst calendar year, which is how a drawdown is actually lived through.
     std::map<int, std::pair<double, double>> byYear;
     for (std::size_t i = 0; i < equity.size(); ++i) {
-        const int y = yearOf(ts[i]);
+        const int y  = yearOf(ts[i]);
         auto      it = byYear.find(y);
         if (it == byYear.end()) {
             byYear[y] = {i > 0 ? equity[i - 1] : equity[i], equity[i]};
@@ -160,8 +160,8 @@ void printRow(const std::string& name, const Stats& s) {
 
 void printHeader() {
     std::cout << std::left << std::setw(36) << "" << std::right << std::setw(9) << "CAGR%" << std::setw(10) << "MDD%"
-              << std::setw(9) << "sharpe" << std::setw(11) << "worst yr" << std::setw(13) << "x money"
-              << std::setw(9) << "trades" << "\n"
+              << std::setw(9) << "sharpe" << std::setw(11) << "worst yr" << std::setw(13) << "x money" << std::setw(9)
+              << "trades" << "\n"
               << std::string(97, '-') << "\n";
 }
 
@@ -175,7 +175,7 @@ int main(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         if (a == "--index" && i + 1 < argc) {
-            index = argv[++i];
+            index    = argv[++i];
             indexKey = index;
             indexKey.erase(std::remove(indexKey.begin(), indexKey.end(), '^'), indexKey.end());
         } else if (a == "--start" && i + 1 < argc)
@@ -269,9 +269,9 @@ int main(int argc, char* argv[]) {
             lastSynth = b->second;
         }
         if (realR.size() > 100) {
-            const std::size_t n  = realR.size();
-            const double      mr = std::accumulate(realR.begin(), realR.end(), 0.0) / static_cast<double>(n);
-            const double      ms = std::accumulate(synthR.begin(), synthR.end(), 0.0) / static_cast<double>(n);
+            const std::size_t n   = realR.size();
+            const double      mr  = std::accumulate(realR.begin(), realR.end(), 0.0) / static_cast<double>(n);
+            const double      ms  = std::accumulate(synthR.begin(), synthR.end(), 0.0) / static_cast<double>(n);
             double            cov = 0.0, vr = 0.0, vs = 0.0, te = 0.0;
             for (std::size_t i = 0; i < n; ++i) {
                 cov += (realR[i] - mr) * (synthR[i] - ms);
@@ -340,15 +340,19 @@ int main(int argc, char* argv[]) {
             }
         }
     }
-    auto above  = [&](std::size_t i) { return ma[i] > 0.0 && idx.close[i] > ma[i]; };
-    auto always = [](std::size_t) { return true; };
+    auto above = [&](std::size_t i) {
+        return ma[i] > 0.0 && idx.close[i] > ma[i];
+    };
+    auto always = [](std::size_t) {
+        return true;
+    };
 
     const std::string levName = std::to_string(static_cast<int>(leverage)) + "x";
 
     // Each curve is built once and then sliced, rather than rebuilt per window: the
     // whole point of the trend rule is what it was holding when a window began, and
     // restarting it at each window start would hand it a flat position it did not have.
-    int                              swIdx = 0, swLev = 0;
+    int                                                      swIdx = 0, swLev = 0;
     std::vector<std::pair<std::string, std::vector<double>>> curves;
     curves.emplace_back("Index, held throughout (1x)", walk(idx.close, always, nullptr));
     curves.emplace_back(levName + " fund, held throughout", walk(synth, always, nullptr));
@@ -376,8 +380,8 @@ int main(int argc, char* argv[]) {
         const char* to;
     };
     const Window windows[] = {
-        {"1987 crash", "1987-08-01", "1988-06-30"},   {"dot-com bust", "2000-03-01", "2002-12-31"},
-        {"2008 crisis", "2007-10-01", "2009-06-30"},  {"2022 rate shock", "2021-11-01", "2023-01-31"},
+        {"1987 crash", "1987-08-01", "1988-06-30"},        {"dot-com bust", "2000-03-01", "2002-12-31"},
+        {"2008 crisis", "2007-10-01", "2009-06-30"},       {"2022 rate shock", "2021-11-01", "2023-01-31"},
         {"the tested decade", "2016-01-01", "2026-01-01"},
     };
 
@@ -408,7 +412,7 @@ int main(int argc, char* argv[]) {
             (void)name;
             const std::vector<double> slice(curve.begin() + static_cast<std::ptrdiff_t>(a),
                                             curve.begin() + static_cast<std::ptrdiff_t>(b));
-            const auto st = measure(slice, tslice);
+            const auto                st = measure(slice, tslice);
             std::cout << std::setw(10) << st.cagr << std::setw(8) << st.mddPct;
         }
         std::cout << "\n";

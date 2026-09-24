@@ -432,7 +432,7 @@ TEST(portfolio, a_strategy_holding_nothing_pays_no_management_fee) {
 TEST(portfolio, buy_and_hold_pays_a_round_trip_and_keeps_its_curve_mark_to_market) {
     constexpr std::size_t bars    = 60;
     const double          initial = 1000000.0;
-    const auto            d = portfolio::PortfolioData::align({flat("A", 100.0, bars), flat("B", 250.0, bars)});
+    const auto            d       = portfolio::PortfolioData::align({flat("A", 100.0, bars), flat("B", 250.0, bars)});
 
     portfolio::PortfolioConfigBt cfg;
     cfg.commissionRate      = 0.001;

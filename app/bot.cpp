@@ -2,9 +2,9 @@
 #include <ctime>
 #include <fstream>
 #include <iomanip>
-#include <sstream>
 #include <iostream>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -12,9 +12,9 @@
 
 #include "broker/kis_trader.hpp"
 #include "common/util.hpp"
-#include "portfolio/price_cache.hpp"
 #include "notify/bot_commands.hpp"
 #include "notify/telegram.hpp"
+#include "portfolio/price_cache.hpp"
 #include "strategy/strategy_catalog.hpp"
 #include "strategy/strategy_factory.hpp"
 
@@ -81,7 +81,7 @@ notify::BotSnapshot snapshot(const nlohmann::json& live) {
 }
 
 std::vector<notify::BotSignal> currentSignals(const nlohmann::json& live, const StrategyCatalog& catalog,
-                                             std::string* staleness) {
+                                              std::string* staleness) {
     std::vector<notify::BotSignal> out;
     if (!live.contains("positions")) {
         return out;
@@ -103,8 +103,8 @@ std::vector<notify::BotSignal> currentSignals(const nlohmann::json& live, const 
             continue;
         }
         StrategyProfile prof;
-        prof.type    = def->type;
-        prof.params  = def->params;
+        prof.type        = def->type;
+        prof.params      = def->params;
         auto       strat = prof.createStrategy();
         const auto data  = portfolio::loadCachedDaily(pos.value("ticker", ""));
         if (!strat || !data || data->close.size() <= strat->warmupPeriod()) {
@@ -154,8 +154,8 @@ std::vector<notify::BotTrade> recentTrades() {
             continue;
         }
         try {
-            const auto        j = nlohmann::json::parse(line);
-            notify::BotTrade  t;
+            const auto       j = nlohmann::json::parse(line);
+            notify::BotTrade t;
             t.time     = j.value("time", "");
             t.event    = j.value("event", "");
             t.ticker   = j.value("ticker", "");
@@ -238,7 +238,7 @@ int main(int argc, char* argv[]) {
             std::cerr << "[v] id " << u.updateId << " from [" << u.chatId << "] text [" << u.text << "] cmd [" << cmd
                       << "]" << std::endl;
         }
-        std::string       reply;
+        std::string reply;
         if (cmd == "/status" || cmd == "/start") {
             reply = notify::formatStatus(snapshot(live ? *live : nlohmann::json::object()));
         } else if (cmd == "/positions") {

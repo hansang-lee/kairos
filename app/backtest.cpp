@@ -5,9 +5,9 @@
 #include <sstream>
 
 #include "backtest/backtest_engine.hpp"
+#include "common/util.hpp"
 #include "rsi_strategy.hpp"
 #include "sma_crossover.hpp"
-#include "common/util.hpp"
 #include "yfinance.hpp"
 
 inline std::string currentDateTimeString() {

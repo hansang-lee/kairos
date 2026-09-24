@@ -356,9 +356,9 @@ std::shared_ptr<StockInfo> KisProvider::getStockInfo(std::string_view ticker, st
         // Returning nothing makes the caller handle a failure it can see, instead
         // of caching a series that starts years later than it should.
         if (pageFailed) {
-            std::cerr << "KisProvider: " << tickerStr << " incomplete at page " << page << " (have "
-                      << allBars.size() << " bars, wanted back to " << normStart
-                      << "); returning nothing rather than a truncated series." << std::endl;
+            std::cerr << "KisProvider: " << tickerStr << " incomplete at page " << page << " (have " << allBars.size()
+                      << " bars, wanted back to " << normStart << "); returning nothing rather than a truncated series."
+                      << std::endl;
             return nullptr;
         }
         if (chunk.empty()) {

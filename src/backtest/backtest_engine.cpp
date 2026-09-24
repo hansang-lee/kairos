@@ -190,7 +190,7 @@ BacktestResult BacktestEngine::run(IStrategy& strategy, const StockInfo& data, c
         } else if (signal == Signal::SELL && inPos) {
             // Unwind one tranche; the last one clears whatever is left so no dust
             // remains to be marked to market forever.
-            const int    remaining = std::max(1, exitTranches - exitsDone);
+            const int remaining = std::max(1, exitTranches - exitsDone);
             // The final tranche takes whatever is left, so rounding cannot strand a
             // share that then sits marked to market for the rest of the run.
             const double sold = (remaining <= 1) ? shares : std::floor(shares / remaining);

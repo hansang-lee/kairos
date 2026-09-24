@@ -235,15 +235,15 @@ int main(int argc, char* argv[]) {
         return out;
     };
 
-    const std::vector<int64_t> ts  = qqq.ts;
-    const std::vector<double>  Q   = qqq.close;
-    const std::vector<double>  S   = onTimeline(spy);
-    const std::vector<double>  T   = onTimeline(tlt);
-    const std::vector<double>  C   = onTimeline(shy);
-    const std::vector<double>  G   = onTimeline(gld);
-    const std::vector<double>  L2  = onTimeline(qld);
-    const std::vector<double>  L3  = onTimeline(tqqq);
-    const std::vector<double>  R   = onTimeline(bill);
+    const std::vector<int64_t> ts = qqq.ts;
+    const std::vector<double>  Q  = qqq.close;
+    const std::vector<double>  S  = onTimeline(spy);
+    const std::vector<double>  T  = onTimeline(tlt);
+    const std::vector<double>  C  = onTimeline(shy);
+    const std::vector<double>  G  = onTimeline(gld);
+    const std::vector<double>  L2 = onTimeline(qld);
+    const std::vector<double>  L3 = onTimeline(tqqq);
+    const std::vector<double>  R  = onTimeline(bill);
 
     // A reconstructed leveraged fund, so the question reaches back past 2006 when
     // QLD listed and 2010 when TQQQ did — which is the only way the dot-com bust
@@ -260,10 +260,10 @@ int main(int argc, char* argv[]) {
         }
         return out;
     };
-    const std::vector<double> S2 = reconstruct(2.0);
-    const std::vector<double> S3 = reconstruct(3.0);
-    const std::size_t          n   = ts.size();
-    const std::size_t          warm = 252;
+    const std::vector<double> S2   = reconstruct(2.0);
+    const std::vector<double> S3   = reconstruct(3.0);
+    const std::size_t         n    = ts.size();
+    const std::size_t         warm = 252;
 
     auto sma = [&](const std::vector<double>& p, std::size_t i, std::size_t w) {
         if (i + 1 < w) {
@@ -340,7 +340,7 @@ int main(int argc, char* argv[]) {
     };
 
     struct Candidate {
-        std::string                          name;
+        std::string                         name;
         std::function<Weights(std::size_t)> pick;
     };
 
@@ -348,16 +348,30 @@ int main(int argc, char* argv[]) {
         // The two plain holdings first, always. Every rule below is asking to be
         // preferred over one of them, and a reader should not have to hunt for what
         // it is being compared against.
-        {"SPY, held", [&](std::size_t) { return Weights{{&S, 1.0}}; }},
-        {"QQQ, held (the benchmark)", [&](std::size_t) { return Weights{{&Q, 1.0}}; }},
+        {"SPY, held",
+         [&](std::size_t) {
+             return Weights{{&S, 1.0}};
+         }},
+        {"QQQ, held (the benchmark)",
+         [&](std::size_t) {
+             return Weights{{&Q, 1.0}};
+         }},
         {"QQQ above ma200, else cash",
-         [&](std::size_t i) { return Q[i] > sma(Q, i, 200) ? Weights{{&Q, 1.0}} : Weights{{&C, 1.0}}; }},
+         [&](std::size_t i) {
+             return Q[i] > sma(Q, i, 200) ? Weights{{&Q, 1.0}} : Weights{{&C, 1.0}};
+         }},
         {"QQQ above ma200, else long bonds",
-         [&](std::size_t i) { return Q[i] > sma(Q, i, 200) ? Weights{{&Q, 1.0}} : Weights{{&T, 1.0}}; }},
+         [&](std::size_t i) {
+             return Q[i] > sma(Q, i, 200) ? Weights{{&Q, 1.0}} : Weights{{&T, 1.0}};
+         }},
         {"QQQ above ma100, else long bonds",
-         [&](std::size_t i) { return Q[i] > sma(Q, i, 100) ? Weights{{&Q, 1.0}} : Weights{{&T, 1.0}}; }},
+         [&](std::size_t i) {
+             return Q[i] > sma(Q, i, 100) ? Weights{{&Q, 1.0}} : Weights{{&T, 1.0}};
+         }},
         {"QQQ above ma200, else gold",
-         [&](std::size_t i) { return Q[i] > sma(Q, i, 200) ? Weights{{&Q, 1.0}} : Weights{{&G, 1.0}}; }},
+         [&](std::size_t i) {
+             return Q[i] > sma(Q, i, 200) ? Weights{{&Q, 1.0}} : Weights{{&G, 1.0}};
+         }},
         {"Dual momentum QQQ/SPY, else bonds",
          [&](std::size_t i) {
              const double q = ret12(Q, i), s = ret12(S, i), c = ret12(C, i);
@@ -367,11 +381,17 @@ int main(int argc, char* argv[]) {
              return q >= s ? Weights{{&Q, 1.0}} : Weights{{&S, 1.0}};
          }},
         {"QQQ/TLT 60:40, rebalanced",
-         [&](std::size_t) { return Weights{{&Q, 0.6}, {&T, 0.4}}; }},
+         [&](std::size_t) {
+             return Weights{{&Q, 0.6}, {&T, 0.4}};
+         }},
         {"QQQ/TLT 80:20, rebalanced",
-         [&](std::size_t) { return Weights{{&Q, 0.8}, {&T, 0.2}}; }},
+         [&](std::size_t) {
+             return Weights{{&Q, 0.8}, {&T, 0.2}};
+         }},
         {"QQQ/TLT/GLD 60:20:20",
-         [&](std::size_t) { return Weights{{&Q, 0.6}, {&T, 0.2}, {&G, 0.2}}; }},
+         [&](std::size_t) {
+             return Weights{{&Q, 0.6}, {&T, 0.2}, {&G, 0.2}};
+         }},
         {"QQQ above ma200 else bonds, 80:20",
          [&](std::size_t i) {
              return Q[i] > sma(Q, i, 200) ? Weights{{&Q, 0.8}, {&T, 0.2}} : Weights{{&T, 1.0}};
@@ -380,28 +400,55 @@ int main(int argc, char* argv[]) {
         // Leverage, asked as a return question rather than a risk one. Over 41 years
         // of the index a 2x fund with a trend rule did out-compound the index, and the
         // reason it was set aside was the drawdown, not the return.
-        {"QLD (2x) held", [&](std::size_t) { return Weights{{&L2, 1.0}}; }},
+        {"QLD (2x) held",
+         [&](std::size_t) {
+             return Weights{{&L2, 1.0}};
+         }},
         {"QLD above ma200, else cash",
-         [&](std::size_t i) { return Q[i] > sma(Q, i, 200) ? Weights{{&L2, 1.0}} : Weights{{&C, 1.0}}; }},
+         [&](std::size_t i) {
+             return Q[i] > sma(Q, i, 200) ? Weights{{&L2, 1.0}} : Weights{{&C, 1.0}};
+         }},
         {"QLD above ma200, else long bonds",
-         [&](std::size_t i) { return Q[i] > sma(Q, i, 200) ? Weights{{&L2, 1.0}} : Weights{{&T, 1.0}}; }},
+         [&](std::size_t i) {
+             return Q[i] > sma(Q, i, 200) ? Weights{{&L2, 1.0}} : Weights{{&T, 1.0}};
+         }},
         {"QLD above ma100, else cash",
-         [&](std::size_t i) { return Q[i] > sma(Q, i, 100) ? Weights{{&L2, 1.0}} : Weights{{&C, 1.0}}; }},
+         [&](std::size_t i) {
+             return Q[i] > sma(Q, i, 100) ? Weights{{&L2, 1.0}} : Weights{{&C, 1.0}};
+         }},
         {"Half QLD half cash, ma200",
-         [&](std::size_t i) { return Q[i] > sma(Q, i, 200) ? Weights{{&L2, 0.5}, {&C, 0.5}} : Weights{{&C, 1.0}}; }},
+         [&](std::size_t i) {
+             return Q[i] > sma(Q, i, 200) ? Weights{{&L2, 0.5}, {&C, 0.5}} : Weights{{&C, 1.0}};
+         }},
         {"QLD 60 / TLT 40, rebalanced",
-         [&](std::size_t) { return Weights{{&L2, 0.6}, {&T, 0.4}}; }},
-        {"TQQQ (3x) held", [&](std::size_t) { return Weights{{&L3, 1.0}}; }},
+         [&](std::size_t) {
+             return Weights{{&L2, 0.6}, {&T, 0.4}};
+         }},
+        {"TQQQ (3x) held",
+         [&](std::size_t) {
+             return Weights{{&L3, 1.0}};
+         }},
         {"TQQQ above ma200, else cash",
-         [&](std::size_t i) { return Q[i] > sma(Q, i, 200) ? Weights{{&L3, 1.0}} : Weights{{&C, 1.0}}; }},
+         [&](std::size_t i) {
+             return Q[i] > sma(Q, i, 200) ? Weights{{&L3, 1.0}} : Weights{{&C, 1.0}};
+         }},
 
-        {"2x reconstructed, held", [&](std::size_t) { return Weights{{&S2, 1.0}}; }},
+        {"2x reconstructed, held",
+         [&](std::size_t) {
+             return Weights{{&S2, 1.0}};
+         }},
         {"2x reconstructed above ma200",
-         [&](std::size_t i) { return Q[i] > sma(Q, i, 200) ? Weights{{&S2, 1.0}} : Weights{{&C, 1.0}}; }},
+         [&](std::size_t i) {
+             return Q[i] > sma(Q, i, 200) ? Weights{{&S2, 1.0}} : Weights{{&C, 1.0}};
+         }},
         {"2x recon 60 / TLT 40",
-         [&](std::size_t) { return Weights{{&S2, 0.6}, {&T, 0.4}}; }},
+         [&](std::size_t) {
+             return Weights{{&S2, 0.6}, {&T, 0.4}};
+         }},
         {"3x reconstructed above ma200",
-         [&](std::size_t i) { return Q[i] > sma(Q, i, 200) ? Weights{{&S3, 1.0}} : Weights{{&C, 1.0}}; }},
+         [&](std::size_t i) {
+             return Q[i] > sma(Q, i, 200) ? Weights{{&S3, 1.0}} : Weights{{&C, 1.0}};
+         }},
     };
 
     const std::vector<int64_t> eqTs(ts.begin() + static_cast<std::ptrdiff_t>(warm), ts.end());
@@ -442,9 +489,9 @@ int main(int argc, char* argv[]) {
             if (nm.rfind("Momentum", 0) == 0 || nm.find("abs252") != std::string::npos) {
                 continue;
             }
-            const auto  r     = engine.run(*st, data, cfg);
-            const auto  warmN = std::min(r.warmupBars, r.equityCurve.size());
-            Curve       cv;
+            const auto r     = engine.run(*st, data, cfg);
+            const auto warmN = std::min(r.warmupBars, r.equityCurve.size());
+            Curve      cv;
             cv.name = label + " " + nm;
             for (std::size_t i = warmN; i < r.equityCurve.size(); ++i) {
                 cv.ts.push_back(data.timestamps[i]);
@@ -455,7 +502,7 @@ int main(int argc, char* argv[]) {
             }
         }
         Curve bh;
-        bh.name       = label + " equal-weight buy & hold";
+        bh.name        = label + " equal-weight buy & hold";
         const auto bhr = portfolio::buyAndHold(data, cfg);
         bh.ts          = data.timestamps;
         bh.v           = bhr.equityCurve;
@@ -544,14 +591,14 @@ int main(int argc, char* argv[]) {
     // on the benchmark's calendar and every curve is read by date, so a KRX result
     // and a US one are measured over the same stretch of wall-clock time rather than
     // the same count of bars.
-    const int64_t                                wl = static_cast<int64_t>(windowYears * 365.25 * 86400.0);
-    const int64_t                                sp = static_cast<int64_t>(stepMonths * 30.44 * 86400.0);
-    std::vector<std::pair<int64_t, int64_t>>     windows;
+    const int64_t                            wl = static_cast<int64_t>(windowYears * 365.25 * 86400.0);
+    const int64_t                            sp = static_cast<int64_t>(stepMonths * 30.44 * 86400.0);
+    std::vector<std::pair<int64_t, int64_t>> windows;
     for (int64_t t = eqTs.front(); t + wl <= eqTs.back(); t += sp) {
         windows.emplace_back(t, t + wl);
     }
 
-    const Curve& bench = curves[1];  // QQQ, held
+    const Curve&        bench = curves[1];  // QQQ, held
     std::vector<double> benchWin;
     for (const auto& [a, b] : windows) {
         benchWin.push_back(cagrBetween(bench, a, b));
@@ -562,9 +609,9 @@ int main(int argc, char* argv[]) {
               << " requested " << dayOf(eqTs.front()) << " ~ " << dayOf(eqTs.back()) << ", " << windows.size()
               << " rolling " << std::fixed << std::setprecision(0) << windowYears << "-year holding periods\n"
               << "==========================================================================================\n\n"
-              << std::left << std::setw(40) << "" << std::right << std::setw(23) << "period" << std::setw(7)
-              << "years" << std::setw(12) << "total%" << std::setw(8) << "CAGR%" << std::setw(8) << "MDD%"
-              << std::setw(8) << "sharpe" << std::setw(8) << "beat%" << std::setw(9) << "med exc" << "\n"
+              << std::left << std::setw(40) << "" << std::right << std::setw(23) << "period" << std::setw(7) << "years"
+              << std::setw(12) << "total%" << std::setw(8) << "CAGR%" << std::setw(8) << "MDD%" << std::setw(8)
+              << "sharpe" << std::setw(8) << "beat%" << std::setw(9) << "med exc" << "\n"
               << std::string(123, '-') << "\n";
 
     for (const auto& c : curves) {

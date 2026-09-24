@@ -157,8 +157,8 @@ int main(int argc, char* argv[]) {
         cfg.rebalanceEveryBars = rebalance;
         std::vector<std::string> defensive;
         for (const auto& c : loaded.assetClasses) {
-            const bool isEquity = std::find(loaded.equityClasses.begin(), loaded.equityClasses.end(), c)
-                               != loaded.equityClasses.end();
+            const bool isEquity =
+                std::find(loaded.equityClasses.begin(), loaded.equityClasses.end(), c) != loaded.equityClasses.end();
             if (!isEquity && !c.empty() && std::find(defensive.begin(), defensive.end(), c) == defensive.end()) {
                 defensive.push_back(c);
             }

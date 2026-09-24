@@ -72,8 +72,8 @@ double exposureAt(const portfolio::PortfolioData&, const portfolio::PortfolioRes
 /* --------------------------- the unlevered case --------------------------- */
 
 TEST(leverage, an_unlevered_config_is_untouched_by_the_borrowing_code) {
-    const auto d = portfolio::PortfolioData::align({lvSeries("A", {100, 110, 90, 120, 105}),
-                                                    lvSeries("B", {50, 52, 48, 55, 51})});
+    const auto d =
+        portfolio::PortfolioData::align({lvSeries("A", {100, 110, 90, 120, 105}), lvSeries("B", {50, 52, 48, 55, 51})});
 
     portfolio::PortfolioEngine engine(1000000.0);
 
@@ -100,8 +100,8 @@ TEST(leverage, an_unlevered_config_is_untouched_by_the_borrowing_code) {
 }
 
 TEST(leverage, an_account_that_never_borrows_pays_no_interest) {
-    const auto d   = portfolio::PortfolioData::align({lvSeries("A", std::vector<double>(60, 100.0))});
-    auto       cfg = onceOnly();
+    const auto d         = portfolio::PortfolioData::align({lvSeries("A", std::vector<double>(60, 100.0))});
+    auto       cfg       = onceOnly();
     cfg.maxLeverage      = 2.0;
     cfg.marginRateAnnual = 0.10;
 
@@ -120,7 +120,7 @@ TEST(leverage, interest_is_charged_on_the_borrowed_balance_at_the_stated_annual_
     const std::size_t bars = 253;  // one year of bars, plus the bar that buys
     const auto        d    = portfolio::PortfolioData::align({lvSeries("A", std::vector<double>(bars, 100.0))});
 
-    auto cfg = onceOnly();
+    auto cfg             = onceOnly();
     cfg.maxLeverage      = 2.0;
     cfg.marginRateAnnual = 0.10;
 
@@ -141,7 +141,7 @@ TEST(leverage, interest_is_charged_on_the_borrowed_balance_at_the_stated_annual_
 TEST(leverage, a_higher_rate_costs_proportionally_more) {
     const auto d = portfolio::PortfolioData::align({lvSeries("A", std::vector<double>(60, 100.0))});
 
-    auto cfg = onceOnly();
+    auto cfg        = onceOnly();
     cfg.maxLeverage = 2.0;
 
     portfolio::PortfolioEngine engine(1000000.0);
@@ -164,10 +164,10 @@ TEST(leverage, a_higher_rate_costs_proportionally_more) {
 /* ------------------------------- the ceiling ------------------------------- */
 
 TEST(leverage, gross_exposure_never_exceeds_the_configured_ceiling) {
-    const auto d = portfolio::PortfolioData::align({lvSeries("A", {100, 101, 102, 103, 104, 105}),
-                                                    lvSeries("B", {50, 50, 51, 52, 52, 53})});
+    const auto d = portfolio::PortfolioData::align(
+        {lvSeries("A", {100, 101, 102, 103, 104, 105}), lvSeries("B", {50, 50, 51, 52, 52, 53})});
 
-    auto cfg = onceOnly();
+    auto cfg               = onceOnly();
     cfg.maxLeverage        = 2.0;
     cfg.rebalanceEveryBars = 1;
 
@@ -208,7 +208,7 @@ TEST(leverage, a_fall_past_the_call_level_forces_the_position_back_to_the_ceilin
     // past a 2.2x call level, and the broker sells into it.
     const auto d = portfolio::PortfolioData::align({lvSeries("A", {100, 100, 80, 80, 80})});
 
-    auto cfg = onceOnly();
+    auto cfg               = onceOnly();
     cfg.maxLeverage        = 2.0;
     cfg.marginCallLeverage = 2.2;
 
@@ -232,7 +232,7 @@ TEST(leverage, an_account_wiped_out_stops_there_rather_than_recovering_on_paper)
     // 2x exposure into a 60% fall: the loan is larger than what is left.
     const auto d = portfolio::PortfolioData::align({lvSeries("A", {100, 100, 40, 200, 400})});
 
-    auto cfg = onceOnly();
+    auto cfg        = onceOnly();
     cfg.maxLeverage = 2.0;
 
     LvFixed                    s({2.0});

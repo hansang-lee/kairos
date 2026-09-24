@@ -147,8 +147,7 @@ std::shared_ptr<StockInfo> yFinance::getStockInfo(const std::string& ticker, con
 
         if (result.contains("timestamp") && result.contains("indicators") && result["indicators"].contains("quote")
             && !result["indicators"]["quote"].empty()) {
-            const auto& adj = (result["indicators"].contains("adjclose")
-                               && !result["indicators"]["adjclose"].empty()
+            const auto& adj = (result["indicators"].contains("adjclose") && !result["indicators"]["adjclose"].empty()
                                && result["indicators"]["adjclose"][0].contains("adjclose"))
                                 ? result["indicators"]["adjclose"][0]["adjclose"]
                                 : nlohmann::json::array();
@@ -233,8 +232,7 @@ std::shared_ptr<StockInfo> yFinance::getStockInfo(const std::string& ticker, con
 
         if (result.contains("timestamp") && result.contains("indicators") && result["indicators"].contains("quote")
             && !result["indicators"]["quote"].empty()) {
-            const auto& adj = (result["indicators"].contains("adjclose")
-                               && !result["indicators"]["adjclose"].empty()
+            const auto& adj = (result["indicators"].contains("adjclose") && !result["indicators"]["adjclose"].empty()
                                && result["indicators"]["adjclose"][0].contains("adjclose"))
                                 ? result["indicators"]["adjclose"][0]["adjclose"]
                                 : nlohmann::json::array();

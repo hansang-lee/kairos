@@ -33,8 +33,8 @@ struct Series {
 
 /** Daily closes for a ticker, from cache when it covers the range and Yahoo otherwise. */
 Series load(const std::string& ticker, const std::string& cacheKey, const std::string& from, const std::string& to) {
-    Series out;
-    auto   cached = portfolio::loadCachedDaily(cacheKey);
+    Series        out;
+    auto          cached = portfolio::loadCachedDaily(cacheKey);
     const int64_t wanted = portfolio::parseDate(from);
     if (!cached || cached->timestamps.empty() || cached->timestamps.front() > wanted + 14 * 86400) {
         const auto fetched = yFinance::getStockInfo(ticker, from, to, "1d");
@@ -100,7 +100,7 @@ double irr(const std::vector<std::pair<int64_t, double>>& flows, int64_t endTs, 
         return 0.0;
     }
     for (int i = 0; i < 200; ++i) {
-        const double mid = (lo + hi) / 2.0;
+        const double mid                      = (lo + hi) / 2.0;
         (npv(lo) * npv(mid) <= 0.0 ? hi : lo) = mid;
     }
     return (lo + hi) / 2.0 * 100.0;
@@ -114,8 +114,8 @@ Result runDca(const std::string& name, const Series& px, const std::function<int
     r.name = name;
 
     std::vector<std::pair<int64_t, double>> flows;
-    int64_t                                 held = 0;
-    double                                  paid = 0.0;
+    int64_t                                 held      = 0;
+    double                                  paid      = 0.0;
     double                                  peakValue = 0.0;
 
     for (std::size_t i = 0; i < px.close.size(); ++i) {
@@ -214,7 +214,7 @@ int main(int argc, char* argv[]) {
         if (i == 0 || s.ts[i] < from) {
             return 0;
         }
-        const std::size_t b = i - 1;
+        const std::size_t b   = i - 1;
         int               qty = 1;
 
         double sum20 = 0.0;
@@ -242,7 +242,9 @@ int main(int argc, char* argv[]) {
         return qty;
     };
 
-    auto plain = [&](const Series& s, std::size_t i) -> int { return (i > 0 && s.ts[i] >= from) ? 1 : 0; };
+    auto plain = [&](const Series& s, std::size_t i) -> int {
+        return (i > 0 && s.ts[i] >= from) ? 1 : 0;
+    };
 
     std::cout << "==========================================================================================\n"
               << " Daily accumulation  " << dayOf(std::max(from, lev.ts.front())) << " ~ " << dayOf(lev.ts.back())
@@ -275,14 +277,14 @@ int main(int argc, char* argv[]) {
         }
         const int64_t qty = static_cast<int64_t>(fourRule.invested / s->close[firstBar]);
         Result        r;
-        r.name       = name + ", lump sum on day one";
-        r.invested   = static_cast<double>(qty) * s->close[firstBar];
-        r.shares     = qty;
-        r.finalValue = static_cast<double>(qty) * s->close.back();
-        r.purchases  = 1;
+        r.name             = name + ", lump sum on day one";
+        r.invested         = static_cast<double>(qty) * s->close[firstBar];
+        r.shares           = qty;
+        r.finalValue       = static_cast<double>(qty) * s->close.back();
+        r.purchases        = 1;
         const double years = static_cast<double>(s->ts.back() - s->ts[firstBar]) / (365.25 * 86400.0);
-        r.irrPct = years > 0.0 ? (std::pow(r.finalValue / r.invested, 1.0 / years) - 1.0) * 100.0 : 0.0;
-        double peak = 0.0;
+        r.irrPct           = years > 0.0 ? (std::pow(r.finalValue / r.invested, 1.0 / years) - 1.0) * 100.0 : 0.0;
+        double peak        = 0.0;
         for (std::size_t i = firstBar; i < s->close.size(); ++i) {
             const double v = static_cast<double>(qty) * s->close[i];
             peak           = std::max(peak, v);

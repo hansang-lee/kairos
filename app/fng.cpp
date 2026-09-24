@@ -4,7 +4,6 @@
 #include "common/util.hpp"
 #include "yfinance.hpp"
 
-
 void printHeader() {
     // clang-format off
     std::clog << std::left

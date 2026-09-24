@@ -119,10 +119,10 @@ class GroupParity: public IPortfolioStrategy {
     [[nodiscard]] std::vector<double> targetWeights(const PortfolioData& data, std::size_t index) override;
 
    private:
-    std::vector<std::string>                     classes_;
-    bool                                         inverseVolWithin_;
-    std::size_t                                  lookback_;
-    std::vector<std::pair<std::string, double>>  classWeights_;
+    std::vector<std::string>                    classes_;
+    bool                                        inverseVolWithin_;
+    std::size_t                                 lookback_;
+    std::vector<std::pair<std::string, double>> classWeights_;
 };
 
 /**
@@ -230,7 +230,7 @@ class Levered: public IPortfolioStrategy {
  * all talking about the same strategies. When they each built their own, a
  * parameter changed in one place made two reports silently incomparable.
  */
-[[nodiscard]] std::vector<std::unique_ptr<IPortfolioStrategy>> standardStrategySet(
-    const std::vector<std::string>& assetClasses = {});
+[[nodiscard]] std::vector<std::unique_ptr<IPortfolioStrategy>>
+standardStrategySet(const std::vector<std::string>& assetClasses = {});
 
 }  // namespace portfolio

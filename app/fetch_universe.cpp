@@ -6,8 +6,8 @@
 
 #include "common/util.hpp"
 #include "data/kis_provider.hpp"
-#include "yfinance.hpp"
 #include "portfolio/price_cache.hpp"
+#include "yfinance.hpp"
 
 /**
  * Fills cache/daily/ for a universe and reports what each ticker actually has.
@@ -87,7 +87,7 @@ int main(int argc, char* argv[]) {
             yFinance::close();
         }
     });
-    const auto wanted = portfolio::parseDate(from);
+    const auto  wanted = portfolio::parseDate(from);
 
     std::cout << std::left << std::setw(9) << "code" << std::setw(30) << "name" << std::right << std::setw(7) << "bars"
               << std::setw(13) << "from" << std::setw(13) << "to" << "  status\n"
@@ -105,8 +105,7 @@ int main(int argc, char* argv[]) {
         // Both ends, not just the start. Checking only the start meant a cache that
         // stopped nine months ago was silently reused, and every backtest quietly
         // ended in December while claiming to run to today.
-        const bool covers = cached && !cached->timestamps.empty()
-                         && cached->timestamps.front() <= wanted + 7 * 86400
+        const bool covers = cached && !cached->timestamps.empty() && cached->timestamps.front() <= wanted + 7 * 86400
                          && cached->timestamps.back() >= portfolio::parseDate(to) - 10 * 86400;
 
         std::string status = "cached";

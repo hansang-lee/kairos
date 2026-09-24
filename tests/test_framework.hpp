@@ -42,8 +42,8 @@ struct Registrar {
 
 /** @param filter Substring match on "suite.name"; empty runs everything. */
 inline int runAll(const std::string& filter) {
-    int passed = 0;
-    int failed = 0;
+    int                      passed = 0;
+    int                      failed = 0;
     std::vector<std::string> failures;
 
     std::string currentSuite;
@@ -82,7 +82,7 @@ inline int runAll(const std::string& filter) {
 
 namespace detail {
 
-template <typename T>
+template<typename T>
 std::string show(const T& v) {
     std::ostringstream oss;
     oss << v;
@@ -97,43 +97,45 @@ inline std::string show(const bool& v) {
 
 }  // namespace testing
 
-#define TEST(suite_name, test_name)                                                            \
-    static void suite_name##_##test_name();                                                    \
-    static ::testing::Registrar registrar_##suite_name##_##test_name(#suite_name, #test_name,  \
+#define TEST(suite_name, test_name)                                                             \
+    static void                 suite_name##_##test_name();                                     \
+    static ::testing::Registrar registrar_##suite_name##_##test_name(#suite_name, #test_name,   \
                                                                      suite_name##_##test_name); \
-    static void suite_name##_##test_name()
+    static void                 suite_name##_##test_name()
 
-#define FAIL_WITH(msg)                                                                         \
-    do {                                                                                       \
-        std::ostringstream _oss;                                                               \
-        _oss << msg << "  (" << __FILE__ << ":" << __LINE__ << ")";                            \
-        throw ::testing::AssertionFailure(_oss.str());                                         \
+#define FAIL_WITH(msg)                                              \
+    do {                                                            \
+        std::ostringstream _oss;                                    \
+        _oss << msg << "  (" << __FILE__ << ":" << __LINE__ << ")"; \
+        throw ::testing::AssertionFailure(_oss.str());              \
     } while (0)
 
-#define CHECK(cond)                                                                            \
-    do {                                                                                       \
-        if (!(cond)) FAIL_WITH("CHECK failed: " #cond);                                        \
+#define CHECK(cond)                            \
+    do {                                       \
+        if (!(cond))                           \
+            FAIL_WITH("CHECK failed: " #cond); \
     } while (0)
 
-#define CHECK_MSG(cond, msg)                                                                   \
-    do {                                                                                       \
-        if (!(cond)) FAIL_WITH("CHECK failed: " #cond " — " << msg);                           \
+#define CHECK_MSG(cond, msg)                                \
+    do {                                                    \
+        if (!(cond))                                        \
+            FAIL_WITH("CHECK failed: " #cond " — " << msg); \
     } while (0)
 
-#define CHECK_EQ(a, b)                                                                         \
-    do {                                                                                       \
-        const auto _a = (a);                                                                   \
-        const auto _b = (b);                                                                   \
-        if (!(_a == _b))                                                                       \
-            FAIL_WITH("CHECK_EQ failed: " #a " == " #b "\n        got " << ::testing::detail::show(_a) \
-                                                        << ", expected " << ::testing::detail::show(_b)); \
+#define CHECK_EQ(a, b)                                                                                 \
+    do {                                                                                               \
+        const auto _a = (a);                                                                           \
+        const auto _b = (b);                                                                           \
+        if (!(_a == _b))                                                                               \
+            FAIL_WITH("CHECK_EQ failed: " #a " == " #b "\n        got "                                \
+                      << ::testing::detail::show(_a) << ", expected " << ::testing::detail::show(_b)); \
     } while (0)
 
-#define CHECK_NEAR(a, b, tol)                                                                  \
-    do {                                                                                       \
-        const double _a = (a);                                                                 \
-        const double _b = (b);                                                                 \
-        if (std::fabs(_a - _b) > (tol))                                                        \
-            FAIL_WITH("CHECK_NEAR failed: " #a " ~= " #b "\n        got " << _a << ", expected " << _b \
-                                                      << " (tolerance " << (tol) << ")");      \
+#define CHECK_NEAR(a, b, tol)                                                                                 \
+    do {                                                                                                      \
+        const double _a = (a);                                                                                \
+        const double _b = (b);                                                                                \
+        if (std::fabs(_a - _b) > (tol))                                                                       \
+            FAIL_WITH("CHECK_NEAR failed: " #a " ~= " #b "\n        got " << _a << ", expected " << _b        \
+                                                                          << " (tolerance " << (tol) << ")"); \
     } while (0)

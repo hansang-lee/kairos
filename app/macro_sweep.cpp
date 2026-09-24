@@ -137,8 +137,8 @@ int main(int argc, char* argv[]) {
     std::vector<StrategyEntry> strategies;
     for (const auto& s : sweepCfg["strategies"]) {
         StrategyEntry entry;
-        entry.name             = s["name"].get<std::string>();
-        std::string cfgPath    = util::resolveFromExe(s["config"].get<std::string>());
+        entry.name              = s["name"].get<std::string>();
+        std::string cfgPath     = util::resolveFromExe(s["config"].get<std::string>());
         const auto  strategyCfg = util::loadJsonConfig(cfgPath);
         if (!strategyCfg) {
             return 1;

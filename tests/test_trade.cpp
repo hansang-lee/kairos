@@ -3,13 +3,13 @@
 
 #include <nlohmann/json.hpp>
 
+#include "notify/bot_commands.hpp"
 #include "test_framework.hpp"
+#include "trade/fill_reconciler.hpp"
 #include "trade/position_store.hpp"
 #include "trade/risk_guard.hpp"
 #include "trade/schedule_state.hpp"
 #include "trade/signal_executor.hpp"
-#include "notify/bot_commands.hpp"
-#include "trade/fill_reconciler.hpp"
 #include "trade/trade_journal.hpp"
 
 namespace {
@@ -319,11 +319,9 @@ TEST(fills, an_order_that_fills_further_is_recorded_again_at_the_larger_quantity
     const trade::TradeJournal journal(path);
     journal.append(anOrder("0002", 51, "Aroon Trend 25/70"));
 
-    CHECK_EQ(trade::reconcileFills(journal, {aFill("0002", "069500", 10, 113000.0)}, "paper").recorded,
-             std::size_t{1});
+    CHECK_EQ(trade::reconcileFills(journal, {aFill("0002", "069500", 10, 113000.0)}, "paper").recorded, std::size_t{1});
     // The rest fills later in the session.
-    CHECK_EQ(trade::reconcileFills(journal, {aFill("0002", "069500", 29, 113145.0)}, "paper").recorded,
-             std::size_t{1});
+    CHECK_EQ(trade::reconcileFills(journal, {aFill("0002", "069500", 29, 113145.0)}, "paper").recorded, std::size_t{1});
 
     const auto keys = journal.recordedFillKeys();
     CHECK(keys.count("0002:10") > 0);
@@ -335,9 +333,9 @@ TEST(fills, an_accepted_but_unfilled_order_is_not_a_fill) {
     removeFile(path);
     const trade::TradeJournal journal(path);
 
-    Fill pending   = aFill("0003", "133690", 0, 0.0);
-    pending.orderQty = 17;
-    Fill cancelled   = aFill("0004", "133690", 17, 185000.0);
+    Fill pending        = aFill("0003", "133690", 0, 0.0);
+    pending.orderQty    = 17;
+    Fill cancelled      = aFill("0004", "133690", 17, 185000.0);
     cancelled.cancelled = true;
 
     const auto r = trade::reconcileFills(journal, {pending, cancelled}, "paper");

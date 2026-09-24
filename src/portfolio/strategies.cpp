@@ -203,8 +203,8 @@ std::vector<double> MovingAverageFilter::targetWeights(const PortfolioData& data
             continue;
         }
         if (!filtered_.empty()) {
-            const bool inScope = a < classes_.size()
-                              && std::find(filtered_.begin(), filtered_.end(), classes_[a]) != filtered_.end();
+            const bool inScope =
+                a < classes_.size() && std::find(filtered_.begin(), filtered_.end(), classes_[a]) != filtered_.end();
             if (!inScope) {
                 continue;  // held regardless of its own trend
             }
@@ -395,8 +395,8 @@ std::vector<double> AbsoluteMomentumFilter::targetWeights(const PortfolioData& d
 }
 
 Levered::Levered(std::unique_ptr<IPortfolioStrategy> inner, double multiple)
-    : inner_(std::move(inner)),
-      multiple_(multiple) {}
+    : inner_(std::move(inner))
+    , multiple_(multiple) {}
 
 std::string Levered::name() const {
     std::ostringstream os;
@@ -404,9 +404,13 @@ std::string Levered::name() const {
     return os.str();
 }
 
-void Levered::init(const PortfolioData& data) { inner_->init(data); }
+void Levered::init(const PortfolioData& data) {
+    inner_->init(data);
+}
 
-std::size_t Levered::warmupPeriod() const { return inner_->warmupPeriod(); }
+std::size_t Levered::warmupPeriod() const {
+    return inner_->warmupPeriod();
+}
 
 std::vector<double> Levered::targetWeights(const PortfolioData& data, std::size_t index) {
     auto w = inner_->targetWeights(data, index);
@@ -427,10 +431,10 @@ std::vector<std::unique_ptr<IPortfolioStrategy>> standardStrategySet(const std::
     if (!assetClasses.empty()) {
         out.push_back(std::make_unique<GroupParity>(assetClasses, false));
         out.push_back(std::make_unique<GroupParity>(assetClasses, true, 63));
-        out.push_back(std::make_unique<AbsoluteMomentumFilter>(
-            std::make_unique<GroupParity>(assetClasses, false), 252, 0.0));
-        out.push_back(std::make_unique<AbsoluteMomentumFilter>(
-            std::make_unique<GroupParity>(assetClasses, true, 63), 252, 0.0));
+        out.push_back(
+            std::make_unique<AbsoluteMomentumFilter>(std::make_unique<GroupParity>(assetClasses, false), 252, 0.0));
+        out.push_back(
+            std::make_unique<AbsoluteMomentumFilter>(std::make_unique<GroupParity>(assetClasses, true, 63), 252, 0.0));
     }
 
     out.push_back(std::make_unique<AbsoluteMomentumFilter>(std::make_unique<EqualWeight>(), 252, 0.0));
@@ -438,7 +442,8 @@ std::vector<std::unique_ptr<IPortfolioStrategy>> standardStrategySet(const std::
     out.push_back(std::make_unique<MovingAverageFilter>(std::make_unique<EqualWeight>(), 200));
     if (!assetClasses.empty()) {
         out.push_back(std::make_unique<MovingAverageFilter>(std::make_unique<GroupParity>(assetClasses, false), 200));
-        out.push_back(std::make_unique<MovingAverageFilter>(std::make_unique<GroupParity>(assetClasses, true, 63), 200));
+        out.push_back(
+            std::make_unique<MovingAverageFilter>(std::make_unique<GroupParity>(assetClasses, true, 63), 200));
     }
 
     for (std::size_t top : {1u, 2u, 3u, 5u}) {

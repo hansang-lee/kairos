@@ -34,8 +34,8 @@ struct BotSignal {
     std::string name;
     std::string ticker;
     std::string signal;  ///< "BUY", "SELL", "HOLD"
-    double      price     = 0.0;
-    int64_t     heldQty   = 0;
+    double      price   = 0.0;
+    int64_t     heldQty = 0;
 };
 
 /** @brief A line of the trade journal, for /trades. */

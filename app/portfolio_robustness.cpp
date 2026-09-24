@@ -28,7 +28,7 @@ namespace {
 struct WindowStat {
     double returnPct = 0.0;
     double cagr      = 0.0;
-    double mddPct     = 0.0;
+    double mddPct    = 0.0;
 };
 
 /** Return, CAGR and drawdown over one contiguous stretch of an equity curve. */
@@ -47,7 +47,7 @@ WindowStat measure(const std::vector<double>& curve, const std::vector<int64_t>&
 
     double peak = curve[first];
     for (std::size_t i = first; i < last; ++i) {
-        peak      = std::max(peak, curve[i]);
+        peak     = std::max(peak, curve[i]);
         w.mddPct = std::min(w.mddPct, (curve[i] - peak) / peak * 100.0);
     }
     return w;
@@ -165,7 +165,7 @@ int main(int argc, char* argv[]) {
     }
 
     // ---- Calendar years ----
-    std::vector<int>                       years;
+    std::vector<int>                                   years;
     std::map<int, std::pair<std::size_t, std::size_t>> yearBars;  // year -> [first, last)
     for (std::size_t b = 0; b < data.barCount(); ++b) {
         const int y = yearOf(data.timestamps[b]);
@@ -219,8 +219,8 @@ int main(int argc, char* argv[]) {
 
     std::vector<std::pair<std::size_t, std::size_t>> windows;
     for (int64_t start = data.timestamps.front(); start + windowSecs <= data.timestamps.back(); start += stepSecs) {
-        const auto f = std::lower_bound(data.timestamps.begin(), data.timestamps.end(), start);
-        const auto l = std::lower_bound(data.timestamps.begin(), data.timestamps.end(), start + windowSecs);
+        const auto f  = std::lower_bound(data.timestamps.begin(), data.timestamps.end(), start);
+        const auto l  = std::lower_bound(data.timestamps.begin(), data.timestamps.end(), start + windowSecs);
         const auto fi = static_cast<std::size_t>(f - data.timestamps.begin());
         const auto li = static_cast<std::size_t>(l - data.timestamps.begin());
         if (li > fi + 50) {
@@ -228,8 +228,7 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    std::cout << "\n Rolling " << windowYears << "-year holding periods (" << windows.size()
-              << " in the period)\n"
+    std::cout << "\n Rolling " << windowYears << "-year holding periods (" << windows.size() << " in the period)\n"
               << std::left << std::setw(34) << "" << std::right << std::setw(9) << "windows" << std::setw(10) << "worst"
               << std::setw(10) << "median" << std::setw(10) << "best" << std::setw(11) << "worstMDD" << std::setw(10)
               << "loss%" << std::setw(11) << "beatB&H%" << "\n"
@@ -284,10 +283,9 @@ int main(int argc, char* argv[]) {
             continue;
         }
         const double pct = 100.0 / static_cast<double>(cagrs.size());
-        std::cout << std::setw(9) << cagrs.size() << std::setw(10)
-                  << *std::min_element(cagrs.begin(), cagrs.end()) << std::setw(10) << median(cagrs) << std::setw(10)
-                  << *std::max_element(cagrs.begin(), cagrs.end()) << std::setw(11) << worstMdd << std::setw(10)
-                  << losses * pct;
+        std::cout << std::setw(9) << cagrs.size() << std::setw(10) << *std::min_element(cagrs.begin(), cagrs.end())
+                  << std::setw(10) << median(cagrs) << std::setw(10) << *std::max_element(cagrs.begin(), cagrs.end())
+                  << std::setw(11) << worstMdd << std::setw(10) << losses * pct;
         if (comparable > 0) {
             std::cout << std::setw(11) << beats * 100.0 / static_cast<double>(comparable);
         } else {
@@ -335,8 +333,8 @@ int main(int argc, char* argv[]) {
               << " many stretches survived that, which is why it differs between rows.\n"
               << " The windows overlap: consecutive ones share " << std::fixed << std::setprecision(0) << overlapPct
               << "% of their bars, so loss% and beatB&H%\n"
-              << " read like independent trials and are not — these " << windows.size()
-              << " windows carry roughly " << independent << " windows'\n"
+              << " read like independent trials and are not — these " << windows.size() << " windows carry roughly "
+              << independent << " windows'\n"
               << " worth of independent information.\n";
     return 0;
 }

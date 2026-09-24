@@ -8,7 +8,6 @@
 #include "common/util.hpp"
 #include "yfinance.hpp"
 
-
 void printTable(const std::vector<std::shared_ptr<FredSeriesInfo>>& seriesList) {
     /* Collect all unique dates */
     std::set<std::string> dateSet;

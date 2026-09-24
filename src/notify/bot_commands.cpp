@@ -67,8 +67,7 @@ std::string formatStatus(const BotSnapshot& snap) {
     }
     const double total    = snap.totalEval > 0.0 ? snap.totalEval : snap.cashBalance;
     const double stockPct = total > 0.0 ? stockValue / total * 100.0 : 0.0;
-    const double ret =
-        snap.initialCapital > 0.0 ? (total - snap.initialCapital) / snap.initialCapital * 100.0 : 0.0;
+    const double ret = snap.initialCapital > 0.0 ? (total - snap.initialCapital) / snap.initialCapital * 100.0 : 0.0;
 
     std::ostringstream os;
     os << "평가금액 " << won(total) << "원\n"
@@ -127,7 +126,7 @@ std::string formatTrades(const std::vector<BotTrade>& trades, std::size_t limit)
     }
     // Newest first: the last thing that happened is what somebody checking their
     // phone wants to see, not the first.
-    const std::size_t take = std::min(limit, trades.size());
+    const std::size_t  take = std::min(limit, trades.size());
     std::ostringstream os;
     for (std::size_t i = 0; i < take; ++i) {
         const auto& t = trades[trades.size() - 1 - i];

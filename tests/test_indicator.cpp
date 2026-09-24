@@ -70,7 +70,7 @@ TEST(indicator, zero_period_does_not_crash) {
 }
 
 TEST(indicator, mismatched_series_lengths_are_rejected) {
-    const auto s = makeSeries(40);
+    const auto          s = makeSeries(40);
     std::vector<double> shortHigh(s.high.begin(), s.high.begin() + 10);
     CHECK(indicator::atr(shortHigh, s.low, s.close, 14).empty());
     CHECK(indicator::choppinessIndex(shortHigh, s.low, s.close, 14).empty());

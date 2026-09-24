@@ -75,10 +75,9 @@ class Says: public portfolio::IPortfolioStrategy {
 TEST(allocation, each_class_gets_an_equal_share_however_many_ways_it_is_listed) {
     // Three listings of one bet and one of another: the point of the rule is that
     // the first three share a half between them rather than taking three quarters.
-    const auto d = portfolio::PortfolioData::align({aSeries("A1", {100, 100, 100, 100}),
-                                                    aSeries("A2", {100, 100, 100, 100}),
-                                                    aSeries("A3", {100, 100, 100, 100}),
-                                                    aSeries("B1", {100, 100, 100, 100})});
+    const auto d =
+        portfolio::PortfolioData::align({aSeries("A1", {100, 100, 100, 100}), aSeries("A2", {100, 100, 100, 100}),
+                                         aSeries("A3", {100, 100, 100, 100}), aSeries("B1", {100, 100, 100, 100})});
 
     portfolio::GroupParity s({"EQ", "EQ", "EQ", "BOND"});
     s.init(d);
@@ -126,9 +125,8 @@ TEST(allocation, weighting_by_volatility_inside_a_class_leaves_the_class_split_a
     // One class holds a quiet asset and a wild one; the other holds a single asset.
     // Whatever happens between the two inside the first class, the classes must
     // still be half and half — that split is the decision the rule exists to make.
-    const auto d = portfolio::PortfolioData::align({wobbling("QUIET", 100.0, 1.0, 80),
-                                                    wobbling("WILD", 100.0, 8.0, 80),
-                                                    wobbling("BOND", 100.0, 1.0, 80)});
+    const auto d = portfolio::PortfolioData::align(
+        {wobbling("QUIET", 100.0, 1.0, 80), wobbling("WILD", 100.0, 8.0, 80), wobbling("BOND", 100.0, 1.0, 80)});
 
     portfolio::GroupParity s({"EQ", "EQ", "BOND"}, true, 20);
     s.init(d);
@@ -175,9 +173,9 @@ TEST(allocation, the_allocation_cannot_see_the_bar_it_is_made_for) {
 }
 
 TEST(allocation, a_configured_class_split_is_honoured_exactly) {
-    const auto d = portfolio::PortfolioData::align({aSeries("E1", {100, 100, 100, 100}),
-                                                    aSeries("E2", {100, 100, 100, 100}),
-                                                    aSeries("B1", {100, 100, 100, 100})});
+    const auto d =
+        portfolio::PortfolioData::align({aSeries("E1", {100, 100, 100, 100}), aSeries("E2", {100, 100, 100, 100}),
+                                         aSeries("B1", {100, 100, 100, 100})});
 
     // 20% equity is the split the frontier peaks at; the rule must actually put 20%
     // there rather than approximately 20%.
@@ -208,9 +206,8 @@ TEST(allocation, configured_shares_are_renormalised_over_the_classes_that_exist)
 }
 
 TEST(allocation, a_class_the_split_does_not_mention_is_left_out_rather_than_defaulted) {
-    const auto d = portfolio::PortfolioData::align({aSeries("E", {100, 100, 100}),
-                                                    aSeries("B", {100, 100, 100}),
-                                                    aSeries("G", {100, 100, 100})});
+    const auto d = portfolio::PortfolioData::align(
+        {aSeries("E", {100, 100, 100}), aSeries("B", {100, 100, 100}), aSeries("G", {100, 100, 100})});
 
     // Naming two classes and not the third means the third gets nothing; silently
     // giving it an equal share would make an omission look like a decision.
@@ -224,9 +221,8 @@ TEST(allocation, a_class_the_split_does_not_mention_is_left_out_rather_than_defa
 }
 
 TEST(allocation, an_empty_split_is_the_even_one_and_changes_nothing) {
-    const auto d = portfolio::PortfolioData::align({aSeries("E1", {100, 100, 100}),
-                                                    aSeries("E2", {100, 100, 100}),
-                                                    aSeries("B", {100, 100, 100})});
+    const auto d = portfolio::PortfolioData::align(
+        {aSeries("E1", {100, 100, 100}), aSeries("E2", {100, 100, 100}), aSeries("B", {100, 100, 100})});
 
     portfolio::GroupParity plain({"EQ", "EQ", "BOND"});
     portfolio::GroupParity spelled({"EQ", "EQ", "BOND"}, false, 63, {{"EQ", 1.0}, {"BOND", 1.0}});
@@ -366,10 +362,8 @@ TEST(allocation, without_enough_history_the_trend_is_unknown_and_the_asset_is_no
 /* ------------------------- through the engine ---------------------------- */
 
 TEST(allocation, group_parity_run_end_to_end_stays_fully_invested_and_balanced) {
-    const auto d = portfolio::PortfolioData::align({wobbling("A1", 100.0, 2.0, 200),
-                                                    wobbling("A2", 100.0, 2.0, 200),
-                                                    wobbling("A3", 100.0, 2.0, 200),
-                                                    wobbling("B1", 100.0, 2.0, 200)});
+    const auto d = portfolio::PortfolioData::align({wobbling("A1", 100.0, 2.0, 200), wobbling("A2", 100.0, 2.0, 200),
+                                                    wobbling("A3", 100.0, 2.0, 200), wobbling("B1", 100.0, 2.0, 200)});
 
     portfolio::PortfolioConfigBt cfg;
     cfg.commissionRate     = 0.0;
