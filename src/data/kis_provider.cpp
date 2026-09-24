@@ -420,6 +420,69 @@ std::shared_ptr<StockInfo> KisProvider::getStockInfo(std::string_view ticker, st
     return data;
 }
 
+double KisProvider::getCurrentPrice(std::string_view ticker) {
+    auto& auth = KisAuth::instance();
+    auth.loadFromEnv();
+    const std::string token = auth.getAccessToken();
+    if (token.empty()) {
+        return 0.0;
+    }
+
+    const std::string url = auth.getBaseUrl()
+                          + "/uapi/domestic-stock/v1/quotations/inquire-price"
+                            "?FID_COND_MRKT_DIV_CODE=J&FID_INPUT_ISCD="
+                          + std::string(ticker);
+
+    // The same retry the chart fetch uses: a throttled call is not a missing price.
+    constexpr int kMaxAttempts = 4;
+    for (int attempt = 0; attempt < kMaxAttempts; ++attempt) {
+        CURL* curl = curl_easy_init();
+        if (!curl) {
+            return 0.0;
+        }
+        std::string        response;
+        struct curl_slist* headers = nullptr;
+        headers                    = curl_slist_append(headers, "Content-Type: application/json; charset=utf-8");
+        headers                    = curl_slist_append(headers, ("authorization: Bearer " + token).c_str());
+        headers                    = curl_slist_append(headers, ("appkey: " + auth.getAppKey()).c_str());
+        headers                    = curl_slist_append(headers, ("appsecret: " + auth.getAppSecret()).c_str());
+        headers                    = curl_slist_append(headers, "tr_id: FHKST01010100");
+        headers                    = curl_slist_append(headers, "custtype: P");
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 15L);
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+        const CURLcode res = curl_easy_perform(curl);
+        curl_slist_free_all(headers);
+        curl_easy_cleanup(curl);
+        if (res != CURLE_OK) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000 * (attempt + 1)));
+            continue;
+        }
+        try {
+            const auto json = nlohmann::json::parse(response);
+            const auto code = json.value("msg_cd", std::string{});
+            if (code == "EGW00201" || code == "EGW00316" || code == "OPSQ0003") {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1000 * (attempt + 1)));
+                continue;
+            }
+            if (!json.contains("output") || !json["output"].is_object()) {
+                std::cerr << "KisProvider quote error response: " << response << std::endl;
+                return 0.0;
+            }
+            // Numbers arrive as strings, and an empty one means no trade yet.
+            const std::string prpr = json["output"].value("stck_prpr", std::string{});
+            return prpr.empty() ? 0.0 : std::stod(prpr);
+        } catch (const std::exception& e) {
+            std::cerr << "KisProvider quote parse exception: " << e.what() << std::endl;
+            return 0.0;
+        }
+    }
+    return 0.0;
+}
+
 std::shared_ptr<StockInfo> KisProvider::getIntradayBars(std::string_view ticker, std::string_view asOfTime) {
     const std::string tickerStr = std::string(ticker);
     std::string       hourStr   = normalizeDate(asOfTime);

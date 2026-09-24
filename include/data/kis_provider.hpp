@@ -24,4 +24,14 @@ class KisProvider: public IDataProvider {
      * @return          StockInfo with up to ~30 minute bars, oldest-first, or nullptr on failure.
      */
     [[nodiscard]] std::shared_ptr<StockInfo> getIntradayBars(std::string_view ticker, std::string_view asOfTime = "");
+
+    /**
+     * @brief Current price from the quote endpoint (KIS 주식현재가 시세, FHKST01010100).
+     *
+     * Outside market hours this is the last close, which is the same number the
+     * daily series ends with — the value of the call is during the session, where
+     * the two differ by the day's move so far.
+     * @return stck_prpr as a double, or 0.0 on any failure.
+     */
+    [[nodiscard]] double getCurrentPrice(std::string_view ticker) override;
 };

@@ -379,7 +379,20 @@ int main(int argc, char* argv[]) {
 
             r.strategy->init(*data);
             const Signal signal = r.strategy->evaluate(*data, evalIdx);
-            const double price  = data->close.back();
+
+            // The price an order is sized and journaled against. A daily series ends
+            // at the last published close, which is yesterday's until the exchange
+            // posts today's bar — so on those days the journal would record a day's
+            // move as slippage. Intraday bars are already "now"; daily ones ask the
+            // quote endpoint and fall back to the close only when it answers nothing.
+            double price = data->close.back();
+            if (!r.isIntraday()) {
+                if (const double quote = provider.getCurrentPrice(p.ticker); quote > 0.0) {
+                    price = quote;
+                } else {
+                    std::cout << "[" << nowLabel() << "] #" << p.id << " no live quote; using last close.\n";
+                }
+            }
 
             const auto decision = r.executor->execute(signal, price, balance);
 
