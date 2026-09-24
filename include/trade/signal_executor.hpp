@@ -4,7 +4,7 @@
 #include <memory>
 #include <string>
 
-#include "broker/kis_trader.hpp"
+#include "broker/ibroker.hpp"
 #include "notify/telegram.hpp"
 #include "strategy/istrategy.hpp"
 #include "strategy/strategy_factory.hpp"
@@ -47,6 +47,14 @@ struct ExecutionContext {
     std::shared_ptr<RiskGuard>     risk;
     std::shared_ptr<PositionStore> positions;
     std::shared_ptr<TradeJournal>  journal;
+
+    /**
+     * @brief Where orders go. KIS in production; a fake in tests.
+     *
+     * Shared like the rest of the context because it describes the account, not a
+     * strategy: every executor in the process sends to the same place.
+     */
+    std::shared_ptr<IBroker> broker;
 
     /** @brief Build a context with the default file locations. */
     static ExecutionContext create(const RiskLimits& limits);

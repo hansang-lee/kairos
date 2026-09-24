@@ -23,6 +23,7 @@ add_library(${PROJECT_NAME} SHARED
   src/macro/macro_backtester.cpp
   src/broker/kis_auth.cpp
   src/broker/kis_trader.cpp
+  src/broker/kis_broker.cpp
   src/data/kis_provider.cpp
   src/data/krx_calendar.cpp
   src/data/bar_recorder.cpp

@@ -250,12 +250,11 @@ int main(int argc, char* argv[]) {
     // Several days back, so a long weekend or a holiday week does not lose a fill.
     if (live) {
         const auto from = kstDate(7);
-        const auto hist = KisTrader::getDailyFills(from, kstDate(0), true);
+        const auto hist = ctx.broker->getDailyFills(from, kstDate(0), true);
         if (!hist.success) {
             std::cout << "[!] Fill history unavailable (" << hist.message << "); nothing reconciled.\n";
         } else {
-            const auto r =
-                trade::reconcileFills(*ctx.journal, hist.fills, KisAuth::instance().isPaper() ? "paper" : "live");
+            const auto r = trade::reconcileFills(*ctx.journal, hist.fills, ctx.broker->mode());
             std::cout << "[*] Fills since " << from << ": " << r.recorded << " newly recorded, " << r.alreadyKnown
                       << " already known, " << r.ignored << " unfilled or cancelled.\n";
         }
@@ -308,7 +307,7 @@ int main(int argc, char* argv[]) {
 
         // One balance per cycle, shared by every profile: it describes the account,
         // not a strategy, and re-fetching per profile would burn the rate limit.
-        const auto balance = KisTrader::getBalance();
+        const auto balance = ctx.broker->getBalance();
         if (!balance.success) {
             std::cout << "[" << nowLabel() << "] Balance fetch failed: " << balance.message << ". Waiting...\n";
             if (once) {

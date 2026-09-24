@@ -3,6 +3,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "broker/ibroker.hpp"
 #include "notify/bot_commands.hpp"
 #include "test_framework.hpp"
 #include "trade/fill_reconciler.hpp"
@@ -49,13 +50,60 @@ StrategyProfile profile() {
 }
 
 /** An executor whose state files are per-test, so tests cannot leak into each other. */
+/**
+ * A broker that records what it was asked and answers with whatever it was told
+ * to. This is the seam the executor's live branch had been missing: until it
+ * existed that branch had never run under a test at all.
+ */
+class FakeBroker: public IBroker {
+   public:
+    struct Placed {
+        OrderSide   side;
+        std::string ticker;
+        int64_t     quantity;
+        double      price;
+    };
+    std::vector<Placed> placed;
+    OrderResult         next;  ///< what the next placeOrder returns
+    std::string         modeName = "paper";
+
+    FakeBroker() {
+        next.success = true;
+        next.orderNo = "FAKE-0001";
+    }
+
+    OrderResult placeOrder(OrderSide side, const std::string& ticker, int64_t quantity, double price) override {
+        placed.push_back({side, ticker, quantity, price});
+        return next;
+    }
+    AccountBalance getBalance() override { return {}; }
+    FillHistory    getDailyFills(const std::string&, const std::string&, bool) override { return {}; }
+    std::string    mode() const override { return modeName; }
+};
+
+std::shared_ptr<FakeBroker> fakeBroker(const trade::ExecutionContext& ctx) {
+    return std::dynamic_pointer_cast<FakeBroker>(ctx.broker);
+}
+
 trade::ExecutionContext freshContext(const trade::RiskLimits& limits, const std::string& tag) {
     removeFile(tmp(tag + "_pos.json"));
     removeFile(tmp(tag + "_risk.json"));
     removeFile(tmp(tag + "_journal.jsonl"));
     return {std::make_shared<trade::RiskGuard>(limits, tmp(tag + "_risk.json")),
             std::make_shared<trade::PositionStore>(tmp(tag + "_pos.json")),
-            std::make_shared<trade::TradeJournal>(tmp(tag + "_journal.jsonl"))};
+            std::make_shared<trade::TradeJournal>(tmp(tag + "_journal.jsonl")), std::make_shared<FakeBroker>()};
+}
+
+/** The last journal line, parsed. */
+nlohmann::json lastJournalLine(const trade::TradeJournal& journal) {
+    std::ifstream in(journal.path());
+    std::string   line, last;
+    while (std::getline(in, line)) {
+        if (!line.empty()) {
+            last = line;
+        }
+    }
+    return last.empty() ? nlohmann::json::object() : nlohmann::json::parse(last);
 }
 
 }  // namespace
@@ -511,6 +559,143 @@ TEST(executor, a_failed_balance_fetch_skips_the_round) {
     // Reading a failed fetch as "flat" would re-buy a position already held.
     const auto d = ex.execute(Signal::BUY, 1000, failed);
     CHECK(!d.acted);
+}
+
+/* ------------------------- the live branch, at last ------------------------- */
+
+TEST(executor, a_live_buy_sends_one_order_and_records_everything_it_should) {
+    auto                  ctx  = freshContext({}, "exec_live_buy");
+    auto                  fake = fakeBroker(ctx);
+    auto                  p    = profile();
+    trade::SignalExecutor ex(p, true, -1, ctx);
+
+    const auto d = ex.execute(Signal::BUY, 1000, balance(100000, 0, 0, 1000));
+
+    CHECK(d.sent);
+    CHECK(d.order.success);
+    CHECK_EQ(fake->placed.size(), std::size_t{1});
+    CHECK_EQ(fake->placed[0].ticker, std::string{"005930"});
+    CHECK_EQ(fake->placed[0].quantity, d.quantity);
+    CHECK(fake->placed[0].side == OrderSide::Buy);
+    CHECK_NEAR(fake->placed[0].price, 0.0, 1e-9);  // market order
+
+    // Every downstream record the order should leave behind.
+    CHECK_EQ(ctx.positions->get("005930").entryTranches, 1);
+    CHECK_EQ(ex.ordersSent(), 1);
+    const auto j = lastJournalLine(*ctx.journal);
+    CHECK_EQ(j.value("event", ""), std::string{"order"});
+    CHECK_EQ(j.value("order_no", ""), std::string{"FAKE-0001"});
+    CHECK(j.value("success", false));
+    CHECK(!j.value("dry_run", true));
+    CHECK_EQ(j.value("mode", ""), std::string{"paper"});
+}
+
+TEST(executor, a_live_sell_sends_the_whole_holding_and_records_an_exit) {
+    auto                  ctx  = freshContext({}, "exec_live_sell");
+    auto                  fake = fakeBroker(ctx);
+    auto                  p    = profile();
+    trade::SignalExecutor ex(p, true, -1, ctx);
+
+    const auto d = ex.execute(Signal::SELL, 1000, balance(0, 90, 900, 1000));
+
+    CHECK(d.sent);
+    CHECK_EQ(fake->placed.size(), std::size_t{1});
+    CHECK(fake->placed[0].side == OrderSide::Sell);
+    CHECK_EQ(fake->placed[0].quantity, int64_t{90});
+    CHECK_EQ(ctx.positions->get("005930").exitTranches, 1);
+}
+
+TEST(executor, a_rejected_order_is_journaled_as_failed_and_opens_no_position) {
+    auto ctx           = freshContext({}, "exec_live_reject");
+    auto fake          = fakeBroker(ctx);
+    fake->next.success = false;
+    fake->next.orderNo.clear();
+    fake->next.message      = "주문가능금액을 초과했습니다";
+    auto                  p = profile();
+    trade::SignalExecutor ex(p, true, -1, ctx);
+
+    const auto d = ex.execute(Signal::BUY, 1000, balance(100000, 0, 0, 1000));
+
+    CHECK(d.sent);
+    CHECK(!d.order.success);
+    // The broker said no, so nothing was opened — a tranche recorded here would
+    // make the next HOLD buy the remainder of a position that does not exist.
+    CHECK_EQ(ctx.positions->get("005930").entryTranches, 0);
+    const auto j = lastJournalLine(*ctx.journal);
+    CHECK_EQ(j.value("event", ""), std::string{"order"});
+    CHECK(!j.value("success", true));
+    CHECK(j.value("message", "").find("초과") != std::string::npos);
+}
+
+TEST(executor, a_lost_response_is_journaled_as_unknown_not_as_a_rejection) {
+    auto ctx                 = freshContext({}, "exec_live_unknown");
+    auto fake                = fakeBroker(ctx);
+    fake->next.success       = false;
+    fake->next.indeterminate = true;
+    fake->next.orderNo.clear();
+    auto                  p = profile();
+    trade::SignalExecutor ex(p, true, -1, ctx);
+
+    ex.execute(Signal::BUY, 1000, balance(100000, 0, 0, 1000));
+
+    // The order may exist at the broker. The journal must say so in a way a later
+    // reconciliation can find, and must not open a position it cannot confirm.
+    CHECK_EQ(lastJournalLine(*ctx.journal).value("event", ""), std::string{"order_unknown"});
+    CHECK_EQ(ctx.positions->get("005930").entryTranches, 0);
+}
+
+TEST(executor, the_session_cap_stops_the_call_before_it_reaches_the_broker) {
+    auto ctx  = freshContext({}, "exec_live_cap");
+    auto fake = fakeBroker(ctx);
+    auto p    = profile();
+    // Three tranches, so the second BUY genuinely wants to send another order —
+    // with one tranche the position is simply complete and the cap is never asked.
+    p.entryTranches = 3;
+    trade::SignalExecutor ex(p, true, 1, ctx);
+
+    ex.execute(Signal::BUY, 1000, balance(100000, 0, 0, 1000));
+    const auto second = ex.execute(Signal::BUY, 1000, balance(100000, 0, 0, 1000));
+
+    CHECK_EQ(fake->placed.size(), std::size_t{1});
+    CHECK(second.skipped);
+    CHECK(!second.sent);
+}
+
+TEST(executor, a_dry_run_never_touches_the_broker) {
+    auto                  ctx  = freshContext({}, "exec_dry_broker");
+    auto                  fake = fakeBroker(ctx);
+    auto                  p    = profile();
+    trade::SignalExecutor ex(p, false, -1, ctx);
+
+    const auto d = ex.execute(Signal::BUY, 1000, balance(100000, 0, 0, 1000));
+
+    CHECK(d.acted);
+    CHECK(!d.sent);
+    CHECK(fake->placed.empty());
+}
+
+TEST(executor, a_live_executor_with_no_broker_refuses_rather_than_pretending) {
+    auto ctx = freshContext({}, "exec_live_nobroker");
+    ctx.broker.reset();
+    auto                  p = profile();
+    trade::SignalExecutor ex(p, true, -1, ctx);
+
+    const auto d = ex.execute(Signal::BUY, 1000, balance(100000, 0, 0, 1000));
+
+    CHECK(!d.sent);
+    CHECK(d.skipped);
+    CHECK_EQ(d.blockedBy, std::string{"no broker configured"});
+}
+
+TEST(executor, the_journal_mode_comes_from_the_broker) {
+    auto ctx                = freshContext({}, "exec_mode");
+    auto fake               = fakeBroker(ctx);
+    fake->modeName          = "live";
+    auto                  p = profile();
+    trade::SignalExecutor ex(p, true, -1, ctx);
+
+    ex.execute(Signal::BUY, 1000, balance(100000, 0, 0, 1000));
+    CHECK_EQ(lastJournalLine(*ctx.journal).value("mode", ""), std::string{"live"});
 }
 
 TEST(executor, dry_run_decides_but_never_sends) {

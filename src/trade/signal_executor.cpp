@@ -5,8 +5,6 @@
 #include <iomanip>
 #include <sstream>
 
-#include "broker/kis_auth.hpp"
-
 namespace trade {
 
 namespace {
@@ -48,7 +46,8 @@ std::string pctString(double v) {
 }  // namespace
 
 ExecutionContext ExecutionContext::create(const RiskLimits& limits) {
-    return {std::make_shared<RiskGuard>(limits), std::make_shared<PositionStore>(), std::make_shared<TradeJournal>()};
+    return {std::make_shared<RiskGuard>(limits), std::make_shared<PositionStore>(), std::make_shared<TradeJournal>(),
+            std::make_shared<KisBroker>()};
 }
 
 SignalExecutor::SignalExecutor(const StrategyProfile& profile, bool live, int maxOrders, const RiskLimits& limits)
@@ -59,8 +58,9 @@ SignalExecutor::SignalExecutor(const StrategyProfile& profile, bool live, int ma
     , live_(live)
     , maxOrders_(maxOrders)
     , ctx_(std::move(context)) {
-    KisAuth::instance().loadFromEnv();
-    mode_ = KisAuth::instance().isPaper() ? "paper" : "live";
+    // The broker knows which account it points at; the executor should not have
+    // to read .env to find out.
+    mode_ = ctx_.broker ? ctx_.broker->mode() : "paper";
 }
 
 std::string SignalExecutor::entryBlockReason(const PositionState& state) const {
@@ -244,8 +244,15 @@ Decision SignalExecutor::execute(Signal signal, double price, const AccountBalan
         d.blockedBy   = verdict.reason;
         entry.event   = "skip";
         entry.message = verdict.reason;
+    } else if (live_ && !ctx_.broker) {
+        // A live executor with nowhere to send is a wiring error, and it must read
+        // as one — not as an order that quietly never happened.
+        d.skipped     = true;
+        d.blockedBy   = "no broker configured";
+        entry.event   = "skip";
+        entry.message = d.blockedBy;
     } else if (live_) {
-        d.order = KisTrader::placeOrder(side, profile_.ticker, d.quantity);
+        d.order = ctx_.broker->placeOrder(side, profile_.ticker, d.quantity);
         d.sent  = true;
         ++ordersSent_;
         ctx_.risk->recordOrder();
