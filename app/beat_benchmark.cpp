@@ -145,25 +145,6 @@ double sharpeBetween(const Curve& c, int64_t t0, int64_t t1) {
     return sd > 1e-12 ? m / sd * std::sqrt(252.0) : 0.0;
 }
 
-double sharpeOf(const std::vector<double>& eq) {
-    std::vector<double> r;
-    for (std::size_t i = 1; i < eq.size(); ++i) {
-        if (eq[i - 1] > 0.0) {
-            r.push_back(eq[i] / eq[i - 1] - 1.0);
-        }
-    }
-    if (r.size() < 2) {
-        return 0.0;
-    }
-    const double m = std::accumulate(r.begin(), r.end(), 0.0) / static_cast<double>(r.size());
-    double       v = 0.0;
-    for (const double x : r) {
-        v += (x - m) * (x - m);
-    }
-    const double sd = std::sqrt(v / static_cast<double>(r.size()));
-    return sd > 1e-12 ? m / sd * std::sqrt(252.0) : 0.0;
-}
-
 double median(std::vector<double> v) {
     if (v.empty()) {
         return 0.0;

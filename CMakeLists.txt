@@ -104,6 +104,13 @@ target_link_libraries(${PROJECT_NAME}
     CURL::libcurl
 )
 
+# Warnings on, but not fatal: a new compiler version must not break the build of
+# a machine that trades. CI reads the log; a warning there is a bug to fix, not
+# a reason the trader failed to start. -Wshadow because a shadowed member is
+# exactly the kind of mistake that reads correctly and computes wrongly.
+set(KAIROS_WARNINGS -Wall -Wextra -Wshadow)
+target_compile_options(${PROJECT_NAME} PRIVATE ${KAIROS_WARNINGS})
+
 set_target_properties(${PROJECT_NAME}
   PROPERTIES
     OUTPUT_NAME "kairos"
@@ -143,6 +150,7 @@ add_executable(kairos_tests
   tests/test_portfolio_allocation.cpp
 )
 target_link_libraries(kairos_tests PRIVATE ${PROJECT_NAME})
+target_compile_options(kairos_tests PRIVATE ${KAIROS_WARNINGS})
 target_include_directories(kairos_tests PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/tests
   ${CMAKE_CURRENT_SOURCE_DIR}/include

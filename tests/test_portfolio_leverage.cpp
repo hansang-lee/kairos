@@ -62,11 +62,6 @@ class LvFixed: public portfolio::IPortfolioStrategy {
     std::vector<double> weights_;
 };
 
-/** Gross exposure as a multiple of equity, at one bar of a finished run. */
-double exposureAt(const portfolio::PortfolioData&, const portfolio::PortfolioResult&, std::size_t) {
-    return 0.0;  // placeholder, unused
-}
-
 }  // namespace
 
 /* --------------------------- the unlevered case --------------------------- */

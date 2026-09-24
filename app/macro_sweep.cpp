@@ -25,7 +25,7 @@ static std::string computeWarmupDate(const std::string& date, int monthsEarlier)
         m += 12;
         y--;
     }
-    char buf[11];
+    char buf[32];
     snprintf(buf, sizeof(buf), "%04d-%02d-01", y, m);
     return std::string(buf);
 }

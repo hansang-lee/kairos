@@ -10,7 +10,7 @@
 #include "indicator.hpp"
 #include "yfinance.hpp"
 
-int main(int argc, char* argv[]) {
+int main() {
     yFinance::init();
     util::Defer _cleanup([] { yFinance::close(); });
 

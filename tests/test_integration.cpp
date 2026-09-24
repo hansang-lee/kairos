@@ -40,14 +40,16 @@ struct Sandbox {
         std::filesystem::create_directories(root);
         ctx = {std::make_shared<trade::RiskGuard>(limits, root + "/risk.json"),
                std::make_shared<trade::PositionStore>(root + "/positions.json"),
-               std::make_shared<trade::TradeJournal>(root + "/trades.jsonl")};
+               std::make_shared<trade::TradeJournal>(root + "/trades.jsonl"),
+               nullptr};  // dry-run throughout: nothing is ever sent, so no broker is needed
     }
 
     /** Re-open the same files, as a restarted process would. */
     trade::ExecutionContext reopen(const trade::RiskLimits& limits = {}) const {
         return {std::make_shared<trade::RiskGuard>(limits, root + "/risk.json"),
                 std::make_shared<trade::PositionStore>(root + "/positions.json"),
-                std::make_shared<trade::TradeJournal>(root + "/trades.jsonl")};
+                std::make_shared<trade::TradeJournal>(root + "/trades.jsonl"),
+                nullptr};  // dry-run throughout: nothing is ever sent, so no broker is needed
     }
 
     [[nodiscard]] std::vector<nlohmann::json> journalEntries() const {

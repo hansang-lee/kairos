@@ -10,6 +10,7 @@ macro(BUILD_APP "NAME")
     ${APP} PRIVATE
       kairos::kairos
   )
+  target_compile_options(${APP} PRIVATE ${KAIROS_WARNINGS})
   target_include_directories(
     ${APP} PRIVATE
       ${CMAKE_SOURCE_DIR}/lib/sma_crossover

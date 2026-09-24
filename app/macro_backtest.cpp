@@ -96,7 +96,7 @@ int main(int argc, char* argv[]) {
             m += 12;
             y--;
         }
-        char buf[11];
+        char buf[32];
         snprintf(buf, sizeof(buf), "%04d-%02d-01", y, m);
         return std::string(buf);
     };
@@ -183,8 +183,6 @@ int main(int argc, char* argv[]) {
     for (const auto& [key, ticker] : assetTickerMap) {
         if (priceData.find(ticker) != priceData.end()) {
             auto returns = buildMonthlyReturns(priceData[ticker]);
-            // Align: use minimum length
-            size_t len = std::min(returns.size(), months);
             if (returns.size() > months) {
                 returns = std::vector<double>(returns.end() - months, returns.end());
             } else if (returns.size() < months) {
