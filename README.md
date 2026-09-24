@@ -512,6 +512,7 @@ macro report.
 > Terms used in the output: [docs/GLOSSARY.md](docs/GLOSSARY.md)
 > Placing the first real order: [docs/FIRST_LIVE_ORDER.md](docs/FIRST_LIVE_ORDER.md)
 > What every strategy actually measured, and which older numbers are void: [docs/BACKTEST_RESULTS.md](docs/BACKTEST_RESULTS.md)
+> Open findings from the last full review, with status: [docs/REVIEW-2026-09-25.md](docs/REVIEW-2026-09-25.md)
 
 ---
 
