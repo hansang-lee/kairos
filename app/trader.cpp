@@ -24,6 +24,7 @@
 #include "strategy/strategy_factory.hpp"
 #include "trade/fill_reconciler.hpp"
 #include "trade/schedule_state.hpp"
+#include "trade/session.hpp"
 #include "trade/signal_executor.hpp"
 
 /**
@@ -63,25 +64,8 @@ std::string nowLabel() {
     return oss.str();
 }
 
-/** @return empty if KRX is open right now, otherwise why it is not. */
-std::string krxClosedReason(const data::KrxCalendar& calendar) {
-    if (const std::string why = calendar.closedReason(util::kstDate()); !why.empty()) {
-        return why;
-    }
-    const int hm = util::kstNow().second;
-    return (hm >= 900 && hm <= 1530) ? "" : "outside 09:00-15:30 KST";
-}
-
 std::string signalName(Signal s) {
     return s == Signal::BUY ? "BUY" : (s == Signal::SELL ? "SELL" : "HOLD");
-}
-
-/** Calendar date of a daily bar; KisProvider stamps them at 09:00 UTC on their own date. */
-std::string barDate(int64_t ts) {
-    const std::time_t  t = static_cast<std::time_t>(ts);
-    std::ostringstream oss;
-    oss << std::put_time(std::gmtime(&t), "%Y-%m-%d");
-    return oss.str();
 }
 
 /**
@@ -285,7 +269,7 @@ int main(int argc, char* argv[]) {
 
         // --once still honours market hours: a timer firing at 15:15 on a holiday must
         // do nothing, not act on stale prices. Only --force overrides that.
-        const std::string closed = krxClosedReason(calendar);
+        const std::string closed = trade::krxClosedReason(calendar, util::kstDate(), util::kstNow().second);
         if (!closed.empty() && !force) {
             std::cout << "[" << nowLabel() << "] Market closed (" << closed << ").";
             if (once) {
@@ -354,12 +338,9 @@ int main(int argc, char* argv[]) {
                 // history, so the inputs would otherwise be unrecoverable.
                 recorder.recordSeries(p.ticker, "daily", *data);
                 for (const int64_t ts : data->timestamps) {
-                    observedBarDates.insert(barDate(ts));
+                    observedBarDates.insert(trade::barDate(ts));
                 }
-                // The index to evaluate is the bar the order fills at: today's if KIS
-                // has published it, otherwise the one past the last.
-                const std::size_t lastIdx = data->close.size() - 1;
-                evalIdx = (barDate(data->timestamps[lastIdx]) == today) ? lastIdx : data->close.size();
+                evalIdx = trade::evaluationIndex(*data, today);
             }
 
             if (data->close.size() <= r.strategy->warmupPeriod()) {
@@ -376,13 +357,10 @@ int main(int argc, char* argv[]) {
             // posts today's bar — so on those days the journal would record a day's
             // move as slippage. Intraday bars are already "now"; daily ones ask the
             // quote endpoint and fall back to the close only when it answers nothing.
-            double price = data->close.back();
-            if (!r.isIntraday()) {
-                if (const double quote = provider.getCurrentPrice(p.ticker); quote > 0.0) {
-                    price = quote;
-                } else {
-                    std::cout << "[" << nowLabel() << "] #" << p.id << " no live quote; using last close.\n";
-                }
+            const double quote = r.isIntraday() ? 0.0 : provider.getCurrentPrice(p.ticker);
+            const double price = trade::referencePrice(quote, data->close.back(), r.isIntraday());
+            if (!r.isIntraday() && quote <= 0.0) {
+                std::cout << "[" << nowLabel() << "] #" << p.id << " no live quote; using last close.\n";
             }
 
             const auto decision = r.executor->execute(signal, price, balance);
@@ -444,7 +422,7 @@ int main(int argc, char* argv[]) {
 
         // One summary per day, after the once-a-day pass, whether or not anything
         // happened: silence must not mean both "held correctly" and "never ran".
-        if (ranDaily && !quiet && summarySentFor != today) {
+        if (trade::shouldSendSummary(ranDaily, quiet, summarySentFor, today)) {
             const notify::Telegram telegram;
             if (telegram.enabled()) {
                 std::ostringstream msg;

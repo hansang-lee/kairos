@@ -37,6 +37,7 @@ add_library(${PROJECT_NAME} SHARED
   src/trade/signal_executor.cpp
   src/trade/risk_guard.cpp
   src/trade/schedule_state.cpp
+  src/trade/session.cpp
   src/trade/position_store.cpp
   src/notify/telegram.cpp
   src/notify/bot_commands.cpp
@@ -148,6 +149,7 @@ add_executable(kairos_tests
   tests/test_portfolio.cpp
   tests/test_portfolio_leverage.cpp
   tests/test_portfolio_allocation.cpp
+  tests/test_session.cpp
 )
 target_link_libraries(kairos_tests PRIVATE ${PROJECT_NAME})
 target_compile_options(kairos_tests PRIVATE ${KAIROS_WARNINGS})
