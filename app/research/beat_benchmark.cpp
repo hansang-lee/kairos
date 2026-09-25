@@ -170,9 +170,11 @@ int main(int argc, char* argv[]) {
             windowYears = std::stod(argv[++i]);
         else if (a == "--step-months" && i + 1 < argc)
             stepMonths = std::stoi(argv[++i]);
+        else if (a == "--switch-cost" && i + 1 < argc)
+            switchCost = std::stod(argv[++i]);
         else {
             std::cout << "Usage:\n  beat_benchmark [--start YYYY-MM-DD] [--end YYYY-MM-DD]\n"
-                      << "                 [--window-years 3] [--step-months 3]\n\n"
+                      << "                 [--window-years 3] [--step-months 3] [--switch-cost 0.0005]\n\n"
                       << "  Asks which rules beat holding QQQ, counted over rolling holding periods\n"
                       << "  rather than over the whole span.\n";
             return (a == "--help" || a == "-h") ? 0 : 1;
@@ -260,12 +262,60 @@ int main(int argc, char* argv[]) {
         return (i >= 252 && p[i - 252] > 0.0) ? p[i] / p[i - 252] - 1.0 : -1e9;
     };
 
+    using Weights = std::vector<std::pair<const std::vector<double>*, double>>;
+
+    /** Annualised standard deviation of the last `w` daily returns ending at bar i. */
+    auto realisedVol = [&](const std::vector<double>& p, std::size_t i, std::size_t w) {
+        if (i < w || p[i - w] <= 0.0) {
+            return 0.0;
+        }
+        double sum = 0.0, sq = 0.0;
+        for (std::size_t k = i - w + 1; k <= i; ++k) {
+            const double r = p[k] / p[k - 1] - 1.0;
+            sum += r;
+            sq += r * r;
+        }
+        const double cnt = static_cast<double>(w);
+        const double v   = sq / cnt - (sum / cnt) * (sum / cnt);
+        return v > 0.0 ? std::sqrt(v * 252.0) : 0.0;
+    };
+
+    /**
+     * Exposure to QQQ that would put the portfolio at `target` annual volatility,
+     * given what the last month realised, held below `cap`, and in steps of a tenth
+     * so a one-point change in volatility does not trade. The unallocated remainder
+     * earns nothing — cash yield is deliberately left out, which understates these
+     * rows a little rather than crediting them with a bill rate nobody asked for.
+     * Above 1x the extra is carried by the reconstructed 2x fund, so the borrowing
+     * is charged at the bill rate plus spread the way a real levered fund pays it.
+     */
+    auto volTarget = [&](std::size_t i, double target, double cap, const std::vector<double>* fallback,
+                         std::size_t window = 20) {
+        const double vol = realisedVol(Q, i, window);
+        double       e   = vol > 0.0 ? target / vol : 0.0;
+        e                = std::floor(std::min(e, cap) * 10.0 + 1e-9) / 10.0;
+        Weights w;
+        if (e <= 1.0) {
+            if (e > 0.0) {
+                w.emplace_back(&Q, e);
+            }
+            if (fallback != nullptr && e < 1.0) {
+                w.emplace_back(fallback, 1.0 - e);
+            }
+        } else {
+            // e in (1, 2]: hold (2 - e) of QQQ and (e - 1) of the 2x fund, which sums
+            // to an exposure of exactly e with nothing left over.
+            w.emplace_back(&Q, 2.0 - e);
+            w.emplace_back(&S2, e - 1.0);
+        }
+        return w;
+    };
+
     /**
      * Walk an allocation forward. `pick` returns the weight of each asset for the
      * next bar, decided on bar i and applied to bar i+1, so no rule ever acts on
      * the move it is about to receive.
      */
-    using Weights = std::vector<std::pair<const std::vector<double>*, double>>;
     // A fund that has not listed yet has a zero price here, and treating that as
     // cash quietly credits a strategy with sitting out a crash it was not there for
     // — QLD, which listed in 2006, appeared to dodge the dot-com bust entirely.
@@ -429,6 +479,91 @@ int main(int argc, char* argv[]) {
         {"3x reconstructed above ma200",
          [&](std::size_t i) {
              return Q[i] > sma(Q, i, 200) ? Weights{{&S3, 1.0}} : Weights{{&C, 1.0}};
+         }},
+
+        // Volatility targeting: exposure scaled down as the last month's realised
+        // volatility rises, which it does before and during every crash, and back up
+        // as it settles. Unlike a moving-average rule this is not all-or-nothing, so
+        // a whipsaw costs a fraction of the position rather than all of it.
+        {"QQQ vol-target 15%, cap 1x",
+         [&](std::size_t i) {
+             return volTarget(i, 0.15, 1.0, nullptr);
+         }},
+        {"QQQ vol-target 20%, cap 1x",
+         [&](std::size_t i) {
+             return volTarget(i, 0.20, 1.0, nullptr);
+         }},
+        {"QQQ vol-target 25%, cap 1x",
+         [&](std::size_t i) {
+             return volTarget(i, 0.25, 1.0, nullptr);
+         }},
+        // With room above 1x, the return given up in calm markets can be bought back
+        // — the question is whether the busts take it away again.
+        {"QQQ vol-target 20%, cap 1.5x",
+         [&](std::size_t i) {
+             return volTarget(i, 0.20, 1.5, nullptr);
+         }},
+        {"QQQ vol-target 25%, cap 1.5x",
+         [&](std::size_t i) {
+             return volTarget(i, 0.25, 1.5, nullptr);
+         }},
+        {"QQQ vol-target 25%, cap 2x",
+         [&](std::size_t i) {
+             return volTarget(i, 0.25, 2.0, nullptr);
+         }},
+        // The two mechanisms together: the trend rule decides whether to be in at
+        // all, the volatility rule decides how much.
+        {"QQQ ma200 gate + vol-target 25% 1.5x",
+         [&](std::size_t i) {
+             return Q[i] > sma(Q, i, 200) ? volTarget(i, 0.25, 1.5, nullptr) : Weights{};
+         }},
+        // The lookback is the one number here that is not a policy choice. If the
+        // result depends on it being twenty, the result is the lookback's, not the rule's.
+        {"QQQ vol-target 20% 1.5x, 10d window",
+         [&](std::size_t i) {
+             return volTarget(i, 0.20, 1.5, nullptr, 10);
+         }},
+        {"QQQ vol-target 20% 1.5x, 40d window",
+         [&](std::size_t i) {
+             return volTarget(i, 0.20, 1.5, nullptr, 40);
+         }},
+        {"QQQ vol-target 20% 1.5x, 60d window",
+         [&](std::size_t i) {
+             return volTarget(i, 0.20, 1.5, nullptr, 60);
+         }},
+        // Trades only when the target exposure has moved by a fifth since the last
+        // trade. Daily tenth-steps turned out to cost three points a year at 0.05% a
+        // switch; the question is how much of the rule survives trading it a tenth
+        // as often.
+        {"QQQ vol-target 20% 1.5x, band 0.2",
+         [&, held = std::make_shared<double>(-1.0)](std::size_t i) {
+             const Weights want = volTarget(i, 0.20, 1.5, nullptr);
+             double        e    = 0.0;
+             for (const auto& [px, w] : want) {
+                 e += (px == &S2) ? 2.0 * w : w;
+             }
+             if (*held < 0.0 || std::fabs(e - *held) >= 0.2 - 1e-9 || e == 0.0) {
+                 *held = e;
+             }
+             return *held <= 1.0 ? Weights{{&Q, *held}} : Weights{{&Q, 2.0 - *held}, {&S2, *held - 1.0}};
+         }},
+        {"QQQ vol-target 25% 1.5x, band 0.2",
+         [&, held = std::make_shared<double>(-1.0)](std::size_t i) {
+             const Weights want = volTarget(i, 0.25, 1.5, nullptr);
+             double        e    = 0.0;
+             for (const auto& [px, w] : want) {
+                 e += (px == &S2) ? 2.0 * w : w;
+             }
+             if (*held < 0.0 || std::fabs(e - *held) >= 0.2 - 1e-9 || e == 0.0) {
+                 *held = e;
+             }
+             return *held <= 1.0 ? Weights{{&Q, *held}} : Weights{{&Q, 2.0 - *held}, {&S2, *held - 1.0}};
+         }},
+        // Idle exposure parked in long bonds rather than earning nothing. Usable
+        // only from TLT's listing in 2002, so it cannot speak to the dot-com bust.
+        {"QQQ vol-target 20% 1.5x, rest TLT",
+         [&](std::size_t i) {
+             return volTarget(i, 0.20, 1.5, &T);
          }},
     };
 

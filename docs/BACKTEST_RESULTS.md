@@ -344,3 +344,84 @@ The live configuration is neither.
 - Per-ticker `expense_ratio` fields are unfilled; every fee figure is an assumption.
 - `--equity-sweep` has not been run through `portfolio_robustness`, so the 20% point
   has no rolling-window statistics yet.
+
+
+---
+
+## 11. Volatility targeting — the first rule to beat QQQ across the dot-com bust (2026-09-25)
+
+Everything above concluded that no rule beat QQQ on return except leverage, and
+that leverage was destroyed in 2000-2002. That conclusion covered moving-average
+gates, allocation rules and static leverage. It did not cover **volatility
+targeting**, which scales exposure to the last month's realised volatility rather
+than switching all-or-nothing on a trend line. Volatility rises before and during
+every crash, so exposure falls into them gradually and comes back as it settles.
+
+Rule: exposure = min(cap, target / σ₂₀), in tenth-steps, decided on bar i and
+applied to i+1. Exposure above 1x is carried by the reconstructed 2x fund
+(financing at bill + 0.4%, 0.95% fee; 0.9951 daily correlation with real QLD).
+The unallocated remainder earns nothing — cash yield deliberately left out, so
+these rows are understated rather than flattered. Switching costs are zero per the
+standing decision to ignore fees; the cost row below shows what that hides.
+
+`app/research/beat_benchmark --start 1999-03-10 --window-years 5 --switch-cost 0`
+
+### Across the whole span, from the top of the bubble
+
+| Strategy (2000-03 ~ 2026-09, 26.5 y) | CAGR | MDD | Sharpe | beat QQQ, 5y windows | 10y windows |
+|---|---|---|---|---|---|
+| QQQ held | 8.1 | -83.0 | 0.43 | — | — |
+| QQQ above ma200, else cash | 7.9 | -57.3 | 0.55 | 27.6% | 10.4% |
+| 2x reconstructed, held | 5.5 | -98.8 | 0.37 | 69.0% | 85.1% |
+| vol-target 15%, cap 1x | 9.4 | **-45.4** | **0.71** | 29.9% | 13.4% |
+| vol-target 20%, cap 1x | 10.7 | -55.4 | 0.68 | 37.9% | 50.7% |
+| **vol-target 20%, cap 1.5x** | **12.3** | -55.4 | 0.69 | **80.5%** | **97.0%** |
+| vol-target 25%, cap 1.5x | 13.4 | -64.3 | 0.66 | 97.7% | 100% |
+| ma200 gate + vol-target 25% 1.5x | 10.8 | **-40.1** | 0.63 | 37.9% | 20.9% |
+
+Note the 2x row: it wins 69% of 5-year windows and still compounds at 5.5%
+against QQQ's 8.1%, because the windows it lost, it lost 98.8%. Window win-rate
+and total return disagree whenever one event is ruinous. Volatility targeting is
+the first row where they agree.
+
+### The tests everything else failed
+
+**Era split.** 2000-2013 held the dot-com bust and 2008; QQQ compounded at
+-2.8% with an 83% drawdown. Vol-target 20%/1.5x compounded at +3.8% with -55%,
+beating QQQ in 79% of five-year windows. 2013-2026 was the bull decade; QQQ did
+20.2%, vol-target 20%/1.5x 21.3% with a drawdown of -26% against -35%. The same
+parameters work in both halves, which momentum never managed.
+
+**Through 2008 alone** (2007-06 ~ 2014-06, 3-year windows): QQQ 11.1% / -53.4%;
+vol-target 15%/1x matched the return at 11.1% with a drawdown of -28.5%;
+vol-target 20%/1.5x did 14.9% / -36.8%, winning 88% of windows.
+
+**The last fifteen years** (2011-09 ~ 2026-09, 5-year windows): QQQ 19.9% / -35.1%
+/ 0.99; vol-target 20%/1.5x 21.3% / -26.3% / 1.08, winning 80%; vol-target 20%/1x
+18.4% / -25.3% / 1.12 — the "slightly lower, much safer" version.
+
+**Lookback.** The one parameter that is not a policy choice. 10, 20, 40, 60 days
+give 12.8, 12.3, 11.7, 11.4% — monotonic, all above QQQ, drawdown -57 to -48. The
+result is the rule's, not the window's.
+
+**Cost.** At 0.05% per switch the unbanded rule loses three points a year (12.3 →
+9.2) and most of its win rate, because tenth-steps trade almost daily. Trading
+only when the target has moved a fifth (`band 0.2`) recovers it: 12.4% at zero
+cost, 11.5% at 0.05% a switch, 75% of windows won. **The banded form is the one to
+implement.** This is the extreme-turnover case the standing cost decision said to
+flag, and it is flagged.
+
+### What is not settled
+
+- Fourteen variants of one family, chosen after seeing 27 years. The family is
+  monotonic in every parameter, and volatility targeting is a well-documented
+  approach rather than something found by search here, which is a weaker version
+  of the multiple-comparisons trap than momentum's — not an absence of it.
+- The `rest TLT` variant (17.7% / -35.4% / 0.93 from 2002) cannot be tested
+  through the dot-com bust and rides the 2002-2020 bond bull; it survived 2022,
+  but is not evidence of the same kind.
+- Nothing in the live path can express this rule. The trader emits BUY/SELL/HOLD
+  for one ticker in whole tranches; a target exposure that moves in tenths, with
+  leverage carried by a second instrument, needs a target-weight interface on the
+  single-ticker path and a way to hold QQQ and QLD in a set ratio. That is
+  implementation work, not a measurement gap.
