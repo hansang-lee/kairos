@@ -38,37 +38,47 @@ Telegram notifier.
 binds `127.0.0.1` only. CI builds, tests, and checks formatting on every push.
 Backups the user keeps by hand: `.env`, `config/live.json`, `data/`, `cache/kis_token_*.json`.
 
-**Live configuration:** positions 50/51/52, `aroon25` (Aroon 25, strength 70) on
-133690 (KODEX NASDAQ100), 069500 (KODEX 200), 132030 (KODEX Gold), 0.33 each, no
-stop, daily loss limit 3%, 20 orders/day. Positions 30-44 (bb40, slope_balanced)
-are present but disabled.
+**Live configuration:** positions 50/51/52 at 0.33 each, no stop, daily loss
+limit 3%, 20 orders/day. Position 50 is `vt20` (volatility target 20%, cap 1x,
+20-day window, band 0.2) on 133690 (TIGER NASDAQ100), switched from aroon25 on
+2026-09-25. Positions 51 and 52 stay on `aroon25` (Aroon 25, strength 70) for
+069500 (KODEX 200) and 132030 (KODEX Gold). Positions 30-44 (bb40,
+slope_balanced) are present but disabled.
 
 ## 2. In flight
 
 **First live (paper) order — Monday 2026-09-28, 15:15 KST.** No order has ever
-gone through the real path. Expected: BUY 133690 ×17 and 069500 ×29 (132030's
-signal was HOLD as of 09-25). The date was 09-29 until 09-25, when the holiday
-file was found to mark Monday 09-28 as a Chuseok substitute holiday that does not
-exist: the substitute rule for Chuseok applies only when the period overlaps a
-Sunday or another holiday, and this year's (Thu 24 to Sat 26) overlaps neither.
-Verify afterwards with
-`journalctl --user -u kairos-trader -n 40`, `/trades` and `/positions` on the bot,
-and the KIS app. Fill reconciliation runs at the start of the 09-30 run.
-Procedure: `docs/FIRST_LIVE_ORDER.md`.
+gone through the real path. A forced dry run on 09-25 against the installed
+binary and config showed what Monday will do on those prices: BUY 133690 ×17
+(vt20, target exposure 1.0 — 20-day realised vol was 12.8%, well under the 20%
+target, so the sleeve is fully in), BUY 069500 ×29 (aroon25 signal BUY), HOLD
+132030. Verify afterwards with `journalctl --user -u kairos-trader -n 40`,
+`/trades` and `/positions` on the bot, and the KIS app. Fill reconciliation runs
+at the start of the 09-29 run. Procedure: `docs/FIRST_LIVE_ORDER.md`.
 
-**Volatility targeting on the live path — branch `feat/vol-target`, worktree
-`/home/hslee/workspace/kairos-vt`.** Phase 1 (unlevered, single instrument) is
-implemented, tested, and pushed; CI green. It is deliberately not merged: `main`
-and the installed binary stay untouched until the 09-29 order is verified. After
-that: merge, rebuild, reinstall (`scripts/install_systemd.sh --live`), and decide
-whether to switch a live position to `vt15` or `vt20` (both in the catalog).
-Details and the measured figures are in `docs/BACKTEST_RESULTS.md` §11.
+The date was 09-29 until 09-25, when the holiday file was found to mark Monday
+09-28 as a Chuseok substitute holiday that does not exist: the substitute rule for
+Chuseok applies only when the period overlaps a Sunday or another holiday, and
+this year's (Thu 24 to Sat 26) overlaps neither.
+
+**Volatility targeting is on the live path — merged 2026-09-25.** Phase 1
+(unlevered, single instrument): `IStrategy::targetExposure`, the `vol_target`
+type, the exposure branch in `BacktestEngine` and `SignalExecutor`, 228 tests.
+The user's decision: the rule is proven on daily history, and what remains is a
+long run on the paper account, so it went live on 133690 without waiting for a
+separate aroon25 first order. Consequence for diagnosis: if Monday's 133690 order
+fails and 069500's succeeds, the exposure branch is the suspect; if both fail, the
+order path is. Figures and the one-day-lag note: `docs/BACKTEST_RESULTS.md` §11-12.
 
 ## 3. Open items
 
 - Phase 2 of volatility targeting: the levered leg. Cap 1.5x needs QQQ and QLD
   (or their KRX equivalents) held in a set ratio, which means one profile driving
-  two tickers. Not designed yet.
+  two tickers. Not designed yet, and not before phase 1 has traded on paper for
+  a while.
+- Whether 069500 and 132030 should stay on aroon25. Vol targeting on them costs
+  more return than on 133690 (§12), and the research case is for NASDAQ 100
+  only; they were left as they were so both executor paths trade side by side.
 - Per-ticker `expense_ratio` fields in the universe files are unfilled. Moot
   under the standing decision to ignore fees, but the fields exist.
 - `--equity-sweep` has not been run through `portfolio_robustness`.
@@ -112,18 +122,23 @@ session; bring evidence if one looks wrong.
   number in it.
 - Commit and push finished units of work without asking. Never force-push,
   rebase shared history, or reset without explicit confirmation.
-- Do not change `main` or reinstall the trader between now and the 09-29
-  verification.
+- Between a rebuild and the next 15:15 run, run `doctor` and a `trader --force`
+  dry run and read what they would order. A binary that has never been executed
+  against the live config is not verified, whatever the tests say.
 
 ## 6. Next steps, in order
 
-1. 09-28 15:15: first live order. Verify per §2. If it fails, fix the path before
-   anything else; the backtests are worth nothing until an order leaves.
+1. 09-28 15:15: first live orders, vt20 on 133690 and aroon25 on 069500. Verify
+   per §2. If it fails, fix the path before anything else; the backtests are
+   worth nothing until an order leaves.
 2. 09-29: confirm fill reconciliation recorded the fills (`/trades` shows fill
    prices; `data/trades.jsonl` has `fill` events).
-3. Merge `feat/vol-target`, rebuild, reinstall. Run `doctor`.
-4. Decide whether to move a live position to `vt15`/`vt20`, or run one alongside
-   aroon25 with a small `position_pct`.
+3. Let vt20 run on paper for weeks. What to watch: the journal's "target
+   exposure" lines should change only when 20-day vol moves the target by 0.2,
+   which on a calm tape means no order for days at a time; a run of daily
+   orders means the band is not doing its job. Compare the held share count
+   against what `BacktestEngine` would hold on the same bars.
+4. Decide whether 069500 and 132030 move to vt20 or stay on aroon25.
 5. Design phase 2 (levered leg) — only after phase 1 has traded live for a while.
 6. Ask for a review (Fable) before the Meritz migration, since that is the first
    real-money step.
