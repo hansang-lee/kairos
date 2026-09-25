@@ -542,7 +542,8 @@ macro report.
 | **4** | AI / adaptive strategies (Python ML) | 🔲 not started |
 | **5** | Multi-tenant productization | 🔲 not started |
 
-> Full plan: [docs/PLAN.md](docs/PLAN.md)
+> Where things stand, decisions in effect, next steps (start here): [docs/STATUS.md](docs/STATUS.md)
+> Original phase plan (historical): [docs/PLAN.md](docs/PLAN.md)
 > Running it day to day: [docs/OPERATIONS.md](docs/OPERATIONS.md)
 > Terms used in the output: [docs/GLOSSARY.md](docs/GLOSSARY.md)
 > Placing the first real order: [docs/FIRST_LIVE_ORDER.md](docs/FIRST_LIVE_ORDER.md)

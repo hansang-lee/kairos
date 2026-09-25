@@ -711,8 +711,9 @@ Either extend the existing `docs/index.html` (macro dashboard) or build a separa
 phone needs an access path.
 
 **Precondition**: the dashboard exposes account balance and holdings verbatim, so it must not be
-opened to the internet without authentication. The server currently has no auth at all and binds
-`0.0.0.0` — do not port-forward it on the router until one of the options below is in place.
+opened to the internet without authentication. The server has no auth at all; since 2026-09-25 it
+binds `127.0.0.1` (`--bind` to change) — do not port-forward it on the router until one of the
+options below is in place.
 
 | Approach | Pros | Cons | Notes |
 |------|------|------|------|
@@ -723,7 +724,7 @@ opened to the internet without authentication. The server currently has no auth 
 **Checklist when implementing**:
 - [ ] Choose the access method (default: Tailscale)
 - [ ] Add authentication to `dashboard_server.py` (Basic Auth at minimum, or delegate to the tunnel)
-- [ ] Make the bind address an option (`--host`, defaulting to `127.0.0.1` — currently hardcoded `0.0.0.0`)
+- [x] Make the bind address an option (`--bind`, defaulting to `127.0.0.1`; done 2026-09-25)
 - [ ] HTTPS (delegated to the tunnel/proxy, or self-signed)
 - [ ] Keep it read-only — never add a path that can place orders from the dashboard
 

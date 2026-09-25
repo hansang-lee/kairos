@@ -339,8 +339,9 @@ The live configuration is neither.
 
 - **No live order has ever succeeded.** Zero orders have gone through the real path.
   A backtest is worth nothing if the order never leaves. See `docs/FIRST_LIVE_ORDER.md`.
-- `SignalExecutor` still has the tranche-fill defect the backtest engine had: a
-  crossover strategy emits BUY once, so three tranches buy one third and stay there.
+- ~~`SignalExecutor` still has the tranche-fill defect the backtest engine had.~~ Fixed
+  2026-09-25: later tranches continue on HOLD, and `tests/test_agreement.cpp` holds the
+  live path to the engine's entry and exit bars.
 - Per-ticker `expense_ratio` fields are unfilled; every fee figure is an assumption.
 - `--equity-sweep` has not been run through `portfolio_robustness`, so the 20% point
   has no rolling-window statistics yet.
