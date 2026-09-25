@@ -12,7 +12,7 @@ kairos is a C++17 automated trading system: strategies are backtested, then exec
 
 **Core features:**
 - **25 technical indicators** — trend (SMA/EMA/WMA/ADX/Parabolic SAR/SuperTrend/Aroon), momentum (RSI/MACD/ROC/CCI/Williams %R/TRIX/Stochastic/MA slope), volume (VWAP/OBV/MFI/CMF/A-D Line), volatility (Bollinger/ATR/StdDev/Keltner/Donchian)
-- **24 trading strategies** — single-ticker signals grouped by category (swing / trend / position / scalp), plus portfolio-level allocation rules (group parity, risk parity, momentum rotation, trend and momentum filters); see [Strategy categories](#-strategy-categories)
+- **25 trading strategies** — single-ticker signals grouped by category (swing / trend / position / scalp), plus portfolio-level allocation rules (group parity, risk parity, momentum rotation, trend and momentum filters); see [Strategy categories](#-strategy-categories)
 - **Live order execution** — one `trader` process runs every enabled profile, on minute bars or daily ones as each profile requires
 - **Trade journal** — every decision, including dry runs, is appended to `data/trades.jsonl` with the strategy that produced it
 - **Backtest engine** — models commission, slippage and stop-loss; reports a 0–100 composite score
@@ -74,7 +74,7 @@ kairos/
 │       └── process_lock.hpp     # flock: one trading process at a time
 │
 ├── src/                         # C++ implementations, mirroring include/
-├── lib/                         # Single-ticker strategies (24, one hpp/cpp dir each)
+├── lib/                         # Single-ticker strategies (25, one hpp/cpp dir each)
 │   │                             # swing:    rsi, bollinger, stochastic_reversal, williams_r, cci_reversal, mfi_reversal, regime_rsi
 │   │                             # trend:    sma_crossover, macd, adx_trend, supertrend_follow, aroon_trend, psar_trend, ma_slope_trend,
 │   │                             #           ichimoku_trend, ma_timing, absolute_momentum, dual_momentum, relative_momentum
@@ -240,7 +240,7 @@ Strategies are defined in JSON, so tickers and parameters can be added or change
 
 `initial_capital_krw` is the principal the dashboard measures returns against (the paper account's seed money).
 
-**Supported strategy types:** `sma_crossover`, `rsi`, `macd`, `bollinger`, `stochastic_reversal`, `williams_r`, `cci_reversal`, `mfi_reversal`, `adx_trend`, `supertrend`, `aroon_trend`, `psar_trend`, `donchian_breakout`, `obv_trend`, `keltner_breakout`, `ma_slope_trend` (parameter defaults live in `src/strategy/strategy_factory.cpp`).
+**Supported strategy types:** `sma_crossover`, `rsi`, `macd`, `bollinger`, `stochastic_reversal`, `williams_r`, `cci_reversal`, `mfi_reversal`, `adx_trend`, `supertrend`, `aroon_trend`, `psar_trend`, `donchian_breakout`, `obv_trend`, `keltner_breakout`, `ma_slope_trend`, `vol_target` (sized by exposure rather than signalled; parameter defaults live in `src/strategy/strategy_factory.cpp`).
 
 ---
 

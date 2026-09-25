@@ -1,6 +1,8 @@
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <set>
 #include <sstream>
 
 #include "strategy/strategy_factory.hpp"
@@ -97,6 +99,7 @@ std::vector<std::pair<std::string, nlohmann::json>> allStrategies() {
         // path derived from the executable and the test binary sits elsewhere.
         {"relative_momentum",
          {{"reference", "REF"}, {"lookback", 60}, {"margin_pct", 0.0}, {"cache_dir", "/tmp/kairos_test_refcache"}}},
+        {"vol_target", {{"target", 0.20}, {"cap", 1.0}, {"window", 20}, {"band", 0.2}}},
     };
 }
 
@@ -139,6 +142,19 @@ TEST(lookahead, every_strategy_reads_only_closed_bars) {
                 offenders.push_back(oss.str());
                 break;  // one example per strategy is enough to identify it
             }
+
+            // An exposure strategy says nothing through evaluate(), so the check
+            // above passes it trivially; its number is what must not see bar i.
+            const auto fullExp = full->targetExposure(series, i);
+            const auto liveExp = limited->targetExposure(visible, i);
+            if (fullExp.has_value() != liveExp.has_value()
+                || (fullExp.has_value() && std::fabs(*fullExp - *liveExp) > 1e-12)) {
+                std::ostringstream oss;
+                oss << type << " at index " << i << ": exposure " << fullExp.value_or(-1.0) << " with the full series, "
+                    << liveExp.value_or(-1.0) << " with only bars up to " << (i - 1);
+                offenders.push_back(oss.str());
+                break;
+            }
             ++checked;
         }
         CHECK_MSG(checked > 0 || !offenders.empty(), type << ": no indices were actually checked");
@@ -169,12 +185,19 @@ TEST(lookahead, every_strategy_produces_some_signal) {
         s->init(series);
 
         int nonHold = 0;
+        // For an exposure strategy, HOLD forever is by design; what it must do
+        // instead is ask for different amounts at different times.
+        std::set<double> exposures;
         for (std::size_t i = s->warmupPeriod() + 1; i <= series.close.size(); ++i) {
             if (s->evaluate(series, i) != Signal::HOLD) {
                 ++nonHold;
             }
+            if (const auto e = s->targetExposure(series, i); e.has_value()) {
+                exposures.insert(*e);
+            }
         }
-        CHECK_MSG(nonHold > 0, type << " never emitted a BUY or SELL over 400 bars — it cannot be evaluated");
+        CHECK_MSG(nonHold > 0 || exposures.size() > 1,
+                  type << " never emitted a BUY or SELL over 400 bars — it cannot be evaluated");
     }
 }
 

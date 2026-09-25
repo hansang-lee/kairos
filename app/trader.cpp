@@ -363,7 +363,10 @@ int main(int argc, char* argv[]) {
                 std::cout << "[" << nowLabel() << "] #" << p.id << " no live quote; using last close.\n";
             }
 
-            const auto decision = r.executor->execute(signal, price, balance);
+            // An exposure strategy hands the executor a fraction rather than a
+            // direction; every strategy that existed before hands it nothing.
+            const auto decision =
+                r.executor->execute(signal, price, balance, r.strategy->targetExposure(*data, evalIdx));
 
             std::cout << "[" << nowLabel() << "] #" << p.id << " " << p.ticker << " price=" << std::fixed
                       << std::setprecision(0) << price << " signal=" << signalName(signal)

@@ -37,6 +37,7 @@ macro(BUILD_APP "NAME")
       ${CMAKE_SOURCE_DIR}/lib/absolute_momentum
       ${CMAKE_SOURCE_DIR}/lib/dual_momentum
       ${CMAKE_SOURCE_DIR}/lib/relative_momentum
+      ${CMAKE_SOURCE_DIR}/lib/vol_target
   )
   set_target_properties(
     ${APP} PROPERTIES

@@ -29,6 +29,7 @@
 #include "squeeze_breakout.hpp"
 #include "stochastic_reversal.hpp"
 #include "supertrend_follow.hpp"
+#include "vol_target.hpp"
 #include "volume_breakout.hpp"
 #include "williams_r_strategy.hpp"
 
@@ -205,6 +206,14 @@ std::unique_ptr<IStrategy> StrategyProfile::createStrategy(std::vector<std::stri
         const double      marginPct = pr.value("margin_pct", 0.0);
         const std::string cacheDir  = pr.value("cache_dir", std::string());
         return std::make_unique<RelativeMomentum>(reference, lookback, marginPct, cacheDir);
+    }
+
+    if (type == "vol_target") {
+        const double      target = pr.value("target", 0.20);
+        const double      cap    = pr.value("cap", 1.0);
+        const std::size_t window = pr.value("window", 20);
+        const double      band   = pr.value("band", 0.2);
+        return std::make_unique<VolTarget>(target, cap, window, band);
     }
 
     std::cerr << "StrategyProfile: Unknown strategy type '" << type << "'" << std::endl;

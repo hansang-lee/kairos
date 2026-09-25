@@ -82,7 +82,8 @@ std::string SignalExecutor::entryBlockReason(const PositionState& state) const {
     return "";
 }
 
-Decision SignalExecutor::execute(Signal signal, double price, const AccountBalance& balance) {
+Decision SignalExecutor::execute(Signal signal, double price, const AccountBalance& balance,
+                                 std::optional<double> exposure) {
     Decision d;
     d.signal = signal;
     d.price  = price;
@@ -134,6 +135,46 @@ Decision SignalExecutor::execute(Signal signal, double price, const AccountBalan
         }
     }
 
+    // An exposure strategy is sized rather than signalled: move the holding toward
+    // the fraction it asked for, in whole shares, only when the target has moved by
+    // the band. A forced exit above has already taken the whole position; this only
+    // runs when it did not.
+    if (!d.acted && exposure.has_value()) {
+        const double equity  = balance.totalEvalAmount > 0.0 ? balance.totalEvalAmount : balance.cashBalance;
+        const double sleeve  = equity * profile_.positionPct;
+        const double want    = std::clamp(*exposure, 0.0, 1.0);  // no levered leg on this path yet
+        const double have    = sleeve > 0.0 ? static_cast<double>(heldQty) * price / sleeve : 0.0;
+        const double band    = std::max(profile_.exposureBand, 0.0);
+        const bool   closing = want <= 0.0 && heldQty > 0;
+
+        std::ostringstream why;
+        why << "target exposure " << std::fixed << std::setprecision(1) << want << " (held " << have << ")";
+
+        if (!closing && std::fabs(want - have) < band - 1e-9) {
+            d.reason = why.str() + " within band";
+            return d;  // nothing to do, and not worth a journal line
+        }
+        const int64_t targetQty = price > 0.0 ? static_cast<int64_t>(std::floor(sleeve * want / price)) : 0;
+        if (targetQty > heldQty) {
+            d.acted    = true;
+            d.side     = "BUY";
+            d.reason   = why.str();
+            d.quantity = std::min<int64_t>(targetQty - heldQty, static_cast<int64_t>(balance.cashBalance / price));
+        } else if (targetQty < heldQty) {
+            d.acted    = true;
+            d.side     = "SELL";
+            d.reason   = why.str();
+            d.quantity = closing ? heldQty : heldQty - targetQty;
+        } else {
+            d.reason = why.str() + " already there";
+            return d;
+        }
+        if (d.quantity <= 0) {
+            d.acted = false;
+            return d;
+        }
+    }
+
     // A buy can add to an existing position until the entry plan is filled.
     //
     // The later tranches do not wait for another BUY. A crossover strategy emits BUY
@@ -166,7 +207,9 @@ Decision SignalExecutor::execute(Signal signal, double price, const AccountBalan
 
     // Size the order before deciding whether to send it, so the journal records
     // what a dry run or a blocked round would have done.
-    if (isBuy) {
+    if (isBuy && exposure.has_value()) {
+        // Sized above, from the target; the tranche arithmetic below is for signals.
+    } else if (isBuy) {
         // position_pct is a share of the whole account, not of whatever cash happens
         // to be left. Sizing from remaining cash makes the weights depend on the
         // order the profiles ran in — three profiles at 0.33 would take 33%, 22% and
@@ -202,6 +245,8 @@ Decision SignalExecutor::execute(Signal signal, double price, const AccountBalan
             ctx_.journal->append(note);
             return d;
         }
+    } else if (exposure.has_value() && !forcedExit) {
+        // Sized above: a partial reduction toward the target, not an exit plan.
     } else if (forcedExit || profile_.exitTranches <= 1) {
         d.quantity = heldQty;
     } else {

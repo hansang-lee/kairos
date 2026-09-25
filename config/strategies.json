@@ -348,6 +348,32 @@
         "strength_threshold": 70.0
       },
       "description": "25일 Aroon Up/Down 교차 + 강도 70 이상. 신고가 갱신이 멈추면 현금으로 빠짐"
+    },
+    {
+      "id": "vt20",
+      "name": "Vol target 20% (unlevered)",
+      "type": "vol_target",
+      "category": "trend",
+      "params": {
+        "target": 0.2,
+        "cap": 1.0,
+        "window": 20,
+        "band": 0.2
+      },
+      "description": "Exposure = min(1, 0.20 / realised 20-day vol), in tenths, re-targeted only on a 0.2 move. From the top of the dot-com bubble to 2026: 10.7%/yr vs QQQ 8.1%, MDD -55 vs -83. In 2000-2013 alone, +3.3%/yr where QQQ lost 2.8%/yr. docs/BACKTEST_RESULTS.md §11."
+    },
+    {
+      "id": "vt15",
+      "name": "Vol target 15% (unlevered)",
+      "type": "vol_target",
+      "category": "trend",
+      "params": {
+        "target": 0.15,
+        "cap": 1.0,
+        "window": 20,
+        "band": 0.2
+      },
+      "description": "The safer setting: matched QQQ's return through 2008 with half its drawdown (11.1% / -28.5 vs -53.4); over the last 15 years 15.7%/yr, MDD -19.9, Sharpe 1.12."
     }
   ],
   "grids": [

@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "broker/ibroker.hpp"
@@ -93,7 +94,15 @@ class SignalExecutor {
      * @param price   Current price the order would fill near.
      * @param balance Freshly fetched account balance (source of truth for holdings).
      */
-    Decision execute(Signal signal, double price, const AccountBalance& balance);
+    /**
+     * @param exposure For an exposure strategy, the fraction of the sleeve it wants
+     *        held at this bar. When set, `signal` is not consulted for direction:
+     *        the holding is moved toward the target in whole shares, and only when
+     *        the target has moved by `profile.exposureBand`. Forced exits — stop,
+     *        trailing stop, take profit — still come first.
+     */
+    Decision execute(Signal signal, double price, const AccountBalance& balance,
+                     std::optional<double> exposure = std::nullopt);
 
     [[nodiscard]] int                     ordersSent() const { return ordersSent_; }
     [[nodiscard]] const TradeJournal&     journal() const { return *ctx_.journal; }
