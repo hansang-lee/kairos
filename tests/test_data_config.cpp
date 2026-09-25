@@ -402,7 +402,8 @@ TEST(config, every_strategy_type_reports_a_misspelled_parameter) {
                                             "ma_timing",
                                             "absolute_momentum",
                                             "dual_momentum",
-                                            "relative_momentum"};
+                                            "relative_momentum",
+                                            "vol_target"};
     for (const auto& type : types) {
         StrategyProfile p;
         p.type   = type;

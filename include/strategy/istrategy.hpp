@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <optional>
 #include <string>
 
 #include "stock_info.hpp"
@@ -45,4 +46,24 @@ struct IStrategy {
      * @return Signal — BUY, SELL, or HOLD
      */
     [[nodiscard]] virtual Signal evaluate(const StockInfo& data, std::size_t index) = 0;
+
+    /**
+     * @brief How much of the sleeve to hold at bar `index`, as a fraction, if this
+     *        strategy thinks in exposure rather than in signals.
+     *
+     * A buy/sell signal says "all or nothing". Volatility targeting says "0.7 today,
+     * 0.4 tomorrow", and forcing that through BUY/SELL would lose the number that is
+     * the whole strategy. A strategy that returns a value here is sized to it by the
+     * backtest engine and the executor, and its evaluate() is not consulted for
+     * direction. The same index convention holds: bars up to index-1 only.
+     *
+     * Returns nothing for a signal strategy, which is every strategy that existed
+     * before this hook. Values above 1.0 mean leverage, which the single-instrument
+     * paths clamp to 1.0 until a levered leg exists.
+     */
+    [[nodiscard]] virtual std::optional<double> targetExposure(const StockInfo& data, std::size_t index) {
+        (void)data;
+        (void)index;
+        return std::nullopt;
+    }
 };

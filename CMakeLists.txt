@@ -65,6 +65,7 @@ add_library(${PROJECT_NAME} SHARED
   lib/absolute_momentum/absolute_momentum.cpp
   lib/dual_momentum/dual_momentum.cpp
   lib/relative_momentum/relative_momentum.cpp
+  lib/vol_target/vol_target.cpp
   src/strategy/strategy_factory.cpp
   src/strategy/strategy_catalog.cpp
 )
@@ -98,6 +99,7 @@ target_include_directories(${PROJECT_NAME}
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/absolute_momentum
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/dual_momentum
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/relative_momentum
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/vol_target
 )
 
 target_link_libraries(${PROJECT_NAME}
@@ -151,12 +153,14 @@ add_executable(kairos_tests
   tests/test_portfolio_allocation.cpp
   tests/test_session.cpp
   tests/test_agreement.cpp
+  tests/test_vol_target.cpp
 )
 target_link_libraries(kairos_tests PRIVATE ${PROJECT_NAME})
 target_compile_options(kairos_tests PRIVATE ${KAIROS_WARNINGS})
 target_include_directories(kairos_tests PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/tests
   ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/lib/vol_target
 )
 set_target_properties(kairos_tests PROPERTIES OUTPUT_NAME "kairos_tests")
 

@@ -66,6 +66,12 @@ struct BacktestConfig {
      *
      * @param market "KRX" or "US".
      */
+    /**
+     * @brief For exposure strategies: how far the target may drift from the holding
+     *        before the engine trades. 0.2 means a fifth of the sleeve.
+     */
+    double exposureBand = 0.2;
+
     [[nodiscard]] static BacktestConfig forMarket(const std::string& market);
     // Stop-loss (%, 0 = disabled). If the day's low falls this far below the entry
     // price, the position is closed that same bar without waiting for a SELL signal.

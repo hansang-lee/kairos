@@ -421,11 +421,31 @@ flag, and it is flagged.
 - The `rest TLT` variant (17.7% / -35.4% / 0.93 from 2002) cannot be tested
   through the dot-com bust and rides the 2002-2020 bond bull; it survived 2022,
   but is not evidence of the same kind.
-- Nothing in the live path can express this rule. The trader emits BUY/SELL/HOLD
-  for one ticker in whole tranches; a target exposure that moves in tenths, with
-  leverage carried by a second instrument, needs a target-weight interface on the
-  single-ticker path and a way to hold QQQ and QLD in a set ratio. That is
-  implementation work, not a measurement gap.
+- ~~Nothing in the live path can express this rule.~~ The unlevered form now can
+  (branch `feat/vol-target`, held back from `main` until the 09-29 first order is
+  verified): `IStrategy::targetExposure`, a `vol_target` strategy type, and an
+  exposure branch in both `BacktestEngine` and `SignalExecutor` that moves the
+  holding toward the target in whole shares only when it has moved by the band.
+  The levered leg (QQQ and QLD in a set ratio, for cap 1.5x) is still to do.
+
+### The live path's figures differ from the table above by one day of lag
+
+The research tool sized on bar i's own close and applied that to the next day's
+return. The product engine and the trader decide from bars up to i-1 and fill at
+bar i's close — the convention every strategy in this project shares, because at
+15:15 KST the day's bar is what the order fills against, not what it is decided
+from. Re-running the tool's rule on fractional weights under each convention:
+
+| vol-target 15%, cap 1x, 2000-03-08 ~ 2026-09-21 | CAGR | MDD |
+|---|---|---|
+| research convention (sized on bar i, applied to i+1) | 9.43 | -45.4 |
+| product convention (sized on bar i-1, filled at i) | 9.89 | -41.2 |
+| product engine, whole shares, daily re-target | 9.89 | -41.2 |
+| product engine, whole shares, band 0.2 | 9.38 | -43.7 |
+
+The engine on whole shares lands on the fractional figure to the second decimal,
+so the lag is the whole difference and the sizing is right. Pinned by
+`tests/test_vol_target.cpp` against the cached QQQ series.
 
 ---
 
@@ -462,7 +482,7 @@ the 2020 crash and 2022, but no 2000 and no 2008.
 
 | Ticker | Strategy | CAGR | MDD | Sharpe | switches |
 |---|---|---|---|---|---|
-| 133690 KODEX NASDAQ100 | held | **21.3** | -31.0 | 1.09 | — |
+| 133690 TIGER NASDAQ100 | held | **21.3** | -31.0 | 1.09 | — |
 | | vol target 15% | 16.4 | **-22.7** | **1.15** | 76 |
 | | vol target 20% | 18.0 | -25.5 | 1.12 | 44 |
 | | vol target 25% | 18.3 | -29.4 | 1.06 | 23 |

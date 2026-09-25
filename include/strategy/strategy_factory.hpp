@@ -30,6 +30,12 @@ struct StrategyProfile {
     int    cooldownMinutes = 0;    ///< refuse to re-enter this ticker for this long after an exit
 
     /* ----- Order splitting (1 = all at once) ----- */
+    /**
+     * @brief For exposure strategies: how far the target may drift from what is
+     *        held before an order goes out, as a fraction of the sleeve.
+     */
+    double exposureBand = 0.2;
+
     int entryTranches = 1;  ///< buy the position over this many orders
     int exitTranches  = 1;  ///< sell it over this many orders
 

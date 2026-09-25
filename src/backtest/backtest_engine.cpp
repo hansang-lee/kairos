@@ -136,6 +136,51 @@ BacktestResult BacktestEngine::run(IStrategy& strategy, const StockInfo& data, c
         const double effectiveSellPrice =
             price * (1.0 - config.slippagePct) * (1.0 - config.commissionRate) * (1.0 - config.sellTaxRate);
 
+        // An exposure strategy is sized, not signalled. It says what fraction of the
+        // sleeve to hold; the engine moves the holding toward that in whole shares,
+        // and only when the target has moved by the strategy's band, since chasing
+        // every tick of it is what turns a good rule into a commission stream.
+        if (const auto exposure = strategy.targetExposure(data, i); exposure.has_value()) {
+            const double sleeve  = (capital + shares * price) * std::clamp(config.positionPct, 0.1, 1.0);
+            const double want    = std::clamp(*exposure, 0.0, 1.0);  // no levered leg here yet
+            const double haveExp = sleeve > 0.0 ? shares * price / sleeve : 0.0;
+            const double band    = std::max(config.exposureBand, 0.0);
+
+            const bool closingOut = want <= 0.0 && shares > 0.0;
+            if (closingOut || std::fabs(want - haveExp) >= band - 1e-9) {
+                const double targetShares = std::floor(sleeve * want / effectiveBuyPrice);
+                if (targetShares > shares) {
+                    const double buy = std::min(targetShares - shares, std::floor(capital / effectiveBuyPrice));
+                    if (buy >= 1.0) {
+                        const double spent = buy * effectiveBuyPrice;
+                        if (!inPos) {
+                            buyIdx = i;
+                            inPos  = true;
+                        }
+                        buyPrice = (buyPrice * shares + spent) / (shares + buy);
+                        shares += buy;
+                        capital -= spent;
+                    }
+                } else if (targetShares < shares) {
+                    const double sell = closingOut ? shares : shares - targetShares;
+                    capital += sell * effectiveSellPrice;
+                    shares -= sell;
+                    if (shares <= 1e-9) {
+                        Trade trade;
+                        trade.buyIndex  = buyIdx;
+                        trade.sellIndex = i;
+                        trade.buyPrice  = buyPrice;
+                        trade.sellPrice = effectiveSellPrice;
+                        trade.returnPct = (effectiveSellPrice - buyPrice) / buyPrice * 100.0;
+                        result.trades.push_back(trade);
+                        shares = 0.0;
+                        inPos  = false;
+                    }
+                }
+            }
+            continue;
+        }
+
         // Buying one tranche: the first fixes how much cash the whole position may
         // use, so later tranches cannot quietly grow it as the account moves.
         auto buyTranche = [&](int ofTranches) {
