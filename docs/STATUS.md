@@ -45,9 +45,13 @@ are present but disabled.
 
 ## 2. In flight
 
-**First live (paper) order — Monday 2026-09-29, 15:15 KST.** No order has ever
+**First live (paper) order — Monday 2026-09-28, 15:15 KST.** No order has ever
 gone through the real path. Expected: BUY 133690 ×17 and 069500 ×29 (132030's
-signal was HOLD as of 09-25). Verify afterwards with
+signal was HOLD as of 09-25). The date was 09-29 until 09-25, when the holiday
+file was found to mark Monday 09-28 as a Chuseok substitute holiday that does not
+exist: the substitute rule for Chuseok applies only when the period overlaps a
+Sunday or another holiday, and this year's (Thu 24 to Sat 26) overlaps neither.
+Verify afterwards with
 `journalctl --user -u kairos-trader -n 40`, `/trades` and `/positions` on the bot,
 and the KIS app. Fill reconciliation runs at the start of the 09-30 run.
 Procedure: `docs/FIRST_LIVE_ORDER.md`.
@@ -70,7 +74,7 @@ Details and the measured figures are in `docs/BACKTEST_RESULTS.md` §11.
 - `--equity-sweep` has not been run through `portfolio_robustness`.
 - Dashboard external access (`docs/PLAN.md` §3-D): bind address done; auth and
   the access path are not. Only needed if the Telegram bot stops being enough.
-- KRX holidays for 2026 are all projected (no holiday API on the paper account);
+- KRX holidays after 2026-09-19 are projected (no holiday API on the paper account);
   the trader audits the trailing 14 days against observed bars and alerts on
   disagreement, so a wrong projection is caught after one day, not before.
 - Meritz API for real-money trading: researched, not implemented. Meritz has no
@@ -113,9 +117,9 @@ session; bring evidence if one looks wrong.
 
 ## 6. Next steps, in order
 
-1. 09-29 15:15: first live order. Verify per §2. If it fails, fix the path before
+1. 09-28 15:15: first live order. Verify per §2. If it fails, fix the path before
    anything else; the backtests are worth nothing until an order leaves.
-2. 09-30: confirm fill reconciliation recorded the fills (`/trades` shows fill
+2. 09-29: confirm fill reconciliation recorded the fills (`/trades` shows fill
    prices; `data/trades.jsonl` has `fill` events).
 3. Merge `feat/vol-target`, rebuild, reinstall. Run `doctor`.
 4. Decide whether to move a live position to `vt15`/`vt20`, or run one alongside
