@@ -426,3 +426,82 @@ flag, and it is flagged.
   leverage carried by a second instrument, needs a target-weight interface on the
   single-ticker path and a way to hold QQQ and QLD in a set ratio. That is
   implementation work, not a measurement gap.
+
+---
+
+## 12. Volatility targeting on the tickers actually traded, and where its edge lives (2026-09-25)
+
+§11 measured the rule on QQQ in USD with the research convention (sized on bar i,
+applied to i+1) and mostly without the band. This section re-measures everything
+the way the product will trade it — sized on bars up to i-1, filled at bar i, band
+0.2, whole-sleeve fractions, cash earning nothing — and adds the KRX ETFs that
+`config/live.json` holds. Same rule, same lookback (20 days), cap 1x throughout.
+
+### QQQ, by era
+
+| Era | Strategy | CAGR | MDD | Sharpe |
+|---|---|---|---|---|
+| 2000-03 ~ 2026-09 (26.5y) | QQQ held | 8.1 | -83.0 | 0.43 |
+| | vol target 15% | 9.1 | **-43.7** | **0.70** |
+| | vol target 20% | 9.4 | -53.5 | 0.63 |
+| | vol target 25% | **10.6** | -60.3 | 0.63 |
+| 2000-03 ~ 2013-01 (12.8y) | QQQ held | **-3.6** | -83.0 | 0.04 |
+| | vol target 15% | +2.7 | -43.7 | 0.26 |
+| | vol target 25% | +3.0 | -60.3 | 0.25 |
+| 2007-06 ~ 2009-12 (2.6y) | QQQ held | -0.6 | -53.4 | 0.14 |
+| | vol target 15% | +3.0 | **-28.4** | 0.27 |
+| 2013-01 ~ 2026-09 (13.7y) | QQQ held | **20.1** | -35.1 | 0.99 |
+| | vol target 15% | 15.4 | **-21.1** | **1.10** |
+| | vol target 20% | 16.6 | -27.8 | 1.05 |
+| | vol target 25% | 18.4 | -31.6 | 1.04 |
+
+### The KRX ETFs the live config holds, over all the history they have
+
+2015-01-02 ~ 2026-09-23 (11.7 years, 2,879 bars). This span contains 2018 Q4,
+the 2020 crash and 2022, but no 2000 and no 2008.
+
+| Ticker | Strategy | CAGR | MDD | Sharpe | switches |
+|---|---|---|---|---|---|
+| 133690 KODEX NASDAQ100 | held | **21.3** | -31.0 | 1.09 | — |
+| | vol target 15% | 16.4 | **-22.7** | **1.15** | 76 |
+| | vol target 20% | 18.0 | -25.5 | 1.12 | 44 |
+| | vol target 25% | 18.3 | -29.4 | 1.06 | 23 |
+| 069500 KODEX 200 | held | **16.0** | -40.8 | 0.75 | — |
+| | vol target 15% | 9.7 | **-30.4** | 0.75 | 76 |
+| | vol target 20% | 11.3 | -34.3 | 0.74 | 36 |
+| 132030 KODEX Gold | held | 8.0 | -30.5 | 0.55 | — |
+| | vol target 15% | 7.0 | **-24.7** | **0.59** | 52 |
+
+### What this settles
+
+**The rule's entire edge is crisis survival, and it is large.** Through the lost
+decade QQQ compounded at -3.6% and vol targeting at +2.7%; through 2008 alone,
+-0.6% against +3.0% with a drawdown of -28.4% against -53.4%. Over the full 26.5
+years it wins on return *and* halves the drawdown, which no gate or allocation
+rule in this document managed.
+
+**In a bull market it is a cost, and the cost is not small.** Over 2013-2026 it
+gives up 4.7 points a year (20.1 → 15.4 at a 15% target) to cut the drawdown from
+-35% to -21%. On 133690, whose history is only that bull market, the same trade
+reads 21.3 → 16.4 with the drawdown going -31.0 → -22.7. Sharpe rises in every
+one of these rows, so the rule is efficient; it is simply less exposed.
+
+**Anyone choosing it is buying insurance, and the premium is visible.** The 2015+
+KRX numbers are the premium with no claim made. The 2000-2013 numbers are the
+claim. Which target to run is the question of how much premium is acceptable:
+25% is close to holding, 15% is markedly defensive, 20% is the middle.
+
+**It dominates the current live strategy on character.** aroon(25,80) bought its
+drawdown reduction (-31.0 → -17.4 on these same tickers) by giving up 38 points
+of return and beat buy-and-hold on none of three tickers out of sample (§7). Vol
+targeting buys a comparable reduction while keeping most of the return, and its
+advantage grows rather than vanishes in the periods that matter.
+
+**Caveat that has not changed.** The KRX series are KRW-denominated, so 133690
+carries the won/dollar move; under the standing decision FX is not modelled, and
+the 2022 drawdown in particular was cushioned by won weakness. The comparison
+above is ETF against ETF, so the cushion applies to both rows equally.
+
+Reproduce: `app/research/beat_benchmark --start 1999-03-10 --switch-cost 0` for
+the QQQ rows; the KRX rows were computed directly off `cache/daily/*.csv` with the
+product convention and are pinned in `tests/test_vol_target.cpp` for QQQ.
